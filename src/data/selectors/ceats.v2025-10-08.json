@@ -1,0 +1,8 @@
+{
+  "meta": { "platform": "CEATS", "version": "v2025-10-08", "createdAt": "2025-10-08T09:00:00+09:00" },
+  "login": { "url": "https://partners.coupangeats.example/login", "username": "input[name='loginId']", "password": "input[name='password']", "submit": "button[type='submit']" },
+  "nav":   { "menuPage": "a[href*='menu-management']", "hoursPage": "a[href*='business-hours']", "pausePage": "a[href*='store-status']" },
+  "grid":  { "itemRow": "div.row[data-key]", "itemName": "input.item-name", "itemPrice": "input.item-price", "itemSoldOutToggle": "button.toggle-soldout", "saveButton": "button.btn-save", "toastSuccess": ".snackbar.success", "toastError": ".snackbar.error" },
+  "hours": { "row": "div.dow[data-dow='{{dow}}']", "open": "input.open", "close": "input.close", "breakAdd": "button.add-break", "breakRow": ".break-row:nth-child({{idx}}) input", "saveButton": "button.btn-save-hours", "confirm": "button.btn-confirm" },
+  "pause": { "pauseToggle": "input#pause", "reason": "textarea#reason", "until": "input#until", "saveButton": "button#apply" }
+}

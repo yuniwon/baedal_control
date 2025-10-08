@@ -1,0 +1,53 @@
+{
+  "store": {
+    "id": "store-001",
+    "name": "서울중구김밥",
+    "bindings": [
+      { "platform": "BAEMIN", "shopId": "baemin-shop-01", "credRef": "cred-baemin" },
+      { "platform": "YOGIYO", "shopId": "yogiyo-shop-01", "credRef": "cred-yogiyo" },
+      { "platform": "CEATS", "shopId": "ceats-shop-01", "credRef": "cred-ceats" }
+    ]
+  },
+  "items": [
+    {
+      "id": "item-001",
+      "store_id": "store-001",
+      "category_id": "cat-001",
+      "name": "김밥 세트",
+      "desc": "신선한 재료로 만든 김밥 세트",
+      "price": 6000,
+      "sku": "SET-01",
+      "image_url": null,
+      "available": true,
+      "options": [
+        {
+          "id": "optgrp-001",
+          "item_id": "item-001",
+          "name": "추가 반찬",
+          "min": 0,
+          "max": 2,
+          "required": false,
+          "sort": 0,
+          "options": [
+            { "id": "opt-001", "group_id": "optgrp-001", "name": "단무지 추가", "price_delta": 0, "default": false, "available": true },
+            { "id": "opt-002", "group_id": "optgrp-001", "name": "김치 추가", "price_delta": 500, "default": false, "available": true }
+          ]
+        }
+      ],
+      "external_mappings": []
+    },
+    {
+      "id": "item-002",
+      "store_id": "store-001",
+      "category_id": "cat-001",
+      "name": "충무 김밥",
+      "desc": "오징어와 무침이 어우러진 충무김밥",
+      "price": 7500,
+      "sku": "ITEM-002",
+      "image_url": null,
+      "available": true,
+      "options": [],
+      "external_mappings": []
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "meta": { "platform": "YOGIYO", "version": "v2025-10-08", "createdAt": "2025-10-08T09:00:00+09:00" },
+  "login": { "url": "https://owner.yogiyo.example/login", "username": "#id", "password": "#pw", "submit": "button.login" },
+  "nav":   { "menuPage": "a[href*='menu']", "hoursPage": "a[href*='hours']", "pausePage": "a[href*='status']" },
+  "grid":  { "itemRow": "li.item[data-id]", "itemName": "input.name", "itemPrice": "input.price", "itemSoldOutToggle": "button.soldout", "saveButton": "button.save", "toastSuccess": ".toast--ok", "toastError": ".toast--err" },
+  "hours": { "row": "section.hours [data-dow='{{dow}}']", "open": "input.open", "close": "input.close", "breakAdd": "button.add-break", "breakRow": ".break .time:nth-child({{idx}})", "saveButton": "button.submit", "confirm": "button.confirm" },
+  "pause": { "pauseToggle": "input#shop-paused", "reason": "textarea#reason", "until": "input#until", "saveButton": "button.apply" }
+}
