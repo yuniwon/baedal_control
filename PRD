@@ -1,0 +1,368 @@
+
+
+# PRD: 멀티 배달앱 통합 관리 콘솔 (Windows)
+
+## 0. 배경·문제정의
+
+* 매장(또는 본사)에서 **배달의민족/요기요/쿠팡이츠** 각각의 가맹점 포털에 들어가 **메뉴/가격/품절/영업시간/일시중지**를 반복 수정하는 운영 부담이 큼.
+* 각 플랫폼 공개 API가 제한적이라 일반적 “쇼핑몰 통합관리”처럼 쉽게 못 함 → **단기 해법은 브라우저 자동화(RPA)**, 중장기 해법은 **공식 제휴/미들웨어 연동**.
+* 목표: **하나의 카탈로그·영업상태 스키마**를 중심에 두고, **일괄 반영**과 **차이 감지/충돌 해결**까지 제공.
+
+## 1. 제품 목표 (Goals)
+
+1. **한 화면에서 메뉴/가격/품절/영업상태를 편집**하고, **버튼 한 번으로 3사에 동기화**
+2. 실제 포털 UI 변경/오류에도 버텨내는 **회복력(Retry/휴먼 인더루프/버전드 셀렉터)**
+3. **감사로그/차이비교**로 신뢰성·책임소재 명확화
+4. **확장 가능한 커넥터 구조**: RPA→(제휴)API로 갈아끼우기 쉬움
+
+## 2. 범위 (MVP → v1 → v2)
+
+* **MVP (6~8주)**
+
+  * 매장 1~3곳, 3개 플랫폼 “쓰기” 중 **품절 토글 / 일시중지 / 영업시간 변경 / 가격 일괄 변경** 지원
+  * **통합 카탈로그 DB**(카테고리/상품/옵션/가격/이미지URL/재고)
+  * **Diff & Merge UI**(통합 vs 플랫폼 스냅샷 비교)
+  * **Playwright 커넥터**(로그인/세션유지/폼입력/결과검증), 실패시 휴먼 인더루프
+  * 감사로그/권한(기본: 관리자/스태프), 로깅 대시보드
+* **v1 (+6주)**
+
+  * **역방향 동기화(읽기)**: 포털 수기 변경분 수집→통합 DB 반영 승인 플로우
+  * 멀티매장·역할 권한 고도화, 예외 영업(명절/브레이크타임 템플릿)
+  * 작업큐·스케줄러(자동 품절/시간대 토글)
+* **v2**
+
+  * POS/미들웨어 제휴 커넥터(공식 채널) 추가
+  * 리뷰/지표 읽기 연동, 변경 이력 리포트, 알러지/원산지 등 메타데이터 확장
+
+## 3. 사용자 시나리오 (요약)
+
+* **점장**: 점심 피크 전 30분, 재고 적은 메뉴 8개를 한 번에 **품절** → 3사에 2분 내 반영, 실패시 실패 항목만 재시도
+* **본사 매니저**: 신메뉴 12종 등록, 가격 정책 일괄 적용, 각 플랫폼 미리보기 확인 후 배포
+* **스태프**: 오늘만 **임시 영업중지**(설정 시간 이후 자동 해제)
+
+## 4. 성공 지표 (MVP)
+
+* 배포 실패율 < **5%** (재시도 후 최종 성공 기준)
+* 3사 동기화에 걸리는 평균 처리시간 < **3분**
+* UI 변경으로 인한 커넥터 Hotfix 주기 ≥ **2주**(버전드 셀렉터/회복력 확보 시)
+
+---
+
+## 5. 시스템 설계(개발자 지시용)
+
+### 5.1 기술스택
+
+* **클라이언트**: .NET 8 + **WinUI 3** (또는 WPF), MVVM
+* **RPA**: **Playwright** for .NET (Chromium)
+* **백그라운드 서비스**: Windows Service (동기화 워커: Quartz.NET)
+* **DB**: SQLite(싱글), PostgreSQL(멀티)
+* **로깅/감사**: Serilog → 파일/Seq
+* **보안**: Windows DPAPI로 자격증명 암호화 저장
+
+### 5.2 폴더 구조(제안)
+
+```
+/src
+  /App            # WinUI 프론트
+  /Domain         # 엔티티, DTO, 밸리데이터
+  /Infrastructure # Repos, PlaywrightRuntime, Encryption, Logging
+  /Connectors     # Platform.* (Baemin, Yogiyo, CoupangEats)
+  /Sync           # Diff, Orchestrator, Schedulers
+  /Tests
+```
+
+### 5.3 핵심 인터페이스 (커넥터 플러그인)
+
+```csharp
+public interface IPlatformConnector {
+  Task<AuthSession> LoginAsync(Credential cred);
+  Task<PlatformSnapshot> FetchSnapshotAsync(AuthSession session);
+  Task<ApplyResult> ApplyChangesAsync(AuthSession session, UnifiedDelta delta);
+  Task<ApplyResult> SetPauseAsync(AuthSession session, PauseCommand cmd);
+  Task<ApplyResult> SetOperatingHoursAsync(AuthSession session, HoursCommand cmd);
+}
+```
+
+### 5.4 통합 스키마 (요약)
+
+```json
+// 핵심 엔티티
+Store { "id": "uuid", "name": "string",
+  "bindings": [ { "platform":"BAEMIN|YOGIYO|CEATS", "shopId":"string", "credRef":"secure-id" } ]
+}
+
+Category { "id":"uuid", "storeId":"uuid", "name":"string", "sort":0, "active":true }
+
+Item {
+  "id":"uuid", "storeId":"uuid", "categoryId":"uuid",
+  "name":"string", "desc":"string", "price":12000, "sku":"string?",
+  "imageUrl":"string?", "available":true,
+  "options":[ OptionGroup... ],
+  "externalMappings":[{"platform":"BAEMIN","externalId":"..."}]
+}
+
+OptionGroup { "id":"uuid", "itemId":"uuid", "name":"string",
+  "min":0, "max":2, "required":false, "sort":0, "options":[Option...] }
+
+Option { "id":"uuid", "groupId":"uuid", "name":"string",
+  "priceDelta":500, "default":false, "available":true }
+
+OperatingHours {
+  "storeId":"uuid", "dow":1, "open":"10:00", "close":"22:00",
+  "break":[{"start":"15:00","end":"17:00"}], "holiday":false
+}
+
+Inventory { "itemId":"uuid", "type":"INFINITE|COUNT", "qty":10, "low":2, "autoSoldOut":true }
+
+StoreState { "storeId":"uuid", "paused":false, "reason":"string?", "until":"2025-10-08T22:00:00+09:00" }
+
+AuditLog { "id":"uuid", "actor":"userId", "action":"APPLY|PAUSE|HOURS|...","entity":"Item/Store", "before":{}, "after":{}, "ts": "..."}
+```
+
+### 5.5 동기화 파이프라인
+
+1. **Edit**: 통합 카탈로그에서 사용자 변경
+2. **Validate**: 필수 필드/플랫폼 제약 검증(옵션 min/max 등)
+3. **Plan**: 플랫폼별 변환(정규화) → `UnifiedDelta` 생성
+4. **Apply**: 커넥터가 포털 UI 조작(Playwright)하여 저장
+5. **Verify**: 저장 확인 토스트/DOM/재조회로 검증, `PlatformSnapshot` 저장
+6. **Reconcile**: 스냅샷↔통합 비교, mismatch 시 경고/재시도
+7. **Log**: 감사 로그 기록
+
+### 5.6 RPA 회복 전략
+
+* **버전드 셀렉터 맵**: `Selectors/Baemin.v2025-10.json`
+* **랜덤 지연·휴먼틱 입력** + **지수 백오프 재시도(최대 3회)**
+* **캡차 감지**: 사용자 팝업(“지금 화면에서 캡차 해결 후 계속”), 타임아웃 시 실패 처리
+* **Partial apply**: 실패 항목만 추려 재시도 큐로 이동
+
+---
+
+## 6. 기능 요구사항 (Functional Specs)
+
+### 6.1 메뉴/가격/품절 일괄 변경
+
+* [FR-01] 스프레드시트형 **메뉴 에디터**: 카테고리/상품/옵션/가격/품절(Boolean)/이미지URL 편집
+* [FR-02] **검증**: 빈 이름/가격 음수/옵션 min>max 등 실시간 경고
+* [FR-03] **미리보기**: 플랫폼별 렌더링 차이(필수 옵션/콤보 제한) 경고
+* [FR-04] **일괄 적용 버튼**: 대상 플랫폼 체크박스(배민/요기요/이츠) 선택 후 실행
+* [FR-05] 결과 리포트: 성공/실패 항목, 원인, 재시도 버튼
+
+### 6.2 영업상태/시간
+
+* [FR-06] **일시중지/해제**, 사유·종료시각(옵션) 지정
+* [FR-07] **영업시간 세트**: 평일/주말/브레이크타임/명절 템플릿
+* [FR-08] 일괄 반영 결과 리포트 + 자동 복구 스케줄 옵션
+
+### 6.3 역방향 동기화(읽기, v1)
+
+* [FR-09] 포털 스냅샷 주기적 수집(읽기 전용), 변경 후보 리스트업
+* [FR-10] **승인 머지**: 통합에 반영/무시 선택(3-way merge UI)
+
+### 6.4 권한/감사/설정
+
+* [FR-11] 사용자 역할: 관리자(쓰기), 스태프(제한 쓰기), 뷰어(읽기)
+* [FR-12] 모든 쓰기 작업은 **감사로그**에 before/after JSON 저장
+* [FR-13] 자격증명은 DPAPI로 암호화 보관, 화면에서 원문 노출 금지
+
+---
+
+## 7. UX 요건 (와이어 설명)
+
+* **대시보드**: 매장 카드(영업/중지/오류), 최근 작업결과 타임라인
+* **메뉴 에디터**: 엑셀처럼 편집 + 필터/검색 + “변환 미리보기” 패널
+* **동기화 큐**: 진행률 표시, 실패 사유(SelectorMiss/Timeout/Captcha), 재시도
+* **설정**: 플랫폼 크리덴셜 입력(아이디/비번/2FA 유의), 스케줄러 간격
+
+---
+
+## 8. 비기능 요구사항 (NFR)
+
+* [NFR-01] **성능**: 200개 상품, 3사 동시 반영 시 3분 내 90% 완료
+* [NFR-02] **안정성**: 커넥터 오류에도 앱 크래시 금지, 작업은 트랜잭션 단위 롤백
+* [NFR-03] **보안/컴플라이언스**: 약관 준수 범위 내(내부 운영 자동화), 경고 시 즉시 수동 전환
+* [NFR-04] **관찰성**: 모든 단계 로깅(Info), 장애 시 Error+스크린샷 첨부
+
+---
+
+## 9. API/모듈 계약 (내부)
+
+### 9.1 Diff & Delta
+
+```ts
+type FieldChange = { path: string; before: any; after: any }
+type UnifiedDelta = {
+  storeId: string
+  toCreate: Item[]
+  toUpdate: FieldChange[]
+  toDelete: string[] // itemIds
+  availabilityToggles: { itemId: string; available: boolean }[]
+  priceChanges: { itemId: string; newPrice: number }[]
+}
+```
+
+### 9.2 커넥터 반환
+
+```ts
+type ApplyResult = {
+  ok: boolean
+  platform: "BAEMIN"|"YOGIYO"|"CEATS"
+  applied: string[]        // itemIds
+  failed: { itemId:string; reason:string }[]
+  evidence?: string        // 스크린샷 파일 경로
+}
+type PlatformSnapshot = {
+  fetchedAt: string
+  categories: any[]
+  items: any[] // 정규화 전 원형에 가깝게
+}
+```
+
+---
+
+## 10. 테스트/검수 기준 (Acceptance Criteria)
+
+**AC-01**: 메뉴 50개 중 10개 품절 토글 → 3사 모두 “품절”로 표시 확인(스크린샷+재조회로 검증)
+**AC-02**: 가격 12종 +10% 일괄 반영 → 3사 단가 일치, 소수점/반올림 규칙 어긋나면 경고 표시
+**AC-03**: 영업시간 주말만 11–23시로 변경 → 저장 후 포털 재조회 값 일치
+**AC-04**: 로그인 세션 만료 시 자동 재로그인, 2FA/캡차 발생 시 사용자 안내 팝업
+**AC-05**: 실패 항목만 재시도 큐로 이동, 최대 3회 재시도 후 실패 보고
+**AC-06**: 감사로그에 모든 변경 전/후 값 기록 및 사용자/시각 표시
+**AC-07**: 크래시 없이 오류격리(커넥터 실패가 앱 전체에 전파되지 않음)
+
+---
+
+## 11. 리스크 & 완화
+
+* **플랫폼 UI 변경/캡차**: 버전드 셀렉터·지수백오프·휴먼 인더루프 / 정기 셀렉터 헬스체크
+* **약관/차단 리스크**: 속도 제한, 심야 배포, 내부 업무 자동화 범위 고지, 장기적으로 **제휴 전환**
+* **데이터 모델 불일치**: “미리보기 검증”과 “필드 매핑 규칙”을 코드로 명시
+
+---
+
+## 12. 프로젝트 계획 (MVP 6~8주)
+
+| 주차  | 산출물                                                   |
+| --- | ----------------------------------------------------- |
+| 1   | 솔루션 스캐폴딩(.NET8/WinUI/SQLite), 도메인 엔티티/마이그레이션, 디자인 시스템 |
+| 2   | 통합 카탈로그 CRUD UI, 검증기, 로깅/암호화, 커넥터 인터페이스               |
+| 3   | **BaeminConnector PoC**: 로그인/세션/품절 토글 적용/검증, 스냅샷 저장   |
+| 4   | **동기화 오케스트레이터**, Diff/Delta, 재시도 큐, 대시보드              |
+| 5   | **YogiyoConnector** 1차, 가격 변경/영업중지 플로우, 미리보기 경고       |
+| 6   | **CoupangEatsConnector** 1차, 영업시간 템플릿, 감사로그           |
+| 7–8 | 안정화/성능/스크린샷 증거/인스톨러(MSIX), 사용자 가이드                    |
+
+---
+
+## 13. 개발 작업 분해(코덱스 에이전트 투입용 체크리스트)
+
+**A. 인프라**
+
+* [ ] .NET 8 WinUI3 프로젝트 생성, DI(Container), AppSettings, Serilog
+* [ ] SQLite DB + EF Core 마이그레이션 스크립트
+* [ ] CryptoService(DPAPI), SecretsRepository
+
+**B. 도메인/리포지토리**
+
+* [ ] 엔티티(위 스키마) + 밸리데이터(FluentValidation)
+* [ ] CatalogRepository (CRUD, 검색, 페이징)
+* [ ] AuditLogRepository (Append/Query)
+
+**C. 커넥터 SDK**
+
+* [ ] `IPlatformConnector` + 공통 헬퍼(FormFiller, ToastWaiter, FileUploader)
+* [ ] PlaywrightRuntime (브라우저 풀, 컨텍스트 쿠키 보관)
+* [ ] SelectorVersioning(`Selectors/{platform}.v*.json` 로드)
+
+**D. 각 플랫폼 커넥터**
+
+* [ ] Login(아이디/비번, 2FA 대비 팝업)
+* [ ] FetchSnapshot(메뉴/상태 목록 파싱)
+* [ ] ApplyChanges(품절/가격/메뉴 생성·수정) + 스크린샷 증거
+* [ ] Pause/Hours 전용 루틴
+
+**E. 동기화/오케스트레이션**
+
+* [ ] Diff 엔진(해시/필드경로 기반)
+* [ ] Delta 생성기(플랫폼별 변환)
+* [ ] 작업큐(Quartz), 재시도/백오프, 부분 실패 처리
+
+**F. UI**
+
+* [ ] 대시보드(상태/실패/최근 작업)
+* [ ] 메뉴 에디터(테이블 편집, 필터, 빠른 붙여넣기)
+* [ ] 변환 미리보기(경고 리스트)
+* [ ] 결과 리포트(성공/실패/증거 스크린샷 링크)
+* [ ] 설정(매장/크리덴셜/스케줄)
+
+**G. 테스트**
+
+* [ ] 통합 E2E(가짜 DOM/목업 포털 + 실제 Playwright 흐름)
+* [ ] 회귀(셀렉터 버전 교체 스위치), 로딩 지연/타임아웃 시나리오
+* [ ] 성능(200상품 x 3사 배포 시간 측정)
+
+---
+
+## 14. 데이터베이스 스키마 (초안, SQL)
+
+```sql
+CREATE TABLE Stores(
+  Id TEXT PRIMARY KEY, Name TEXT NOT NULL
+);
+CREATE TABLE StoreBindings(
+  Id TEXT PRIMARY KEY, StoreId TEXT, Platform TEXT, ShopId TEXT, CredRef TEXT,
+  FOREIGN KEY(StoreId) REFERENCES Stores(Id)
+);
+CREATE TABLE Categories(
+  Id TEXT PRIMARY KEY, StoreId TEXT, Name TEXT, Sort INT, Active INT,
+  FOREIGN KEY(StoreId) REFERENCES Stores(Id)
+);
+CREATE TABLE Items(
+  Id TEXT PRIMARY KEY, StoreId TEXT, CategoryId TEXT,
+  Name TEXT, Desc TEXT, Price INT, Sku TEXT, ImageUrl TEXT, Available INT,
+  FOREIGN KEY(StoreId) REFERENCES Stores(Id),
+  FOREIGN KEY(CategoryId) REFERENCES Categories(Id)
+);
+CREATE TABLE OptionGroups(
+  Id TEXT PRIMARY KEY, ItemId TEXT, Name TEXT, Min INT, Max INT, Required INT, Sort INT,
+  FOREIGN KEY(ItemId) REFERENCES Items(Id)
+);
+CREATE TABLE Options(
+  Id TEXT PRIMARY KEY, GroupId TEXT, Name TEXT, PriceDelta INT, IsDefault INT, Available INT,
+  FOREIGN KEY(GroupId) REFERENCES OptionGroups(Id)
+);
+CREATE TABLE OperatingHours(
+  Id TEXT PRIMARY KEY, StoreId TEXT, Dow INT, Open TEXT, Close TEXT, Holiday INT
+);
+CREATE TABLE Inventories(
+  ItemId TEXT PRIMARY KEY, Type TEXT, Qty INT, Low INT, AutoSoldOut INT,
+  FOREIGN KEY(ItemId) REFERENCES Items(Id)
+);
+CREATE TABLE StoreStates(
+  StoreId TEXT PRIMARY KEY, Paused INT, Reason TEXT, Until TEXT,
+  FOREIGN KEY(StoreId) REFERENCES Stores(Id)
+);
+CREATE TABLE AuditLogs(
+  Id TEXT PRIMARY KEY, Actor TEXT, Action TEXT, Entity TEXT,
+  BeforeJson TEXT, AfterJson TEXT, Timestamp TEXT
+);
+```
+
+---
+
+## 15. 운영 가이드(초안)
+
+* **속도 제한**: 5~8초 간격으로 저장, 배치 20개 단위
+* **릴리즈 채널**: 안정판 / 실험판(새 셀렉터)
+* **장애 대응**: 캡차·CSS 변경 알림 → 셀렉터 핫픽스 JSON 교체 후 재배포
+
+---
+
+## 16. 향후 확장
+
+* POS/미들웨어 커넥터(공식 API, SFTP)
+* 알러지/원산지/노출지역/프로모션 등 확장 메타데이터
+* 리뷰/지표 읽기 대시보드, 이상탐지(가격 실수/폭주 주문) 알림
+
+---
+
