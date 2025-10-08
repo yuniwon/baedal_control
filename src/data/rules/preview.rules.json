@@ -1,0 +1,36 @@
+{
+  "version": "v2025-10-08",
+  "platforms": {
+    "BAEMIN": {
+      "price": { "min": 100, "step": 50, "rounding": "nearest-step" },
+      "name":  { "maxLen": 40 },
+      "desc":  { "maxLen": 200 },
+      "optionGroup": { "maxGroupsPerItem": 4, "minSelect": 0, "maxSelect": 10, "requireIfMinGt0": true },
+      "option": { "maxOptionsPerGroup": 20, "priceDeltaStep": 50 },
+      "comboSet": { "supported": true, "notes": "세트 구성 시 그룹당 1개 필수선택 권장" },
+      "image": { "maxSizeMB": 5, "minEdgePx": 600, "ratio": "1:1" }
+    },
+    "YOGIYO": {
+      "price": { "min": 100, "step": 100, "rounding": "ceil-step" },
+      "name":  { "maxLen": 50 },
+      "desc":  { "maxLen": 250 },
+      "optionGroup": { "maxGroupsPerItem": 5, "minSelect": 0, "maxSelect": 10 },
+      "option": { "maxOptionsPerGroup": 25, "priceDeltaStep": 100 },
+      "comboSet": { "supported": true },
+      "image": { "maxSizeMB": 4, "minEdgePx": 512, "ratio": "1:1" }
+    },
+    "CEATS": {
+      "price": { "min": 100, "step": 10, "rounding": "nearest-step" },
+      "name":  { "maxLen": 60 },
+      "desc":  { "maxLen": 300 },
+      "optionGroup": { "maxGroupsPerItem": 6, "minSelect": 0, "maxSelect": 10 },
+      "option": { "maxOptionsPerGroup": 30, "priceDeltaStep": 10 },
+      "comboSet": { "supported": true },
+      "image": { "maxSizeMB": 3, "minEdgePx": 512, "ratio": "1:1" }
+    }
+  },
+  "global": {
+    "allergy": { "supported": true, "fields": ["egg","milk","wheat","peanut","soy","fish","shellfish"] },
+    "origin":  { "supported": true }
+  }
+}

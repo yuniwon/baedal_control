@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "platform": "BAEMIN",
+    "version": "v2025-10-08",
+    "createdAt": "2025-10-08T09:00:00+09:00",
+    "author": "ops",
+    "notes": "배민 사장님포털 스토어>메뉴관리 기준. DOM 변경 시 신규 버전 추가."
+  },
+  "login": {
+    "url": "https://owner.baemin.example/login",
+    "username": "#username",
+    "password": "#password",
+    "submit": "button[type='submit']",
+    "mfaInput": "input[name='otp']",
+    "captchaFrame": "iframe[src*='captcha']"
+  },
+  "nav": {
+    "menuPage": "a[href*='/catalog']",
+    "hoursPage": "a[href*='/hours']",
+    "pausePage": "a[href*='/store-status']"
+  },
+  "grid": {
+    "itemRow": "tr[data-item-id]",
+    "itemName": "td.col-name input",
+    "itemPrice": "td.col-price input",
+    "itemSoldOutToggle": "td.col-availability button.toggle",
+    "saveButton": "button.save",
+    "toastSuccess": ".toast.success",
+    "toastError": ".toast.error"
+  },
+  "hours": {
+    "row": "div.hours-row[data-dow='{{dow}}']",
+    "open": "input[name='open']",
+    "close": "input[name='close']",
+    "breakAdd": "button.add-break",
+    "breakRow": ".break-row:nth-child({{idx}}) input[name='time']",
+    "saveButton": "button.save-hours",
+    "confirm": "button.confirm"
+  },
+  "pause": {
+    "pauseToggle": "input#pause",
+    "reason": "textarea#pause-reason",
+    "until": "input#resume-at",
+    "saveButton": "button.apply-pause"
+  }
+}
