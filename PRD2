@@ -1,0 +1,317 @@
+---
+
+# 1) 셀렉터 맵 템플릿 (Selectors JSON)
+
+> 목적: 각 플랫폼 포털의 DOM 변경에 대응하기 위해 **버전드 셀렉터**를 JSON으로 외부화.
+> 파일 위치 권장: `/selectors/{platform}.vYYYY-MM-DD.json`
+
+```json
+{
+  "meta": {
+    "platform": "BAEMIN",
+    "version": "v2025-10-08",
+    "createdAt": "2025-10-08T09:00:00+09:00",
+    "author": "ops",
+    "notes": "배민 사장님포털 스토어>메뉴관리 기준. DOM 변경 시 신규 버전 추가."
+  },
+  "login": {
+    "url": "https://owner.baemin.example/login",
+    "username": "#username",
+    "password": "#password",
+    "submit": "button[type='submit']",
+    "mfaInput": "input[name='otp']",
+    "captchaFrame": "iframe[src*='captcha']"
+  },
+  "nav": {
+    "menuPage": "a[href*='/catalog']",
+    "hoursPage": "a[href*='/hours']",
+    "pausePage": "a[href*='/store-status']"
+  },
+  "grid": {
+    "itemRow": "tr[data-item-id]",
+    "itemName": "td.col-name input",
+    "itemPrice": "td.col-price input",
+    "itemSoldOutToggle": "td.col-availability button.toggle",
+    "saveButton": "button.save",
+    "toastSuccess": ".toast.success",
+    "toastError": ".toast.error"
+  },
+  "hours": {
+    "row": "div.hours-row[data-dow='{{dow}}']",
+    "open": "input[name='open']",
+    "close": "input[name='close']",
+    "breakAdd": "button.add-break",
+    "breakRow": ".break-row:nth-child({{idx}}) input[name='time']",
+    "saveButton": "button.save-hours",
+    "confirm": "button.confirm"
+  },
+  "pause": {
+    "pauseToggle": "input#pause",
+    "reason": "textarea#pause-reason",
+    "until": "input#resume-at",
+    "saveButton": "button.apply-pause"
+  }
+}
+```
+
+요기요/쿠팡이츠도 동일 구조로 유지:
+
+```json
+{
+  "meta": { "platform": "YOGIYO", "version": "v2025-10-08", "createdAt": "2025-10-08T09:00:00+09:00" },
+  "login": { "url": "https://owner.yogiyo.example/login", "username": "#id", "password": "#pw", "submit": "button.login" },
+  "nav":   { "menuPage": "a[href*='menu']", "hoursPage": "a[href*='hours']", "pausePage": "a[href*='status']" },
+  "grid":  { "itemRow": "li.item[data-id]", "itemName": "input.name", "itemPrice": "input.price", "itemSoldOutToggle": "button.soldout", "saveButton": "button.save", "toastSuccess": ".toast--ok", "toastError": ".toast--err" },
+  "hours": { "row": "section.hours [data-dow='{{dow}}']", "open": "input.open", "close": "input.close", "breakAdd": "button.add-break", "breakRow": ".break .time:nth-child({{idx}})", "saveButton": "button.submit", "confirm": "button.confirm" },
+  "pause": { "pauseToggle": "input#shop-paused", "reason": "textarea#reason", "until": "input#until", "saveButton": "button.apply" }
+}
+```
+
+```json
+{
+  "meta": { "platform": "CEATS", "version": "v2025-10-08", "createdAt": "2025-10-08T09:00:00+09:00" },
+  "login": { "url": "https://partners.coupangeats.example/login", "username": "input[name='loginId']", "password": "input[name='password']", "submit": "button[type='submit']" },
+  "nav":   { "menuPage": "a[href*='menu-management']", "hoursPage": "a[href*='business-hours']", "pausePage": "a[href*='store-status']" },
+  "grid":  { "itemRow": "div.row[data-key]", "itemName": "input.item-name", "itemPrice": "input.item-price", "itemSoldOutToggle": "button.toggle-soldout", "saveButton": "button.btn-save", "toastSuccess": ".snackbar.success", "toastError": ".snackbar.error" },
+  "hours": { "row": "div.dow[data-dow='{{dow}}']", "open": "input.open", "close": "input.close", "breakAdd": "button.add-break", "breakRow": ".break-row:nth-child({{idx}}) input", "saveButton": "button.btn-save-hours", "confirm": "button.btn-confirm" },
+  "pause": { "pauseToggle": "input#pause", "reason": "textarea#reason", "until": "input#until", "saveButton": "button#apply" }
+}
+```
+
+> 운영 팁
+>
+> * **템플릿 토큰**(`{{dow}}`, `{{idx}}`)은 커넥터에서 `string.Replace`로 주입.
+> * DOM 변경 시에는 **새 버전 파일을 추가**하고 앱 설정에서 버전 스위칭만 바꿔 배포(롤백 쉬움).
+
+---
+
+# 2) 에러코드 사전 (오류·원인·대응)
+
+> 목적: 커넥터/오케스트레이터가 공통된 에러 모델로 리포팅하고 자동 복구 전략을 선택.
+
+| Code                       | Severity | 탐지 기준              | 주 원인          | 자동 복구            | 사용자 안내         |
+| -------------------------- | -------- | ------------------ | ------------- | ---------------- | -------------- |
+| `AUTH_INVALID`             | High     | 로그인 응답 401/에러 토스트  | 자격증명 변경/만료    | 크리덴셜 재입력 요청      | 설정→자격증명 갱신     |
+| `AUTH_2FA_REQUIRED`        | Medium   | 2FA 입력 필드/모달 감지    | OTP 필요        | 2FA 팝업 띄우고 대기    | OTP 입력 후 “계속”  |
+| `CAPTCHA_BLOCKED`          | High     | 캡차 iframe/이미지 감지   | 봇탐지           | 휴먼 인더루프, 실패시 백오프 | 캡차 해결 후 재시도    |
+| `SELECTOR_MISSING`         | High     | 쿼리 결과 0개           | DOM 변경/버전 불일치 | 셀렉터 버전 롤백/교체     | “핫픽스 적용 대기”    |
+| `ELEMENT_NOT_INTERACTABLE` | Medium   | 클릭/타입 실패           | 오버레이/모달       | 스크롤/대기 후 재시도     | “화면 스크롤 후 재시도” |
+| `TOAST_ERROR`              | Medium   | `.toast.error` 텍스트 | 필드 검증 실패      | 값 보정/재시도(최대 2)   | 실패 항목 로그 확인    |
+| `RATE_LIMIT`               | Medium   | 429/유사 메시지         | 요청 빈도 과다      | 지수백오프(15~60s)    | “잠시 후 자동 재시도”  |
+| `TIMEOUT`                  | Medium   | 대기 시간 초과           | 네트워크/지연       | 재시도 2회           | 연결 상태 확인       |
+| `UPLOAD_FAIL`              | Low      | 이미지 업로드 실패         | 파일 용량/형식      | 리사이즈 후 재업로드      | 이미지 규격 안내      |
+| `VALIDATION_FAIL`          | Low      | 내부 사전 검증 실패        | min>max 등     | 사용자 수정 필요        | 에러셀 강조         |
+| `PARTIAL_APPLY`            | Info     | N개 중 일부 실패         | 혼합 오류         | 실패만 재큐잉          | “실패만 재시도” 버튼   |
+| `SNAPSHOT_MISMATCH`        | Low      | 저장 후 재조회 불일치       | 즉시 반영 지연      | 60초 후 재조회        | 지연 안내          |
+
+> 구현 팁
+>
+> * 모든 실패는 **증거 스크린샷 경로** 첨부.
+> * `SELECTOR_MISSING` 발생 시 앱 상단에 **버전 스위치 드롭다운** 표시(롤백 옵션).
+
+---
+
+# 3) “플랫폼 미리보기 규칙표” (카탈로그 → 플랫폼 변환 룰)
+
+> 목적: 통합 카탈로그를 저장할 때 **플랫폼별 제약**을 사전 검증하고, “배포 전 미리보기”에서 경고를 띄움. 실제 수치는 플랫폼 정책에 따라 다를 수 있으므로 **룰을 코드가 아닌 설정으로 관리**.
+
+```json
+{
+  "version": "v2025-10-08",
+  "platforms": {
+    "BAEMIN": {
+      "price": { "min": 100, "step": 50, "rounding": "nearest-step" },
+      "name":  { "maxLen": 40 },
+      "desc":  { "maxLen": 200 },
+      "optionGroup": { "maxGroupsPerItem": 4, "minSelect": 0, "maxSelect": 10, "requireIfMinGt0": true },
+      "option": { "maxOptionsPerGroup": 20, "priceDeltaStep": 50 },
+      "comboSet": { "supported": true, "notes": "세트 구성 시 그룹당 1개 필수선택 권장" },
+      "image": { "maxSizeMB": 5, "minEdgePx": 600, "ratio": "1:1" }
+    },
+    "YOGIYO": {
+      "price": { "min": 100, "step": 100, "rounding": "ceil-step" },
+      "name":  { "maxLen": 50 },
+      "desc":  { "maxLen": 250 },
+      "optionGroup": { "maxGroupsPerItem": 5, "minSelect": 0, "maxSelect": 10 },
+      "option": { "maxOptionsPerGroup": 25, "priceDeltaStep": 100 },
+      "comboSet": { "supported": true },
+      "image": { "maxSizeMB": 4, "minEdgePx": 512, "ratio": "1:1" }
+    },
+    "CEATS": {
+      "price": { "min": 100, "step": 10, "rounding": "nearest-step" },
+      "name":  { "maxLen": 60 },
+      "desc":  { "maxLen": 300 },
+      "optionGroup": { "maxGroupsPerItem": 6, "minSelect": 0, "maxSelect": 10 },
+      "option": { "maxOptionsPerGroup": 30, "priceDeltaStep": 10 },
+      "comboSet": { "supported": true },
+      "image": { "maxSizeMB": 3, "minEdgePx": 512, "ratio": "1:1" }
+    }
+  },
+  "global": {
+    "allergy": { "supported": true, "fields": ["egg","milk","wheat","peanut","soy","fish","shellfish"] },
+    "origin":  { "supported": true }
+  }
+}
+```
+
+> 주의: 위 값들은 **제품 설계 상의 보수적 표준치**로 시작하고, 실제 계정/포털에서 **경험적 검증** 후 갱신해. 이 파일은 `/rules/preview.rules.json` 형태로 두고, 앱에서 로드하여 **사전 검증 + 미리보기 경고**에 활용.
+
+---
+
+# 4) 초기 솔루션 스캐폴드 (Codex가 바로 생성/빌드 가능한 최소 뼈대)
+
+**프로젝트 트리**
+
+```
+/src
+  /App            # WinUI3 클라이언트 (MVVM)
+  /Domain         # 엔티티, DTO, Validation
+  /Infrastructure # EFCore, Serilog, DPAPI, PlaywrightRuntime
+  /Connectors     # Platform.* (Baemin, Yogiyo, Ceats)
+  /Sync           # Orchestrator, Diff, Scheduler(Quartz)
+  /Tests
+/selectors
+/rules
+```
+
+**필수 패키지**
+
+* `Microsoft.WindowsAppSDK`, `CommunityToolkit.Mvvm`
+* `Microsoft.Playwright`
+* `Serilog`, `Serilog.Sinks.File`
+* `Microsoft.Data.Sqlite`, `EFCore.Sqlite`, `FluentValidation`
+* `Quartz`
+
+**핵심 인터페이스 & 스텁**
+
+```csharp
+// Domain/Connectors/IPlatformConnector.cs
+public interface IPlatformConnector
+{
+    Task<AuthSession> LoginAsync(Credential cred, CancellationToken ct);
+    Task<PlatformSnapshot> FetchSnapshotAsync(AuthSession session, CancellationToken ct);
+    Task<ApplyResult> ApplyChangesAsync(AuthSession session, UnifiedDelta delta, CancellationToken ct);
+    Task<ApplyResult> SetPauseAsync(AuthSession session, PauseCommand cmd, CancellationToken ct);
+    Task<ApplyResult> SetOperatingHoursAsync(AuthSession session, HoursCommand cmd, CancellationToken ct);
+}
+```
+
+```csharp
+// Infrastructure/PlaywrightRuntime.cs
+public sealed class PlaywrightRuntime : IAsyncDisposable
+{
+    private readonly SemaphoreSlim _pool = new(1,1);
+    private IPlaywright? _pw;
+    private IBrowser? _browser;
+
+    public async Task<(IBrowser Browser, IPlaywright Pw)> GetAsync()
+    {
+        await _pool.WaitAsync();
+        try
+        {
+            if (_pw == null) _pw = await Playwright.CreateAsync();
+            if (_browser == null) _browser = await _pw.Chromium.LaunchAsync(new() { Headless = true });
+            return (_browser, _pw);
+        }
+        finally { _pool.Release(); }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _browser?.CloseAsync()!;
+        _pw?.Dispose();
+    }
+}
+```
+
+```csharp
+// Sync/Diff/DiffEngine.cs (개요)
+public static class DiffEngine
+{
+    public static UnifiedDelta PlanDelta(Catalog before, Catalog after, PreviewRules rules)
+    {
+        // TODO: 필드 경로 비교, 룰 기반 검증, price step/rounding 적용 전 경고 생성
+        return new UnifiedDelta { /* ... */ };
+    }
+}
+```
+
+```csharp
+// Connectors/Baemin/BaeminConnector.cs (개요)
+public sealed class BaeminConnector : IPlatformConnector
+{
+    private readonly SelectorMap _sel;
+    private readonly PlaywrightRuntime _rt;
+
+    public BaeminConnector(SelectorMap sel, PlaywrightRuntime rt) { _sel = sel; _rt = rt; }
+
+    public async Task<AuthSession> LoginAsync(Credential cred, CancellationToken ct)
+    {
+        var (browser, _) = await _rt.GetAsync();
+        var ctx = await browser.NewContextAsync(); var page = await ctx.NewPageAsync();
+        await page.GotoAsync(_sel.Login.Url);
+        await page.FillAsync(_sel.Login.Username, cred.Username);
+        await page.FillAsync(_sel.Login.Password, cred.Password);
+        await page.ClickAsync(_sel.Login.Submit);
+        // TODO: 2FA/CAPTCHA 감지 → 사용자 인터럽트
+        return new AuthSession(ctx);
+    }
+
+    public async Task<ApplyResult> ApplyChangesAsync(AuthSession session, UnifiedDelta delta, CancellationToken ct)
+    {
+        var page = await session.Context.NewPageAsync();
+        await page.GotoAsync(_sel.Nav.MenuPage);
+        // TODO: 품절 토글/가격 수정 루프 + 토스트 검증 + 스크린샷
+        return ApplyResult.Ok("BAEMIN");
+    }
+
+    // FetchSnapshot / SetPause / SetOperatingHours 유사 패턴
+}
+```
+
+---
+
+## 5) E2E 목업 포털 & 테스트 시나리오 (권장)
+
+* `/tests/mock-portal/`에 **간단한 HTML**을 만들어 실제 DOM 조작 흐름을 재현.
+* CI에서 **실제 포털 접속 없이** 회귀 테스트 가능.
+
+**테스트 케이스(요약)**
+
+* `TC-001` 로그인 실패→`AUTH_INVALID` 보고
+* `TC-002` 품절 10개 토글→성공 토스트→재조회 일치
+* `TC-003` 셀렉터 변경(의도적)→`SELECTOR_MISSING`→버전 롤백 시 정상
+* `TC-004` 캡차 감지→휴먼 인더루프 대기→해결 후 재개
+* `TC-005` 가격 +10% 반영, 미리보기에서 반올림 경고 노출
+
+---
+
+## 6) 다음 단계(문서/산출물 안내)
+
+1. **셀렉터 맵 초안 작성**
+
+   * 실제 운영 계정으로 페이지 구조 확인 후, 상단 템플릿에 맞춰 **최소 경로**부터 기입
+   * 파일: `/selectors/baemin.v2025-10-08.json` 등
+
+2. **미리보기 규칙표 보정**
+
+   * 초기 운영 테스트 결과를 반영해 `/rules/preview.rules.json` 수치 업데이트
+   * 가격 스텝·반올림 규칙, 옵션 그룹 제한치를 **운영에서 본 값**으로 맞춤
+
+3. **UI 와이어프레임**(간단)
+
+   * 4화면: 대시보드 / 메뉴 에디터 / 결과 리포트 / 설정
+   * PNG로 `/docs/wireframes/` 저장 (컴포넌트 명칭은 PRD와 동일)
+
+4. **에러 메시지 카피 가이드**
+
+   * 사용자에게 노출되는 문구를 한글로 통일(짧고 행동지향)
+   * 예: `CAPTCHA_BLOCKED → "보안문자가 표시됐어요. 창에서 보안문자를 입력한 뒤 ‘계속’을 눌러주세요."`
+
+5. **운영 가드레일 문서**
+
+   * 약관/리스크, 속도 제한(예: 저장 간격 5~8초), 야간 배포 원칙
+   * 장애 핫라인(버전 롤백 방법, 스크린샷 수집 위치)
+
+---
+
