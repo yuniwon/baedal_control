@@ -23,7 +23,7 @@ const createWindow = () => {
     minWidth: 1200,
     minHeight: 800,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false
     }
   })
