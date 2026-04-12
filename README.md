@@ -15,8 +15,11 @@ Windows 로컬 PC에서 배민, 쿠팡이츠, 땡겨요 메뉴명을 한 곳에�
 
 ```bash
 npm install --ignore-scripts
+npm run setup:electron
 npm run dev
 ```
+
+`--ignore-scripts`로 설치했기 때문에 처음 한 번은 Electron 바이너리를 별도로 받아야 합니다. `npm run setup:electron`을 실행하면 자동으로 내려받습니다.
 
 ## 빌드
 
