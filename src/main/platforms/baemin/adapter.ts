@@ -9,7 +9,7 @@ export class BaeminAdapter implements PlatformAdapter {
 
   constructor(
     private readonly credentials: { username: string; password: string },
-    private readonly baseUrl = 'https://ceo.baemin.com/'
+    private readonly baseUrl = 'https://self.baemin.com/'
   ) {}
 
   async fetchMenus() {
@@ -45,6 +45,7 @@ export class BaeminAdapter implements PlatformAdapter {
     const page = await browser.newPage()
 
     await page.goto(this.baseUrl, { waitUntil: 'domcontentloaded' })
+    await page.waitForSelector(baeminSelectors.username)
     await page.fill(baeminSelectors.username, this.credentials.username)
     await page.fill(baeminSelectors.password, this.credentials.password)
     await page.click(baeminSelectors.loginButton)

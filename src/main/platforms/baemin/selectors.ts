@@ -1,6 +1,6 @@
 export const baeminSelectors = {
-  username: 'input[type="text"]',
-  password: 'input[type="password"]',
+  username: 'input[name="id"]',
+  password: 'input[name="password"]',
   loginButton: 'button[type="submit"]',
   menuRow: 'tr[data-menu-id]',
   nameInput: '.name input',
