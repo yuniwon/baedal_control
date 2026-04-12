@@ -1,3 +1,5 @@
+import type { PlatformImportSummary } from '../../../shared/contracts'
+
 declare global {
   interface Window {
     appApi?: {
@@ -7,11 +9,12 @@ declare global {
       }
       settings: {
         getPlatformCredentialStatus: () => Promise<unknown[]>
+        listPlatformCredentials: () => Promise<unknown[]>
         savePlatformCredential: (payload: {
           platformCode: string
           username: string
           password: string
-        }) => Promise<{ ok: true }>
+        }) => Promise<{ ok: true; importSummary?: PlatformImportSummary; importError?: string }>
       }
       syncRuns: {
         list: () => Promise<unknown[]>
@@ -28,16 +31,24 @@ declare global {
   }
 }
 
+type AppApi = NonNullable<Window['appApi']>
+
 const noopPromise = async <T,>(value: T) => value
 
-export const appApi = window.appApi ?? {
+export const appApi: AppApi = window.appApi ?? {
   menus: {
     list: () => noopPromise([] as unknown[]),
     save: () => noopPromise(undefined)
   },
   settings: {
     getPlatformCredentialStatus: () => noopPromise([] as unknown[]),
-    savePlatformCredential: () => noopPromise({ ok: true as const })
+    listPlatformCredentials: () => noopPromise([] as unknown[]),
+    savePlatformCredential: () =>
+      noopPromise({
+        ok: true as const,
+        importSummary: undefined,
+        importError: undefined
+      })
   },
   syncRuns: {
     list: () => noopPromise([] as unknown[])

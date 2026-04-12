@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { PlatformImportSummary } from '../../../shared/contracts'
 import { appApi } from '../lib/api'
 
 const platforms = ['baemin', 'coupangeats', 'ddangyo'] as const
@@ -10,21 +11,49 @@ export const SettingsPage = () => {
     coupangeats: { username: '', password: '' },
     ddangyo: { username: '', password: '' }
   })
+  const [isSaving, setIsSaving] = useState<Record<string, boolean>>({})
+  const [messages, setMessages] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    void appApi.settings.getPlatformCredentialStatus().then((value) => {
+    void appApi.settings.listPlatformCredentials().then((value) => {
       if (Array.isArray(value)) {
+        const nextStatus: Record<string, boolean> = {}
+        const nextCredentials = {
+          baemin: { username: '', password: '' },
+          coupangeats: { username: '', password: '' },
+          ddangyo: { username: '', password: '' }
+        }
+
+        value.forEach((entry) => {
+          const item = entry as {
+            platformCode: string
+            connected: boolean
+            username: string
+            password: string
+          }
+
+          nextStatus[item.platformCode] = item.connected
+          nextCredentials[item.platformCode as keyof typeof nextCredentials] = {
+            username: item.username ?? '',
+            password: item.password ?? ''
+          }
+        })
+
+        setCredentials(nextCredentials)
         setStatus(
-          Object.fromEntries(
-            value.map((entry) => {
-              const item = entry as { platformCode: string; connected: boolean }
-              return [item.platformCode, item.connected]
-            })
-          )
+          nextStatus
         )
       }
     })
   }, [])
+
+  const buildSuccessMessage = (summary?: PlatformImportSummary) => {
+    if (!summary) {
+      return '계정을 저장했습니다.'
+    }
+
+    return `메뉴 ${summary.fetchedCount}개를 가져와 ${summary.linkedMappingCount}개 연결했습니다.`
+  }
 
   return (
     <section className="page">
@@ -64,19 +93,35 @@ export const SettingsPage = () => {
               />
               <button
                 className="secondary-button"
-                onClick={() =>
-                  void appApi.settings.savePlatformCredential({
-                    platformCode: platform,
-                    username: credentials[platform].username,
-                    password: credentials[platform].password
-                  }).then(() =>
-                    setStatus((current) => ({ ...current, [platform]: true }))
-                  )
-                }
+                disabled={isSaving[platform]}
+                onClick={() => {
+                  setIsSaving((current) => ({ ...current, [platform]: true }))
+                  setMessages((current) => ({ ...current, [platform]: '' }))
+
+                  void appApi.settings
+                    .savePlatformCredential({
+                      platformCode: platform,
+                      username: credentials[platform].username,
+                      password: credentials[platform].password
+                    })
+                    .then((result) => {
+                      setStatus((current) => ({ ...current, [platform]: true }))
+                      setMessages((current) => ({
+                        ...current,
+                        [platform]:
+                          result.importError ??
+                          buildSuccessMessage(result.importSummary)
+                      }))
+                    })
+                    .finally(() =>
+                      setIsSaving((current) => ({ ...current, [platform]: false }))
+                    )
+                }}
               >
-                저장
+                {isSaving[platform] ? '저장 중' : '저장'}
               </button>
             </div>
+            {messages[platform] ? <p>{messages[platform]}</p> : null}
           </section>
         ))}
       </div>

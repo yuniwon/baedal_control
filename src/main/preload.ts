@@ -11,6 +11,7 @@ const appApi = {
   },
   settings: {
     getPlatformCredentialStatus: () => ipcRenderer.invoke('settings:get-platform-credential-status'),
+    listPlatformCredentials: () => ipcRenderer.invoke('settings:list-platform-credentials'),
     savePlatformCredential: (payload: { platformCode: string; username: string; password: string }) =>
       ipcRenderer.invoke('settings:save-platform-credential', payload)
   },

@@ -3,6 +3,7 @@ import type { CredentialVault } from '../services/credential-vault'
 import type {
   MenuRecord,
   PlatformCode,
+  PlatformImportSummary,
   PlatformMenuMappingRecord,
   SyncPreviewItem
 } from '../../shared/contracts'
@@ -16,6 +17,7 @@ interface HandlerDependencies {
   }
   syncRunRepository: { list: () => unknown[] }
   credentialVault: CredentialVault
+  platformMenuImporter?: { importPlatform: (platformCode: PlatformCode) => Promise<PlatformImportSummary> }
   syncEngine?: { run: (items: SyncPreviewItem[]) => Promise<unknown> }
   onCredentialSaved?: (platformCode: PlatformCode) => void
 }
@@ -25,6 +27,7 @@ export const registerHandlers = ({
   mappingRepository,
   syncRunRepository,
   credentialVault,
+  platformMenuImporter,
   syncEngine,
   onCredentialSaved
 }: HandlerDependencies) => {
@@ -58,11 +61,33 @@ export const registerHandlers = ({
     }))
   })
 
+  register('settings:list-platform-credentials', async () => {
+    const platforms: PlatformCode[] = ['baemin', 'coupangeats', 'ddangyo']
+    return platforms.map((platformCode) => {
+      const credential = credentialVault.get(platformCode)
+      return {
+        platformCode,
+        connected: Boolean(credential),
+        username: credential?.username ?? '',
+        password: credential?.password ?? ''
+      }
+    })
+  })
+
   register('settings:save-platform-credential', async (_event, payload) => {
     const platformCode = payload.platformCode as PlatformCode
     credentialVault.set(platformCode, payload.username, payload.password)
     onCredentialSaved?.(platformCode)
-    return { ok: true }
+
+    try {
+      const importSummary = await platformMenuImporter?.importPlatform(platformCode)
+      return { ok: true, importSummary }
+    } catch (error) {
+      return {
+        ok: true,
+        importError: error instanceof Error ? error.message : 'unknown_error'
+      }
+    }
   })
 
   register('sync:preview', async () =>

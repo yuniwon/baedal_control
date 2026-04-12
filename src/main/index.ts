@@ -13,6 +13,7 @@ import { BaeminAdapter } from './platforms/baemin/adapter'
 import { CoupangEatsAdapter } from './platforms/coupangeats/adapter'
 import { DdangyoAdapter } from './platforms/ddangyo/adapter'
 import { CredentialVault } from './services/credential-vault'
+import { PlatformMenuImporter } from './services/platform-menu-importer'
 import { SyncEngine } from './services/sync-engine'
 
 const createWindow = () => {
@@ -69,6 +70,11 @@ app.whenReady().then(() => {
     finish: (record) => syncRunRepository.update(record),
     addItem: (record) => syncRunItemRepository.addItem(record)
   })
+  const platformMenuImporter = new PlatformMenuImporter(
+    menuRepository,
+    mappingRepository,
+    adapterRegistry
+  )
 
   ;(['baemin', 'coupangeats', 'ddangyo'] as const).forEach(registerPlatformAdapter)
 
@@ -77,6 +83,7 @@ app.whenReady().then(() => {
     mappingRepository,
     syncRunRepository,
     credentialVault,
+    platformMenuImporter,
     syncEngine,
     onCredentialSaved: registerPlatformAdapter
   })

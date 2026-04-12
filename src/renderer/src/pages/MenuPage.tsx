@@ -2,13 +2,8 @@ import { useEffect, useState } from 'react'
 import { appApi } from '../lib/api'
 import { MenuTable, type MenuRow } from '../components/MenuTable'
 
-const initialMenus: MenuRow[] = [
-  { menuId: 'm1', baseName: '콤비네이션', basePrice: 22900, isDirty: 0 },
-  { menuId: 'm2', baseName: '페퍼로니', basePrice: 23900, isDirty: 0 }
-]
-
 export const MenuPage = () => {
-  const [menus, setMenus] = useState<MenuRow[]>(initialMenus)
+  const [menus, setMenus] = useState<MenuRow[]>([])
 
   useEffect(() => {
     void appApi.menus.list().then((value) => {
@@ -56,6 +51,7 @@ export const MenuPage = () => {
             메뉴 추가
           </button>
         </div>
+        {!menus.length ? <p>아직 불러온 메뉴가 없습니다. 계정 연결에서 메뉴를 먼저 가져오세요.</p> : null}
         <MenuTable menus={menus} onChange={handleChange} />
       </section>
     </section>

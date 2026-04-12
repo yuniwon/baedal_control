@@ -28,11 +28,16 @@ export const MenuTable = ({
   }, [menus])
 
   const updateDraft = (menuId: string, patch: Partial<MenuDraft>) => {
-    setDrafts((current) => {
-      const nextDraft = { ...current[menuId], ...patch }
-      onChange(menuId, nextDraft)
-      return { ...current, [menuId]: nextDraft }
-    })
+    const sourceMenu = menus.find((menu) => menu.menuId === menuId)
+    const nextDraft = {
+      baseName: sourceMenu?.baseName ?? '',
+      basePrice: sourceMenu?.basePrice ?? 0,
+      ...(drafts[menuId] ?? {}),
+      ...patch
+    }
+
+    setDrafts((current) => ({ ...current, [menuId]: nextDraft }))
+    onChange(menuId, nextDraft)
   }
 
   return (

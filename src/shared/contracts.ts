@@ -50,3 +50,10 @@ export interface SyncPreviewResult {
   items: SyncPreviewItem[]
   needsReview: SyncPreviewNeedsReview[]
 }
+
+export interface PlatformImportSummary {
+  platformCode: PlatformCode
+  fetchedCount: number
+  createdMenuCount: number
+  linkedMappingCount: number
+}
