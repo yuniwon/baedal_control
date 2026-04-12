@@ -20,12 +20,27 @@ export const MenuPage = () => {
 
   const handleChange = (menuId: string, patch: Partial<MenuRow>) => {
     setMenus((current) =>
-      current.map((menu) =>
-        menu.menuId === menuId
-          ? { ...menu, ...patch, isDirty: 1 }
-          : menu
-      )
+      current.map((menu) => {
+        if (menu.menuId !== menuId) {
+          return menu
+        }
+
+        const nextRecord = { ...menu, ...patch, isDirty: 1 }
+        void appApi.menus.save(nextRecord)
+        return nextRecord
+      })
     )
+  }
+
+  const handleAddMenu = () => {
+    const menuId =
+      typeof globalThis.crypto?.randomUUID === 'function'
+        ? globalThis.crypto.randomUUID()
+        : `menu-${Date.now()}`
+    const nextRecord = { menuId, baseName: '새 메뉴', basePrice: 0, isDirty: 1 }
+
+    setMenus((current) => [...current, nextRecord])
+    void appApi.menus.save(nextRecord)
   }
 
   return (
@@ -36,6 +51,11 @@ export const MenuPage = () => {
       </header>
 
       <section className="panel">
+        <div className="inline-actions">
+          <button className="secondary-button" onClick={handleAddMenu}>
+            메뉴 추가
+          </button>
+        </div>
         <MenuTable menus={menus} onChange={handleChange} />
       </section>
     </section>

@@ -1,14 +1,23 @@
 import { ipcMain } from 'electron'
 import type { CredentialVault } from '../services/credential-vault'
-import type { PlatformCode, SyncPreviewItem } from '../../shared/contracts'
+import type {
+  MenuRecord,
+  PlatformCode,
+  PlatformMenuMappingRecord,
+  SyncPreviewItem
+} from '../../shared/contracts'
 import { buildSyncPreview } from '../services/sync-planner'
 
 interface HandlerDependencies {
-  menuRepository: { list: () => unknown[]; upsert: (payload: unknown) => void }
-  mappingRepository: { listAll: () => unknown[]; upsert: (payload: unknown) => void }
+  menuRepository: { list: () => MenuRecord[]; upsert: (payload: MenuRecord) => void }
+  mappingRepository: {
+    listAll: () => PlatformMenuMappingRecord[]
+    upsert: (payload: PlatformMenuMappingRecord) => void
+  }
   syncRunRepository: { list: () => unknown[] }
   credentialVault: CredentialVault
   syncEngine?: { run: (items: SyncPreviewItem[]) => Promise<unknown> }
+  onCredentialSaved?: (platformCode: PlatformCode) => void
 }
 
 export const registerHandlers = ({
@@ -16,23 +25,32 @@ export const registerHandlers = ({
   mappingRepository,
   syncRunRepository,
   credentialVault,
-  syncEngine
+  syncEngine,
+  onCredentialSaved
 }: HandlerDependencies) => {
-  ipcMain.handle('menus:list', async () => menuRepository.list())
-  ipcMain.handle('menus:save', async (_event, payload) => {
+  const register = (
+    channel: string,
+    handler: Parameters<typeof ipcMain.handle>[1]
+  ) => {
+    ipcMain.removeHandler(channel)
+    ipcMain.handle(channel, handler)
+  }
+
+  register('menus:list', async () => menuRepository.list())
+  register('menus:save', async (_event, payload) => {
     menuRepository.upsert(payload)
     return { ok: true }
   })
 
-  ipcMain.handle('mappings:list', async () => mappingRepository.listAll())
-  ipcMain.handle('mappings:save', async (_event, payload) => {
+  register('mappings:list', async () => mappingRepository.listAll())
+  register('mappings:save', async (_event, payload) => {
     mappingRepository.upsert(payload)
     return { ok: true }
   })
 
-  ipcMain.handle('syncRuns:list', async () => syncRunRepository.list())
+  register('syncRuns:list', async () => syncRunRepository.list())
 
-  ipcMain.handle('settings:get-platform-credential-status', async () => {
+  register('settings:get-platform-credential-status', async () => {
     const platforms: PlatformCode[] = ['baemin', 'coupangeats', 'ddangyo']
     return platforms.map((platformCode) => ({
       platformCode,
@@ -40,22 +58,24 @@ export const registerHandlers = ({
     }))
   })
 
-  ipcMain.handle('settings:save-platform-credential', async (_event, payload) => {
-    credentialVault.set(payload.platformCode as PlatformCode, payload.username, payload.password)
+  register('settings:save-platform-credential', async (_event, payload) => {
+    const platformCode = payload.platformCode as PlatformCode
+    credentialVault.set(platformCode, payload.username, payload.password)
+    onCredentialSaved?.(platformCode)
     return { ok: true }
   })
 
-  ipcMain.handle('sync:preview', async () =>
+  register('sync:preview', async () =>
     buildSyncPreview({
-      menus: menuRepository.list() as Parameters<typeof buildSyncPreview>[0]['menus'],
-      mappings: mappingRepository.listAll() as Parameters<typeof buildSyncPreview>[0]['mappings']
+      menus: menuRepository.list(),
+      mappings: mappingRepository.listAll()
     })
   )
 
-  ipcMain.handle('sync:run', async () => {
+  register('sync:run', async () => {
     const preview = buildSyncPreview({
-      menus: menuRepository.list() as Parameters<typeof buildSyncPreview>[0]['menus'],
-      mappings: mappingRepository.listAll() as Parameters<typeof buildSyncPreview>[0]['mappings']
+      menus: menuRepository.list(),
+      mappings: mappingRepository.listAll()
     })
 
     return syncEngine?.run(preview.items) ?? { syncRunId: null, summary: '0 succeeded, 0 failed' }

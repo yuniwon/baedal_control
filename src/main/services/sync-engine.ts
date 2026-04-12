@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { SyncPreviewItem } from '../../shared/contracts'
+import type { PlatformCode, SyncPreviewItem } from '../../shared/contracts'
 
 interface SyncRunLogger {
   create: (record: {
@@ -24,7 +24,7 @@ interface SyncRunLogger {
 
 interface AdapterRegistryLike {
   get: (
-    platformCode: string
+    platformCode: PlatformCode
   ) => { applyMenuUpdate: (item: SyncPreviewItem) => Promise<void> | void }
 }
 
