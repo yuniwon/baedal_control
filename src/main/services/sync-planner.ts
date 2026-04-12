@@ -1,31 +1,20 @@
-import type { MenuRecord, PlatformMenuMappingRecord } from '../../shared/contracts'
+import type {
+  MenuRecord,
+  PlatformMenuMappingRecord,
+  SyncPreviewItem,
+  SyncPreviewNeedsReview,
+  SyncPreviewResult
+} from '../../shared/contracts'
 
 interface BuildSyncPreviewInput {
   menus: MenuRecord[]
   mappings: PlatformMenuMappingRecord[]
 }
 
-interface SyncPreviewItem {
-  platformCode: PlatformMenuMappingRecord['platformCode']
-  menuId: string
-  platformMenuId: string
-  previousName: string
-  nextName: string
-  nextPrice: number
-}
-
-interface SyncPreviewNeedsReview {
-  menuId: string
-  reason: 'missing_mapping'
-}
-
 export const buildSyncPreview = ({
   menus,
   mappings
-}: BuildSyncPreviewInput): {
-  items: SyncPreviewItem[]
-  needsReview: SyncPreviewNeedsReview[]
-} => {
+}: BuildSyncPreviewInput): SyncPreviewResult => {
   const items: SyncPreviewItem[] = []
   const needsReview: SyncPreviewNeedsReview[] = []
 

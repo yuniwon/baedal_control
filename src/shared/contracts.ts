@@ -31,3 +31,22 @@ export interface SyncRunRecord {
   triggerType: 'manual'
   resultSummary?: string | null
 }
+
+export interface SyncPreviewItem {
+  platformCode: PlatformCode
+  menuId: string
+  platformMenuId: string
+  previousName: string
+  nextName: string
+  nextPrice: number
+}
+
+export interface SyncPreviewNeedsReview {
+  menuId: string
+  reason: 'missing_mapping'
+}
+
+export interface SyncPreviewResult {
+  items: SyncPreviewItem[]
+  needsReview: SyncPreviewNeedsReview[]
+}
