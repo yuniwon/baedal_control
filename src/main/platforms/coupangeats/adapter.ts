@@ -1,4 +1,3 @@
-import { chromium } from 'playwright'
 import type { SyncPreviewItem } from '../../../shared/contracts'
 import type { PlatformAdapter } from '../base/types'
 import { parseCoupangEatsMenus } from './parser'
@@ -13,7 +12,7 @@ export class CoupangEatsAdapter implements PlatformAdapter {
   ) {}
 
   async fetchMenus() {
-    const browser = await chromium.launch({ headless: false })
+    const browser = await this.launchBrowser()
     const page = await browser.newPage()
 
     try {
@@ -26,7 +25,7 @@ export class CoupangEatsAdapter implements PlatformAdapter {
   }
 
   async applyMenuUpdate(item: SyncPreviewItem) {
-    const browser = await chromium.launch({ headless: false })
+    const browser = await this.launchBrowser()
     const page = await browser.newPage()
 
     try {
@@ -40,5 +39,10 @@ export class CoupangEatsAdapter implements PlatformAdapter {
     } finally {
       await browser.close()
     }
+  }
+
+  private async launchBrowser() {
+    const { chromium } = await import('playwright')
+    return chromium.launch({ headless: false })
   }
 }

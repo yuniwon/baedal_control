@@ -2,11 +2,18 @@ import { join } from 'node:path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
+const isMainExternal = (id: string) =>
+  id === 'playwright' ||
+  id === 'playwright-core' ||
+  id.startsWith('playwright/') ||
+  id.startsWith('playwright-core/')
+
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
+        external: isMainExternal,
         input: {
           index: join(__dirname, 'src/main/index.ts')
         }
