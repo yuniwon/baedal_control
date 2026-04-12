@@ -55,6 +55,14 @@ export const SettingsPage = () => {
     return `메뉴 ${summary.fetchedCount}개를 가져와 ${summary.linkedMappingCount}개 연결했습니다.`
   }
 
+  const buildErrorMessage = (value: string) => {
+    if (value.startsWith('playwright_install_failed:')) {
+      return '브라우저 엔진 설치에 실패했습니다. 인터넷 연결을 확인한 뒤 다시 저장해 주세요.'
+    }
+
+    return `메뉴를 가져오지 못했습니다. ${value}`
+  }
+
   return (
     <section className="page">
       <header className="page-header">
@@ -109,7 +117,7 @@ export const SettingsPage = () => {
                       setMessages((current) => ({
                         ...current,
                         [platform]:
-                          result.importError ??
+                          (result.importError ? buildErrorMessage(result.importError) : undefined) ??
                           buildSuccessMessage(result.importSummary)
                       }))
                     })

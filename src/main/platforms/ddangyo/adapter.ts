@@ -2,6 +2,7 @@ import type { SyncPreviewItem } from '../../../shared/contracts'
 import type { PlatformAdapter } from '../base/types'
 import { parseDdangyoMenus } from './parser'
 import { ddangyoSelectors } from './selectors'
+import { launchPlaywrightChromium } from '../../services/playwright-runtime'
 
 export class DdangyoAdapter implements PlatformAdapter {
   readonly platformCode = 'ddangyo' as const
@@ -36,8 +37,7 @@ export class DdangyoAdapter implements PlatformAdapter {
   }
 
   private async launchBrowser() {
-    const { chromium } = await import('playwright')
-    return chromium.launch({ headless: false })
+    return launchPlaywrightChromium()
   }
 
   private async createAuthenticatedSession() {

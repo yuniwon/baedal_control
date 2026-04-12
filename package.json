@@ -6,7 +6,8 @@
   "main": "./out/main/index.js",
   "scripts": {
     "setup:electron": "node node_modules/electron/install.js",
-    "dev": "npm run setup:electron && electron-vite dev",
+    "setup:playwright": "node node_modules/playwright/cli.js install chromium",
+    "dev": "npm run setup:electron && npm run setup:playwright && electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "test": "vitest run --coverage",

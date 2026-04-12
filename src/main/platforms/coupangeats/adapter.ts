@@ -2,6 +2,7 @@ import type { SyncPreviewItem } from '../../../shared/contracts'
 import type { PlatformAdapter } from '../base/types'
 import { parseCoupangEatsMenus } from './parser'
 import { coupangEatsSelectors } from './selectors'
+import { launchPlaywrightChromium } from '../../services/playwright-runtime'
 
 export class CoupangEatsAdapter implements PlatformAdapter {
   readonly platformCode = 'coupangeats' as const
@@ -36,8 +37,7 @@ export class CoupangEatsAdapter implements PlatformAdapter {
   }
 
   private async launchBrowser() {
-    const { chromium } = await import('playwright')
-    return chromium.launch({ headless: false })
+    return launchPlaywrightChromium()
   }
 
   private async createAuthenticatedSession() {

@@ -2,6 +2,7 @@ import type { SyncPreviewItem } from '../../../shared/contracts'
 import type { PlatformAdapter } from '../base/types'
 import { parseBaeminMenus } from './parser'
 import { baeminSelectors } from './selectors'
+import { launchPlaywrightChromium } from '../../services/playwright-runtime'
 
 export class BaeminAdapter implements PlatformAdapter {
   readonly platformCode = 'baemin' as const
@@ -36,8 +37,7 @@ export class BaeminAdapter implements PlatformAdapter {
   }
 
   private async launchBrowser() {
-    const { chromium } = await import('playwright')
-    return chromium.launch({ headless: false })
+    return launchPlaywrightChromium()
   }
 
   private async createAuthenticatedSession() {
