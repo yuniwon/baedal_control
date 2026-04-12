@@ -2,10 +2,11 @@ import { useState } from 'react'
 import './App.css'
 import { DashboardPage } from './pages/DashboardPage'
 import { HistoryPage } from './pages/HistoryPage'
+import { MappingPage } from './pages/MappingPage'
 import { MenuPage } from './pages/MenuPage'
 import { SettingsPage } from './pages/SettingsPage'
 
-const tabs = ['dashboard', 'menus', 'settings', 'history'] as const
+const tabs = ['dashboard', 'menus', 'mapping', 'settings', 'history'] as const
 
 type AppTab = (typeof tabs)[number]
 
@@ -28,6 +29,7 @@ export default function App() {
             >
               {value === 'dashboard' && '대시보드'}
               {value === 'menus' && '메뉴 관리'}
+              {value === 'mapping' && '매핑 검토'}
               {value === 'settings' && '계정 연결'}
               {value === 'history' && '실행 기록'}
             </button>
@@ -37,6 +39,7 @@ export default function App() {
       <main className="content">
         {tab === 'dashboard' && <DashboardPage />}
         {tab === 'menus' && <MenuPage />}
+        {tab === 'mapping' && <MappingPage />}
         {tab === 'settings' && <SettingsPage />}
         {tab === 'history' && <HistoryPage />}
       </main>
