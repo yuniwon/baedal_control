@@ -12,12 +12,10 @@ export class DdangyoAdapter implements PlatformAdapter {
   ) {}
 
   async fetchMenus() {
-    const browser = await this.launchBrowser()
-    const page = await browser.newPage()
+    const { browser, page } = await this.createAuthenticatedSession()
 
     try {
-      await page.goto(this.baseUrl, { waitUntil: 'domcontentloaded' })
-      await page.waitForLoadState('networkidle')
+      await page.waitForSelector(ddangyoSelectors.menuRow)
       return parseDdangyoMenus(await page.content())
     } finally {
       await browser.close()
@@ -25,14 +23,10 @@ export class DdangyoAdapter implements PlatformAdapter {
   }
 
   async applyMenuUpdate(item: SyncPreviewItem) {
-    const browser = await this.launchBrowser()
-    const page = await browser.newPage()
+    const { browser, page } = await this.createAuthenticatedSession()
 
     try {
-      await page.goto(this.baseUrl, { waitUntil: 'domcontentloaded' })
-      await page.fill(ddangyoSelectors.username, this.credentials.username)
-      await page.fill(ddangyoSelectors.password, this.credentials.password)
-      await page.click(ddangyoSelectors.loginButton)
+      await page.waitForSelector(ddangyoSelectors.menuRow)
       await page.locator(`${ddangyoSelectors.menuRow}[data-menu-id="${item.platformMenuId}"] ${ddangyoSelectors.nameInput}`).fill(item.nextName)
       await page.locator(`${ddangyoSelectors.menuRow}[data-menu-id="${item.platformMenuId}"] ${ddangyoSelectors.priceInput}`).fill(String(item.nextPrice))
       await page.click(ddangyoSelectors.saveButton)
@@ -44,5 +38,18 @@ export class DdangyoAdapter implements PlatformAdapter {
   private async launchBrowser() {
     const { chromium } = await import('playwright')
     return chromium.launch({ headless: false })
+  }
+
+  private async createAuthenticatedSession() {
+    const browser = await this.launchBrowser()
+    const page = await browser.newPage()
+
+    await page.goto(this.baseUrl, { waitUntil: 'domcontentloaded' })
+    await page.fill(ddangyoSelectors.username, this.credentials.username)
+    await page.fill(ddangyoSelectors.password, this.credentials.password)
+    await page.click(ddangyoSelectors.loginButton)
+    await page.waitForLoadState('networkidle')
+
+    return { browser, page }
   }
 }

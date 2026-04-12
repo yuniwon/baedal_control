@@ -12,12 +12,10 @@ export class BaeminAdapter implements PlatformAdapter {
   ) {}
 
   async fetchMenus() {
-    const browser = await this.launchBrowser()
-    const page = await browser.newPage()
+    const { browser, page } = await this.createAuthenticatedSession()
 
     try {
-      await page.goto(this.baseUrl, { waitUntil: 'domcontentloaded' })
-      await page.waitForLoadState('networkidle')
+      await page.waitForSelector(baeminSelectors.menuRow)
       return parseBaeminMenus(await page.content())
     } finally {
       await browser.close()
@@ -25,14 +23,10 @@ export class BaeminAdapter implements PlatformAdapter {
   }
 
   async applyMenuUpdate(item: SyncPreviewItem) {
-    const browser = await this.launchBrowser()
-    const page = await browser.newPage()
+    const { browser, page } = await this.createAuthenticatedSession()
 
     try {
-      await page.goto(this.baseUrl, { waitUntil: 'domcontentloaded' })
-      await page.fill(baeminSelectors.username, this.credentials.username)
-      await page.fill(baeminSelectors.password, this.credentials.password)
-      await page.click(baeminSelectors.loginButton)
+      await page.waitForSelector(baeminSelectors.menuRow)
       await page.locator(`${baeminSelectors.menuRow}[data-menu-id="${item.platformMenuId}"] ${baeminSelectors.nameInput}`).fill(item.nextName)
       await page.locator(`${baeminSelectors.menuRow}[data-menu-id="${item.platformMenuId}"] ${baeminSelectors.priceInput}`).fill(String(item.nextPrice))
       await page.click(baeminSelectors.saveButton)
@@ -44,5 +38,18 @@ export class BaeminAdapter implements PlatformAdapter {
   private async launchBrowser() {
     const { chromium } = await import('playwright')
     return chromium.launch({ headless: false })
+  }
+
+  private async createAuthenticatedSession() {
+    const browser = await this.launchBrowser()
+    const page = await browser.newPage()
+
+    await page.goto(this.baseUrl, { waitUntil: 'domcontentloaded' })
+    await page.fill(baeminSelectors.username, this.credentials.username)
+    await page.fill(baeminSelectors.password, this.credentials.password)
+    await page.click(baeminSelectors.loginButton)
+    await page.waitForLoadState('networkidle')
+
+    return { browser, page }
   }
 }
