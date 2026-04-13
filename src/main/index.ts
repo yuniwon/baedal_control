@@ -24,6 +24,10 @@ import { SyncEngine } from './services/sync-engine'
 type PlatformCredential = NonNullable<ReturnType<CredentialVault['get']>>
 type PlatformAdapterFactory = (credential: PlatformCredential) => BaeminAdapter | CoupangEatsAdapter | DdangyoAdapter
 
+const APP_NAME = 'delivery-menu-sync'
+
+app.setName(APP_NAME)
+
 const createWindow = () => {
   const window = new BrowserWindow({
     width: 1440,
@@ -77,7 +81,6 @@ app.whenReady().then(() => {
     finish: (record) => syncRunRepository.update(record),
     addItem: (record) => syncRunItemRepository.addItem(record)
   })
-  // @ts-expect-error -- TS resolves the factory call as the concrete class symbol here.
   const catalogImportOrchestrator = createCatalogImportOrchestrator({
     db,
     adapterRegistry,
@@ -87,7 +90,7 @@ app.whenReady().then(() => {
     platformOptionGroupRepository,
     platformImportRunRepository,
     platformImportChangeRepository
-  })
+  });
   (Object.keys(adapterFactories) as PlatformCode[]).forEach(registerPlatformAdapter)
 
   registerHandlers({
