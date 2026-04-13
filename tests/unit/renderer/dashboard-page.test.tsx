@@ -1,0 +1,208 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
+const {
+  listMenus,
+  getPlatformCredentialStatus,
+  listSyncRuns,
+  listImportRuns,
+  listImportChanges,
+  previewSync,
+  runSync
+} = vi.hoisted(() => ({
+  listMenus: vi.fn().mockResolvedValue([
+    { menuId: 'menu-1', baseName: '콰트로피자 15인치', basePrice: 32900, isDirty: 0, isManaged: 1 },
+    { menuId: 'menu-2', baseName: '메뉴 검토용 피자', basePrice: 23900, isDirty: 0, isManaged: 1 }
+  ]),
+  getPlatformCredentialStatus: vi.fn().mockResolvedValue([
+    { platformCode: 'baemin', connected: true },
+    { platformCode: 'coupangeats', connected: false },
+    { platformCode: 'ddangyo', connected: false }
+  ]),
+  listSyncRuns: vi.fn().mockResolvedValue([
+    {
+      syncRunId: 'run-1',
+      startedAt: '2026-04-13 14:00',
+      resultSummary: '1 succeeded, 0 failed'
+    }
+  ]),
+  listImportRuns: vi.fn().mockResolvedValue([
+    {
+      importRunId: 'run-1',
+      platformCode: 'baemin',
+      startedAt: '2026-04-13 13:50',
+      finishedAt: '2026-04-13 13:55',
+      status: 'completed',
+      menuFetchCompleted: 1,
+      optionFetchCompleted: 1
+    },
+    {
+      importRunId: 'run-0',
+      platformCode: 'baemin',
+      startedAt: '2026-04-12 13:50',
+      finishedAt: '2026-04-12 13:55',
+      status: 'completed',
+      menuFetchCompleted: 1,
+      optionFetchCompleted: 1
+    }
+  ]),
+  previewSync: vi.fn().mockResolvedValue({
+    items: [
+      {
+        platformCode: 'baemin',
+        menuId: 'menu-1',
+        platformMenuId: '59707517',
+        previousName: '콰트로피자 15\'\'',
+        nextName: '콰트로피자 15\'\'',
+        nextPrice: 32900
+      }
+    ],
+    needsReview: [
+      {
+        menuId: 'menu-2',
+        platformCode: 'baemin',
+        platformMenuId: 'p-2',
+        reason: 'source_missing_review'
+      }
+    ]
+  }),
+  runSync: vi.fn().mockResolvedValue({
+    summary: '배민 1건 반영 완료'
+  }),
+  listImportChanges: vi.fn().mockResolvedValue([
+    {
+      changeId: 'c-1',
+      importRunId: 'run-1',
+      platformCode: 'baemin',
+      entityType: 'menu',
+      entityKey: 'menu-1',
+      entityName: '감자피자',
+      changeType: 'created'
+    },
+    {
+      changeId: 'c-2',
+      importRunId: 'run-1',
+      platformCode: 'baemin',
+      entityType: 'menu',
+      entityKey: 'menu-2',
+      entityName: '새 메뉴',
+      changeType: 'missing_suspected'
+    },
+    {
+      changeId: 'c-3',
+      importRunId: 'run-1',
+      platformCode: 'baemin',
+      entityType: 'menu',
+      entityKey: 'menu-3',
+      entityName: '없음 메뉴',
+      changeType: 'absent_confirmed'
+    },
+    {
+      changeId: 'c-4',
+      importRunId: 'run-1',
+      platformCode: 'baemin',
+      entityType: 'option_group',
+      entityKey: 'group-1',
+      entityName: '옵션그룹',
+      changeType: 'missing_suspected'
+    },
+    {
+      changeId: 'c-5',
+      importRunId: 'run-1',
+      platformCode: 'baemin',
+      entityType: 'menu',
+      entityKey: 'menu-4',
+      entityName: '재등장 메뉴',
+      changeType: 'resurfaced'
+    },
+    {
+      changeId: 'c-6',
+      importRunId: 'run-0',
+      platformCode: 'baemin',
+      entityType: 'menu',
+      entityKey: 'menu-0',
+      entityName: '이전 수집 메뉴',
+      changeType: 'created'
+    }
+  ])
+}))
+
+vi.mock('../../../src/renderer/src/lib/api', () => ({
+  appApi: {
+    menus: {
+      list: listMenus,
+      save: vi.fn(),
+      delete: vi.fn()
+    },
+    mappings: {
+      list: vi.fn(),
+      save: vi.fn(),
+      delete: vi.fn()
+    },
+    settings: {
+      getPlatformCredentialStatus,
+      listPlatformCredentials: vi.fn(),
+      savePlatformCredential: vi.fn(),
+      importPlatformMenus: vi.fn()
+    },
+    syncRuns: {
+      list: listSyncRuns
+    },
+    platformImportRuns: {
+      list: listImportRuns
+    },
+    platformImportChanges: {
+      listLatest: listImportChanges
+    },
+    sync: {
+      preview: previewSync,
+      run: runSync
+    },
+    platformMenus: {
+      list: vi.fn()
+    }
+  }
+}))
+
+import { DashboardPage } from '../../../src/renderer/src/pages/DashboardPage'
+
+describe('DashboardPage', () => {
+  it('shows live connection state and the latest sync summary instead of placeholder values', async () => {
+    render(<DashboardPage />)
+
+    expect(await screen.findByText('1 / 3')).toBeTruthy()
+    expect(screen.getByText('성공 1건, 실패 0건')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '반영 미리보기' })).toBeTruthy()
+    expect(screen.getByText('연결됨')).toBeTruthy()
+    expect(screen.getAllByText('연결 대기').length).toBe(2)
+    expect(screen.getByText('이번 가져오기 변경점')).toBeTruthy()
+    expect(screen.getByText('새 메뉴 1개')).toBeTruthy()
+    expect(screen.getByText('누락 의심 메뉴 1개')).toBeTruthy()
+    expect(screen.getByText('플랫폼에 없음 메뉴 1개')).toBeTruthy()
+    expect(screen.getByText('누락 의심 옵션 1개')).toBeTruthy()
+    expect(screen.getByText('재등장 항목 1개')).toBeTruthy()
+    expect(screen.getByText('원본 메뉴 확인 필요')).toBeTruthy()
+    expect(screen.queryByText('새 메뉴 2개')).toBeNull()
+    expect(screen.getByText('배민 · 메뉴 검토용 피자')).toBeTruthy()
+    expect(screen.queryByText(/menu-2/)).toBeNull()
+  })
+
+  it('opens a preview first and only runs sync after confirmation', async () => {
+    render(<DashboardPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '반영 미리보기' }))
+
+    await waitFor(() => {
+      expect(previewSync).toHaveBeenCalled()
+    })
+  })
+
+  it('does not mix historical change rows when there is no latest import run', async () => {
+    listImportRuns.mockResolvedValueOnce([])
+
+    render(<DashboardPage />)
+
+    expect(await screen.findByText('최근 가져오기 변경점이 없습니다.')).toBeTruthy()
+    expect(screen.queryByText('새 메뉴 1개')).toBeNull()
+  })
+})
