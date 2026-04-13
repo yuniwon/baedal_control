@@ -1,5 +1,6 @@
 import type { PlatformCode, PlatformMenuCatalogRecord } from '../../shared/contracts'
 import type { DatabaseConnection } from '../db/connection'
+import { withSavepoint } from '../db/savepoint'
 
 interface PlatformMenuPresenceUpdate {
   platformCode: PlatformCode
@@ -12,9 +13,7 @@ export class PlatformMenuRepository {
   constructor(private readonly db: DatabaseConnection) {}
 
   replaceForPlatform(platformCode: PlatformCode, records: PlatformMenuCatalogRecord[]) {
-    this.db.exec('begin')
-
-    try {
+    withSavepoint(this.db, () => {
       this.db.prepare(`
         delete from platform_menus
         where platform_code = ?
@@ -50,12 +49,7 @@ export class PlatformMenuRepository {
           record.platformMenuBindingStatus ?? null
         )
       }
-
-      this.db.exec('commit')
-    } catch (error) {
-      this.db.exec('rollback')
-      throw error
-    }
+    })
   }
 
   upsertSeenBatch(
@@ -101,9 +95,7 @@ export class PlatformMenuRepository {
         end
     `)
 
-    this.db.exec('begin')
-
-    try {
+    withSavepoint(this.db, () => {
       for (const record of records) {
         statement.run(
           platformCode,
@@ -119,12 +111,7 @@ export class PlatformMenuRepository {
           importRunId
         )
       }
-
-      this.db.exec('commit')
-    } catch (error) {
-      this.db.exec('rollback')
-      throw error
-    }
+    })
   }
 
   applyPresenceUpdates(updates: PlatformMenuPresenceUpdate[]) {
@@ -144,9 +131,7 @@ export class PlatformMenuRepository {
       where platform_code = ? and platform_menu_id = ?
     `)
 
-    this.db.exec('begin')
-
-    try {
+    withSavepoint(this.db, () => {
       for (const update of updates) {
         statement.run(
           update.missingStreak,
@@ -156,12 +141,7 @@ export class PlatformMenuRepository {
           update.platformMenuId
         )
       }
-
-      this.db.exec('commit')
-    } catch (error) {
-      this.db.exec('rollback')
-      throw error
-    }
+    })
   }
 
   listAll(): PlatformMenuCatalogRecord[] {

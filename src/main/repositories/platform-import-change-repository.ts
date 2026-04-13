@@ -1,13 +1,12 @@
 import type { PlatformImportChangeRecord } from '../../shared/contracts'
 import type { DatabaseConnection } from '../db/connection'
+import { withSavepoint } from '../db/savepoint'
 
 export class PlatformImportChangeRepository {
   constructor(private readonly db: DatabaseConnection) {}
 
   replaceForRun(importRunId: string, changes: PlatformImportChangeRecord[]) {
-    this.db.exec('begin')
-
-    try {
+    withSavepoint(this.db, () => {
       this.db.prepare(`
         delete from platform_import_changes
         where import_run_id = ?
@@ -42,12 +41,7 @@ export class PlatformImportChangeRepository {
           change.afterJson ?? null
         )
       }
-
-      this.db.exec('commit')
-    } catch (error) {
-      this.db.exec('rollback')
-      throw error
-    }
+    })
   }
 
   listLatest(limit = 50): PlatformImportChangeRecord[] {

@@ -1,5 +1,6 @@
 import type { PlatformCode, PlatformOptionGroupRecord } from '../../shared/contracts'
 import type { DatabaseConnection } from '../db/connection'
+import { withSavepoint } from '../db/savepoint'
 
 interface PlatformOptionGroupPresenceUpdate {
   platformCode: PlatformCode
@@ -12,9 +13,7 @@ export class PlatformOptionGroupRepository {
   constructor(private readonly db: DatabaseConnection) {}
 
   replaceForPlatform(platformCode: PlatformCode, records: PlatformOptionGroupRecord[]) {
-    this.db.exec('begin')
-
-    try {
+    withSavepoint(this.db, () => {
       this.db.prepare(`
         delete from platform_option_groups
         where platform_code = ?
@@ -48,12 +47,7 @@ export class PlatformOptionGroupRepository {
           record.signatureKey ?? null
         )
       }
-
-      this.db.exec('commit')
-    } catch (error) {
-      this.db.exec('rollback')
-      throw error
-    }
+    })
   }
 
   upsertSeenBatch(
@@ -97,9 +91,7 @@ export class PlatformOptionGroupRepository {
         end
     `)
 
-    this.db.exec('begin')
-
-    try {
+    withSavepoint(this.db, () => {
       for (const record of records) {
         statement.run(
           platformCode,
@@ -114,12 +106,7 @@ export class PlatformOptionGroupRepository {
           importRunId
         )
       }
-
-      this.db.exec('commit')
-    } catch (error) {
-      this.db.exec('rollback')
-      throw error
-    }
+    })
   }
 
   applyPresenceUpdates(updates: PlatformOptionGroupPresenceUpdate[]) {
@@ -139,9 +126,7 @@ export class PlatformOptionGroupRepository {
       where platform_code = ? and option_group_id = ?
     `)
 
-    this.db.exec('begin')
-
-    try {
+    withSavepoint(this.db, () => {
       for (const update of updates) {
         statement.run(
           update.missingStreak,
@@ -151,12 +136,7 @@ export class PlatformOptionGroupRepository {
           update.optionGroupId
         )
       }
-
-      this.db.exec('commit')
-    } catch (error) {
-      this.db.exec('rollback')
-      throw error
-    }
+    })
   }
 
   listAll(): PlatformOptionGroupRecord[] {
