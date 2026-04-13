@@ -206,7 +206,11 @@ export interface SyncPreviewNeedsReview {
   menuId: string
   platformCode?: PlatformCode
   platformMenuId?: string
-  reason: 'missing_mapping' | 'binding_review' | 'price_variant_review'
+  reason:
+    | 'missing_mapping'
+    | 'binding_review'
+    | 'price_variant_review'
+    | 'source_missing_review'
   detail?: string
 }
 

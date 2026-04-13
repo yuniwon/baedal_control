@@ -1,4 +1,13 @@
-import type { PlatformImportSummary } from '../../../shared/contracts'
+import type {
+  LogicalOptionGroupRecord,
+  PlatformImportChangeRecord,
+  PlatformImportRunRecord,
+  PlatformMenuCatalogRecord,
+  PlatformOptionGroupRecord,
+  PlatformImportSummary,
+  PlatformInspectionReport,
+  SyncRunRecord
+} from '../../../shared/contracts'
 
 declare global {
   interface Window {
@@ -6,6 +15,7 @@ declare global {
       menus: {
         list: () => Promise<unknown[]>
         save: (payload: unknown) => Promise<void>
+        delete: (menuId: string) => Promise<{ ok: boolean; error?: string }>
       }
       settings: {
         getPlatformCredentialStatus: () => Promise<unknown[]>
@@ -14,18 +24,46 @@ declare global {
           platformCode: string
           username: string
           password: string
-        }) => Promise<{ ok: true; importSummary?: PlatformImportSummary; importError?: string }>
+        }) => Promise<{
+          ok: true
+          importSummary?: PlatformImportSummary
+          importInspection?: PlatformInspectionReport
+          importError?: string
+        }>
+        importPlatformMenus: (payload: { platformCode: string }) => Promise<{
+          ok: true
+          importSummary?: PlatformImportSummary
+          importInspection?: PlatformInspectionReport
+          importError?: string
+        }>
       }
       syncRuns: {
-        list: () => Promise<unknown[]>
+        list: () => Promise<SyncRunRecord[]>
       }
       sync: {
         preview: () => Promise<unknown>
         run: () => Promise<unknown>
+        runItems: (payload: unknown) => Promise<unknown>
       }
       mappings: {
         list: () => Promise<unknown[]>
         save: (payload: unknown) => Promise<void>
+        delete: (mappingId: string) => Promise<void>
+      }
+      platformOptionGroups: {
+        list: () => Promise<PlatformOptionGroupRecord[]>
+      }
+      logicalOptionGroups: {
+        list: () => Promise<LogicalOptionGroupRecord[]>
+      }
+      platformMenus: {
+        list: () => Promise<PlatformMenuCatalogRecord[]>
+      }
+      platformImportRuns: {
+        list: () => Promise<PlatformImportRunRecord[]>
+      }
+      platformImportChanges: {
+        listLatest: (limit?: number) => Promise<PlatformImportChangeRecord[]>
       }
     }
   }
@@ -38,7 +76,8 @@ const noopPromise = async <T,>(value: T) => value
 export const appApi: AppApi = window.appApi ?? {
   menus: {
     list: () => noopPromise([] as unknown[]),
-    save: () => noopPromise(undefined)
+    save: () => noopPromise(undefined),
+    delete: () => noopPromise({ ok: true })
   },
   settings: {
     getPlatformCredentialStatus: () => noopPromise([] as unknown[]),
@@ -48,17 +87,40 @@ export const appApi: AppApi = window.appApi ?? {
         ok: true as const,
         importSummary: undefined,
         importError: undefined
+      }),
+    importPlatformMenus: () =>
+      noopPromise({
+        ok: true as const,
+        importSummary: undefined,
+        importError: undefined
       })
   },
   syncRuns: {
-    list: () => noopPromise([] as unknown[])
+    list: () => noopPromise([] as SyncRunRecord[])
   },
   sync: {
     preview: () => noopPromise({ items: [], needsReview: [] }),
-    run: () => noopPromise({ summary: '0 succeeded, 0 failed' })
+    run: () => noopPromise({ summary: '0 succeeded, 0 failed' }),
+    runItems: () => noopPromise({ summary: '0 succeeded, 0 failed' })
   },
   mappings: {
     list: () => noopPromise([] as unknown[]),
-    save: () => noopPromise(undefined)
+    save: () => noopPromise(undefined),
+    delete: () => noopPromise(undefined)
+  },
+  platformOptionGroups: {
+    list: () => noopPromise([] as PlatformOptionGroupRecord[])
+  },
+  logicalOptionGroups: {
+    list: () => noopPromise([] as LogicalOptionGroupRecord[])
+  },
+  platformMenus: {
+    list: () => noopPromise([] as PlatformMenuCatalogRecord[])
+  },
+  platformImportRuns: {
+    list: () => noopPromise([] as PlatformImportRunRecord[])
+  },
+  platformImportChanges: {
+    listLatest: () => noopPromise([] as PlatformImportChangeRecord[])
   }
 }

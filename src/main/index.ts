@@ -18,6 +18,7 @@ import { CoupangEatsAdapter } from './platforms/coupangeats/adapter'
 import { DdangyoAdapter } from './platforms/ddangyo/adapter'
 import { CredentialVault } from './services/credential-vault'
 import { createCatalogImportOrchestrator } from './services/catalog-import-orchestrator'
+import { buildLogicalOptionGroups } from './services/logical-option-group-service'
 import { SyncEngine } from './services/sync-engine'
 
 type PlatformCredential = NonNullable<ReturnType<CredentialVault['get']>>
@@ -94,6 +95,11 @@ app.whenReady().then(() => {
     mappingRepository,
     platformMenuRepository,
     platformOptionGroupRepository,
+    platformImportRunRepository,
+    platformImportChangeRepository,
+    logicalOptionGroupService: {
+      list: () => buildLogicalOptionGroups(platformOptionGroupRepository.listAll())
+    },
     syncRunRepository,
     syncRunItemRepository,
     credentialVault,
