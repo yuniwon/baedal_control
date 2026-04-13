@@ -7,6 +7,7 @@ export const migrate = (db: DatabaseConnection) => {
       base_name text not null,
       base_price integer not null,
       is_dirty integer not null default 0,
+      is_managed integer not null default 1,
       created_at text not null default current_timestamp,
       updated_at text not null default current_timestamp
     );
@@ -17,10 +18,65 @@ export const migrate = (db: DatabaseConnection) => {
       platform_code text not null,
       platform_menu_id text not null,
       platform_menu_name text not null,
+      platform_menu_current_price integer,
+      platform_menu_price_count integer,
       matched_by text not null,
       is_confirmed integer not null default 0,
       last_verified_at text,
       foreign key(menu_id) references menus(menu_id)
+    );
+
+    create table if not exists platform_menus (
+      platform_code text not null,
+      platform_menu_id text not null,
+      platform_menu_name text not null,
+      platform_menu_current_price integer,
+      platform_menu_price_count integer,
+      platform_menu_group_name text,
+      platform_menu_status text,
+      platform_menu_price_summary text,
+      platform_menu_binding_summary text,
+      platform_menu_binding_status text,
+      last_seen_at text not null default current_timestamp,
+      primary key (platform_code, platform_menu_id)
+    );
+
+    create table if not exists platform_option_groups (
+      platform_code text not null,
+      option_group_id text not null,
+      option_group_name text not null,
+      min_order_quantity integer,
+      max_order_quantity integer,
+      mapping_menus_count integer,
+      options_json text not null,
+      menus_json text not null,
+      last_seen_at text not null default current_timestamp,
+      primary key (platform_code, option_group_id)
+    );
+
+    create table if not exists platform_import_runs (
+      import_run_id text primary key,
+      platform_code text not null,
+      started_at text not null default current_timestamp,
+      finished_at text,
+      status text not null,
+      menu_fetch_completed integer not null default 0,
+      option_fetch_completed integer not null default 0,
+      summary_json text
+    );
+
+    create table if not exists platform_import_changes (
+      change_id text primary key,
+      import_run_id text not null,
+      platform_code text not null,
+      entity_type text not null,
+      entity_key text not null,
+      entity_name text not null,
+      change_type text not null,
+      presence_status text,
+      before_json text,
+      after_json text,
+      created_at text not null default current_timestamp
     );
 
     create table if not exists sync_runs (
@@ -31,4 +87,84 @@ export const migrate = (db: DatabaseConnection) => {
       result_summary text
     );
   `)
+
+  const mappingColumns = new Set(
+    (
+      db.prepare(`
+        select name
+        from pragma_table_info('platform_menu_mappings')
+      `).all() as Array<{ name: string }>
+    ).map((column) => column.name)
+  )
+
+  const missingMappingColumns = [
+    ['platform_menu_current_price', 'integer'],
+    ['platform_menu_price_count', 'integer'],
+    ['platform_menu_group_name', 'text'],
+    ['platform_menu_status', 'text'],
+    ['platform_menu_price_summary', 'text'],
+    ['platform_menu_binding_summary', 'text'],
+    ['platform_menu_binding_status', 'text'],
+    ['mapping_status', "text not null default 'active'"]
+  ].filter(([name]) => !mappingColumns.has(name))
+
+  for (const [name, type] of missingMappingColumns) {
+    db.exec(`alter table platform_menu_mappings add column ${name} ${type}`)
+  }
+
+  const menuColumns = new Set(
+    (
+      db.prepare(`
+        select name
+        from pragma_table_info('menus')
+      `).all() as Array<{ name: string }>
+    ).map((column) => column.name)
+  )
+
+  if (!menuColumns.has('is_managed')) {
+    db.exec('alter table menus add column is_managed integer not null default 1')
+  }
+
+  const platformMenuColumns = new Set(
+    (
+      db.prepare(`
+        select name
+        from pragma_table_info('platform_menus')
+      `).all() as Array<{ name: string }>
+    ).map((column) => column.name)
+  )
+
+  const missingPlatformMenuColumns = [
+    ['platform_menu_current_price', 'integer'],
+    ['platform_menu_price_count', 'integer'],
+    ['last_seen_import_id', 'text'],
+    ['missing_streak', 'integer not null default 0'],
+    ['presence_status', "text not null default 'present'"],
+    ['presence_changed_at', 'text']
+  ].filter(([name]) => !platformMenuColumns.has(name))
+
+  for (const [name, type] of missingPlatformMenuColumns) {
+    db.exec(`alter table platform_menus add column ${name} ${type}`)
+  }
+
+  const platformOptionGroupColumns = new Set(
+    (
+      db.prepare(`
+        select name
+        from pragma_table_info('platform_option_groups')
+      `).all() as Array<{ name: string }>
+    ).map((column) => column.name)
+  )
+
+  const missingPlatformOptionGroupColumns = [
+    ['signature_key', 'text'],
+    ['last_seen_import_id', 'text'],
+    ['missing_streak', 'integer not null default 0'],
+    ['presence_status', "text not null default 'present'"],
+    ['presence_changed_at', 'text']
+  ].filter(([name]) => !platformOptionGroupColumns.has(name))
+
+  for (const [name, type] of missingPlatformOptionGroupColumns) {
+    db.exec(`alter table platform_option_groups add column ${name} ${type}`)
+  }
 }
