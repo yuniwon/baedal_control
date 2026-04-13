@@ -4,9 +4,10 @@ import { DashboardPage } from './pages/DashboardPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { MappingPage } from './pages/MappingPage'
 import { MenuPage } from './pages/MenuPage'
+import { OptionPage } from './pages/OptionPage'
 import { SettingsPage } from './pages/SettingsPage'
 
-const tabs = ['dashboard', 'menus', 'mapping', 'settings', 'history'] as const
+const tabs = ['dashboard', 'menus', 'options', 'mapping', 'settings', 'history'] as const
 
 type AppTab = (typeof tabs)[number]
 
@@ -29,6 +30,7 @@ export default function App() {
             >
               {value === 'dashboard' && '대시보드'}
               {value === 'menus' && '메뉴 관리'}
+              {value === 'options' && '옵션 관리'}
               {value === 'mapping' && '매핑 검토'}
               {value === 'settings' && '계정 연결'}
               {value === 'history' && '실행 기록'}
@@ -39,6 +41,7 @@ export default function App() {
       <main className="content">
         {tab === 'dashboard' && <DashboardPage />}
         {tab === 'menus' && <MenuPage />}
+        {tab === 'options' && <OptionPage />}
         {tab === 'mapping' && <MappingPage />}
         {tab === 'settings' && <SettingsPage />}
         {tab === 'history' && <HistoryPage />}
