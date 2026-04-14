@@ -21,15 +21,22 @@
 - 메뉴/매핑에는 `platformMenuPriceVariants`가 구조적으로 저장된다.
 - 기준 메뉴도 `basePriceVariants`를 저장할 수 있고, 메뉴 관리에서 다중 가격 초안을 직접 편집할 수 있다.
 - 원본 누락 상태는 `missing_suspected -> absent_confirmed -> resurfaced` 흐름으로 관리된다.
+- 렌더러 UX 1차 단순화가 들어갔다.
+  - 좌측 기본 내비게이션은 `홈 / 메뉴 / 옵션 / 가져오기`
+  - `매핑 검토 / 실행 기록`은 `고급 기능 보기`를 눌렀을 때만 보인다.
+  - `가져오기` 화면의 브라우저 검사는 기본 숨김이며 `브라우저 진단 보기`로 펼친다.
 
 ## 2. 이번 커밋 직전 검증 결과
 
 - `npm test`
-  - 62개 파일, 272개 테스트 통과
+  - 63개 파일, 276개 테스트 통과
 - `npm run lint:types`
   - 통과
 - `npm run build`
   - 통과
+- `npm run test -- tests/unit/renderer/app.test.tsx tests/unit/renderer/settings-page.test.tsx`
+  - 통과
+  - 작업 중심 내비게이션과 브라우저 진단 기본 숨김 동작 검증
 - `npx electron out/main/index.js --task=agent-plan-next-actions --limit=5`
   - 통과
   - 실패 점검은 플랫폼별 1건으로 묶이고, 옵션 구조 검토는 같은 옵션명 기준으로 묶여 반복 제목이 줄어든 것 확인

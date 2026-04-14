@@ -18,7 +18,7 @@ vi.mock('../../../src/renderer/src/pages/MappingPage', () => ({
 }))
 
 vi.mock('../../../src/renderer/src/pages/SettingsPage', () => ({
-  SettingsPage: () => <h1>계정 연결</h1>
+  SettingsPage: () => <h1>가져오기</h1>
 }))
 
 vi.mock('../../../src/renderer/src/pages/HistoryPage', () => ({
@@ -28,11 +28,18 @@ vi.mock('../../../src/renderer/src/pages/HistoryPage', () => ({
 import App from '../../../src/renderer/src/App'
 
 describe('App navigation', () => {
-  it('shows the option management tab and opens the page', async () => {
+  it('shows task-first navigation and keeps advanced pages collapsed until requested', async () => {
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: '옵션 관리' }))
+    expect(screen.getByRole('button', { name: '홈' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '메뉴' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '옵션' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '가져오기' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '매핑 검토' })).toBeNull()
 
-    expect(await screen.findByRole('heading', { name: '옵션 관리' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '고급 기능 보기' }))
+    fireEvent.click(await screen.findByRole('button', { name: '매핑 검토' }))
+
+    expect(await screen.findByRole('heading', { name: '매핑 검토' })).toBeTruthy()
   })
 })

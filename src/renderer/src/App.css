@@ -34,6 +34,11 @@
 .nav {
   display: flex;
   flex-direction: column;
+  gap: 16px;
+}
+
+.nav-section {
+  display: grid;
   gap: 8px;
 }
 
@@ -59,6 +64,10 @@
   border-color: #d0d5dd;
   box-shadow: inset 3px 0 0 #2563eb;
   color: #101828;
+}
+
+.nav-secondary-toggle {
+  color: #667085;
 }
 
 .content {
@@ -1159,6 +1168,11 @@
 .browser-inspection-section {
   display: grid;
   gap: 14px;
+}
+
+.diagnostics-panel {
+  display: grid;
+  gap: 12px;
 }
 
 .browser-inspection-session {

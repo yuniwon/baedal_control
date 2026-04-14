@@ -231,6 +231,18 @@ describe('SettingsPage', () => {
     expect(screen.getByDisplayValue('pw1')).toBeTruthy()
   })
 
+  it('keeps browser diagnostics hidden until the operator opens advanced tools', async () => {
+    render(<SettingsPage />)
+
+    expect(await screen.findByRole('heading', { name: '가져오기' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '브라우저 진단 보기' })).toBeTruthy()
+    expect(screen.queryByText('브라우저 검사')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '브라우저 진단 보기' }))
+
+    expect(await screen.findByText('브라우저 검사')).toBeTruthy()
+  })
+
   it('shows the automatic import result after saving credentials', async () => {
     render(<SettingsPage />)
 
@@ -346,6 +358,8 @@ describe('SettingsPage', () => {
   it('shows browser inspection instructions and the latest captured merchant snapshot', async () => {
     render(<SettingsPage />)
 
+    fireEvent.click(await screen.findByRole('button', { name: '브라우저 진단 보기' }))
+
     expect(await screen.findByText('브라우저 검사')).toBeTruthy()
     expect(screen.getByText('수신 대기 중')).toBeTruthy()
     expect(screen.getByText('http://127.0.0.1:39481/inspection-snapshots')).toBeTruthy()
@@ -362,6 +376,7 @@ describe('SettingsPage', () => {
   it('launches managed chrome from the browser inspection panel', async () => {
     render(<SettingsPage />)
 
+    fireEvent.click(await screen.findByRole('button', { name: '브라우저 진단 보기' }))
     fireEvent.click(await screen.findByRole('button', { name: '전용 크롬 열기' }))
 
     await waitFor(() => {
@@ -383,6 +398,7 @@ describe('SettingsPage', () => {
   it('launches baemin managed chrome login from the browser inspection panel', async () => {
     render(<SettingsPage />)
 
+    fireEvent.click(await screen.findByRole('button', { name: '브라우저 진단 보기' }))
     fireEvent.click(await screen.findByRole('button', { name: '배민 메뉴 열기' }))
 
     await waitFor(() => {
@@ -396,6 +412,8 @@ describe('SettingsPage', () => {
   it('shows the currently detected managed chrome tabs', async () => {
     render(<SettingsPage />)
 
+    fireEvent.click(await screen.findByRole('button', { name: '브라우저 진단 보기' }))
+
     expect(await screen.findByText('현재 전용 크롬 탭')).toBeTruthy()
     expect(screen.getByText('쿠팡이츠 메뉴 페이지')).toBeTruthy()
     expect(screen.getByText('쿠팡이츠 옵션 페이지')).toBeTruthy()
@@ -405,6 +423,7 @@ describe('SettingsPage', () => {
   it('captures the currently detected managed chrome tab from the app', async () => {
     render(<SettingsPage />)
 
+    fireEvent.click(await screen.findByRole('button', { name: '브라우저 진단 보기' }))
     const captureButtons = await screen.findAllByRole('button', { name: '현재 탭 읽기' })
     fireEvent.click(captureButtons[0])
 

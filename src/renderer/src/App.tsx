@@ -7,12 +7,42 @@ import { MenuPage } from './pages/MenuPage'
 import { OptionPage } from './pages/OptionPage'
 import { SettingsPage } from './pages/SettingsPage'
 
-const tabs = ['dashboard', 'menus', 'options', 'mapping', 'settings', 'history'] as const
+const primaryTabs = ['home', 'menus', 'options', 'imports'] as const
+const advancedTabs = ['mapping', 'history'] as const
 
-type AppTab = (typeof tabs)[number]
+type AppTab = (typeof primaryTabs)[number] | (typeof advancedTabs)[number]
+
+const getTabLabel = (tab: AppTab) => {
+  switch (tab) {
+    case 'home':
+      return '홈'
+    case 'menus':
+      return '메뉴'
+    case 'options':
+      return '옵션'
+    case 'imports':
+      return '가져오기'
+    case 'mapping':
+      return '매핑 검토'
+    case 'history':
+      return '실행 기록'
+  }
+}
 
 export default function App() {
-  const [tab, setTab] = useState<AppTab>('dashboard')
+  const [tab, setTab] = useState<AppTab>('home')
+  const [showAdvancedNav, setShowAdvancedNav] = useState(false)
+
+  const renderNavButton = (value: AppTab) => (
+    <button
+      key={value}
+      className={value === tab ? 'nav-button active' : 'nav-button'}
+      onClick={() => setTab(value)}
+      type="button"
+    >
+      {getTabLabel(value)}
+    </button>
+  )
 
   return (
     <div className="app-shell">
@@ -22,28 +52,33 @@ export default function App() {
           <span>한 곳에서 수정하고 한번에 반영</span>
         </div>
         <nav className="nav">
-          {tabs.map((value) => (
+          <div className="nav-section">{primaryTabs.map(renderNavButton)}</div>
+          <div className="nav-section">
             <button
-              key={value}
-              className={value === tab ? 'nav-button active' : 'nav-button'}
-              onClick={() => setTab(value)}
+              className="nav-button nav-secondary-toggle"
+              onClick={() =>
+                setShowAdvancedNav((current) => {
+                  const nextValue = !current
+                  if (!nextValue && advancedTabs.includes(tab as (typeof advancedTabs)[number])) {
+                    setTab('home')
+                  }
+                  return nextValue
+                })
+              }
+              type="button"
             >
-              {value === 'dashboard' && '대시보드'}
-              {value === 'menus' && '메뉴 관리'}
-              {value === 'options' && '옵션 관리'}
-              {value === 'mapping' && '매핑 검토'}
-              {value === 'settings' && '계정 연결'}
-              {value === 'history' && '실행 기록'}
+              {showAdvancedNav ? '고급 기능 숨기기' : '고급 기능 보기'}
             </button>
-          ))}
+            {showAdvancedNav ? advancedTabs.map(renderNavButton) : null}
+          </div>
         </nav>
       </aside>
       <main className="content">
-        {tab === 'dashboard' && <DashboardPage />}
+        {tab === 'home' && <DashboardPage />}
         {tab === 'menus' && <MenuPage />}
         {tab === 'options' && <OptionPage />}
         {tab === 'mapping' && <MappingPage />}
-        {tab === 'settings' && <SettingsPage />}
+        {tab === 'imports' && <SettingsPage />}
         {tab === 'history' && <HistoryPage />}
       </main>
     </div>
