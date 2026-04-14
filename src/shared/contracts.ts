@@ -197,6 +197,26 @@ export interface LogicalOptionGroupRecord {
   }>
 }
 
+export interface AgentReportFilterInput {
+  platformCode?: PlatformCode | null
+  menuId?: string | null
+  platformMenuId?: string | null
+  reason?: SyncPreviewNeedsReview['reason'] | null
+  limit?: number | null
+}
+
+export interface AgentReportEnvelope<TData> {
+  task:
+    | 'agent-report-overview'
+    | 'agent-report-review-queue'
+    | 'agent-report-menu'
+    | 'agent-report-options'
+    | 'agent-report-platform'
+  generatedAt: string
+  summary: string
+  data: TData
+}
+
 export interface SyncRunRecord {
   syncRunId: string
   startedAt: string
@@ -270,6 +290,85 @@ export interface SyncPreviewNeedsReview {
 export interface SyncPreviewResult {
   items: SyncPreviewItem[]
   needsReview: SyncPreviewNeedsReview[]
+}
+
+export interface AgentOverviewFailureRecord {
+  syncRunId: string
+  syncRunItemId: string
+  startedAt: string
+  platformCode: PlatformCode
+  menuId: string
+  errorCode?: string | null
+  errorMessage?: string | null
+  message: string
+  action?: string | null
+  retryable: boolean
+}
+
+export interface AgentOverviewReport {
+  menuCounts: {
+    total: number
+    managed: number
+    unmanaged: number
+    dirty: number
+  }
+  previewCounts: {
+    executable: number
+    needsReview: number
+    byPlatform: Record<PlatformCode, { executable: number; needsReview: number }>
+  }
+  latestImports: PlatformImportRunRecord[]
+  recentFailures: AgentOverviewFailureRecord[]
+  managedChrome: ManagedChromeSessionStatus | null
+}
+
+export interface AgentReviewQueueItem {
+  menuId: string
+  menuName: string
+  menuBasePrice: number
+  platformCode?: PlatformCode
+  platformMenuId?: string
+  reason: SyncPreviewNeedsReview['reason']
+  detail?: string
+  platformMenuName?: string | null
+  platformMenuPriceSummary?: string | null
+}
+
+export interface AgentReviewQueueReport {
+  total: number
+  items: AgentReviewQueueItem[]
+}
+
+export interface AgentMenuRunRecord extends SyncRunRecord {
+  items: SyncRunItemRecord[]
+}
+
+export interface AgentMenuReport {
+  menu: MenuRecord
+  mappings: PlatformMenuMappingRecord[]
+  preview: {
+    executable: SyncPreviewItem[]
+    needsReview: SyncPreviewNeedsReview[]
+  }
+  logicalOptionGroups: LogicalOptionGroupRecord[]
+  recentRuns: AgentMenuRunRecord[]
+}
+
+export interface AgentOptionsReport {
+  total: number
+  byStatus: Record<LogicalOptionGroupRecord['status'], number>
+  groups: LogicalOptionGroupRecord[]
+}
+
+export interface AgentPlatformReport {
+  platformCode: PlatformCode
+  menuCount: number
+  optionGroupCount: number
+  latestImport: PlatformImportRunRecord | null
+  latestChanges: PlatformImportChangeRecord[]
+  reviewQueue: AgentReviewQueueItem[]
+  recentFailures: AgentOverviewFailureRecord[]
+  managedChrome: ManagedChromeSessionStatus | null
 }
 
 export interface PlatformImportSummary {

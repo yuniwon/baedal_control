@@ -1,4 +1,11 @@
 import type {
+  AgentMenuReport,
+  AgentOptionsReport,
+  AgentOverviewReport,
+  AgentPlatformReport,
+  AgentReportEnvelope,
+  AgentReportFilterInput,
+  AgentReviewQueueReport,
   PlatformCode,
   PlatformImportSummary,
   PlatformInspectionReport,
@@ -9,6 +16,25 @@ import type {
 
 interface CliTaskRunnerDependencies {
   getSyncPreview: () => Promise<SyncPreviewResult> | SyncPreviewResult
+  agentOperationsReportService?: {
+    getOverviewReport: (
+      filters: AgentReportFilterInput
+    ) => Promise<AgentReportEnvelope<AgentOverviewReport>>
+    getReviewQueueReport: (
+      filters: AgentReportFilterInput
+    ) => Promise<AgentReportEnvelope<AgentReviewQueueReport>>
+    getMenuReport: (
+      menuId: string,
+      filters: AgentReportFilterInput
+    ) => Promise<AgentReportEnvelope<AgentMenuReport>>
+    getOptionsReport: (
+      filters: AgentReportFilterInput
+    ) => Promise<AgentReportEnvelope<AgentOptionsReport>>
+    getPlatformReport: (
+      platformCode: PlatformCode,
+      filters: AgentReportFilterInput
+    ) => Promise<AgentReportEnvelope<AgentPlatformReport>>
+  }
   syncEngine?: {
     run: (items: SyncPreviewItem[]) => Promise<{ syncRunId: string | null; summary: string }>
   }
@@ -33,10 +59,30 @@ interface ParsedCliArgs {
   platformCode: PlatformCode | null
   menuId: string | null
   platformMenuId: string | null
+  reason: SyncPreviewNeedsReview['reason'] | null
+  limit: number | null
 }
 
 const isPlatformCode = (value: string | null): value is PlatformCode =>
   value === 'baemin' || value === 'coupangeats' || value === 'ddangyo'
+
+const isNeedsReviewReason = (
+  value: string | null
+): value is SyncPreviewNeedsReview['reason'] =>
+  value === 'missing_mapping' ||
+  value === 'binding_review' ||
+  value === 'price_variant_review' ||
+  value === 'source_missing_review' ||
+  value === 'managed_session_write_review'
+
+const parseLimit = (value?: string | null) => {
+  if (!value) {
+    return null
+  }
+
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) ? parsed : null
+}
 
 const parseCliArgs = (argv: string[]): ParsedCliArgs => {
   const values = new Map<string, string>()
@@ -64,12 +110,15 @@ const parseCliArgs = (argv: string[]): ParsedCliArgs => {
   }
 
   const rawPlatformCode = values.get('platformCode') ?? null
+  const rawReason = values.get('reason') ?? null
 
   return {
     task: values.get('task') ?? null,
     platformCode: isPlatformCode(rawPlatformCode) ? rawPlatformCode : null,
     menuId: values.get('menuId')?.trim() || null,
-    platformMenuId: values.get('platformMenuId')?.trim() || null
+    platformMenuId: values.get('platformMenuId')?.trim() || null,
+    reason: isNeedsReviewReason(rawReason) ? rawReason : null,
+    limit: parseLimit(values.get('limit') ?? null)
   }
 }
 
@@ -116,9 +165,108 @@ export class CliTaskRunner {
 
   async run(argv: string[]): Promise<CliTaskRunnerResult | null> {
     const parsed = parseCliArgs(argv)
+    const reportFilters: AgentReportFilterInput = {
+      platformCode: parsed.platformCode,
+      menuId: parsed.menuId,
+      platformMenuId: parsed.platformMenuId,
+      reason: parsed.reason,
+      limit: parsed.limit
+    }
 
     if (!parsed.task) {
       return null
+    }
+
+    if (parsed.task === 'agent-report-overview') {
+      if (!this.dependencies.agentOperationsReportService) {
+        return {
+          exitCode: 1,
+          payload: { task: parsed.task, error: 'agent_report_service_unavailable' }
+        }
+      }
+
+      return {
+        exitCode: 0,
+        payload: await this.dependencies.agentOperationsReportService.getOverviewReport(reportFilters)
+      }
+    }
+
+    if (parsed.task === 'agent-report-review-queue') {
+      if (!this.dependencies.agentOperationsReportService) {
+        return {
+          exitCode: 1,
+          payload: { task: parsed.task, error: 'agent_report_service_unavailable' }
+        }
+      }
+
+      return {
+        exitCode: 0,
+        payload: await this.dependencies.agentOperationsReportService.getReviewQueueReport(
+          reportFilters
+        )
+      }
+    }
+
+    if (parsed.task === 'agent-report-menu') {
+      if (!this.dependencies.agentOperationsReportService) {
+        return {
+          exitCode: 1,
+          payload: { task: parsed.task, error: 'agent_report_service_unavailable' }
+        }
+      }
+
+      if (!parsed.menuId) {
+        return {
+          exitCode: 1,
+          payload: { task: parsed.task, error: 'menu_id_required' }
+        }
+      }
+
+      return {
+        exitCode: 0,
+        payload: await this.dependencies.agentOperationsReportService.getMenuReport(
+          parsed.menuId,
+          reportFilters
+        )
+      }
+    }
+
+    if (parsed.task === 'agent-report-options') {
+      if (!this.dependencies.agentOperationsReportService) {
+        return {
+          exitCode: 1,
+          payload: { task: parsed.task, error: 'agent_report_service_unavailable' }
+        }
+      }
+
+      return {
+        exitCode: 0,
+        payload: await this.dependencies.agentOperationsReportService.getOptionsReport(reportFilters)
+      }
+    }
+
+    if (parsed.task === 'agent-report-platform') {
+      if (!this.dependencies.agentOperationsReportService) {
+        return {
+          exitCode: 1,
+          payload: { task: parsed.task, error: 'agent_report_service_unavailable' }
+        }
+      }
+
+      if (!parsed.platformCode) {
+        return {
+          exitCode: 1,
+          payload: { task: parsed.task, error: 'platform_code_required' }
+        }
+      }
+
+      return {
+        exitCode: 0,
+        payload: await this.dependencies.agentOperationsReportService.getPlatformReport(
+          parsed.platformCode,
+          reportFilters
+        )
+      }
     }
 
     if (parsed.task === 'sync-preview') {

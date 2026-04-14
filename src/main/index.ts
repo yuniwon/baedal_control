@@ -21,6 +21,7 @@ import { DdangyoAdapter } from './platforms/ddangyo/adapter'
 import { CredentialVault } from './services/credential-vault'
 import { BrowserInspectorBridge } from './services/browser-inspector-bridge'
 import { createCatalogImportOrchestrator } from './services/catalog-import-orchestrator'
+import { AgentOperationsReportService } from './services/agent-operations-report-service'
 import { CliTaskRunner } from './services/cli-task-runner'
 import { buildLogicalOptionGroups } from './services/logical-option-group-service'
 import { ManagedChromeLauncher } from './services/managed-chrome-launcher'
@@ -174,8 +175,23 @@ app.whenReady().then(async () => {
       managedChromeSession: await managedChromeSessionProbe.inspect()
     })
 
+  const agentOperationsReportService = new AgentOperationsReportService({
+    menuRepository,
+    mappingRepository,
+    platformMenuRepository,
+    platformOptionGroupRepository,
+    platformImportRunRepository,
+    platformImportChangeRepository,
+    syncRunRepository,
+    syncRunItemRepository,
+    getSyncPreview,
+    getManagedChromeSession: () => managedChromeSessionProbe.inspect(),
+    buildLogicalOptionGroups
+  })
+
   const cliTaskRunner = new CliTaskRunner({
     getSyncPreview,
+    agentOperationsReportService,
     syncEngine,
     platformMenuImporter: catalogImportOrchestrator,
     platformFlowInspector: {

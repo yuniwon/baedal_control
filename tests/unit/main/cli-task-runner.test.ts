@@ -182,4 +182,58 @@ describe('CliTaskRunner', () => {
 
     expect(inspectCreateMenuFlow).toHaveBeenCalledWith('baemin')
   })
+
+  it('parses reason and limit filters for agent reports', async () => {
+    const getOverviewReport = vi.fn().mockResolvedValue({
+      task: 'agent-report-overview',
+      generatedAt: '2026-04-14T00:00:00.000Z',
+      summary: 'ok',
+      data: {}
+    })
+
+    const runner = new CliTaskRunner({
+      getSyncPreview: vi.fn().mockResolvedValue({ items: [], needsReview: [] }),
+      agentOperationsReportService: {
+        getOverviewReport,
+        getReviewQueueReport: vi.fn(),
+        getMenuReport: vi.fn(),
+        getOptionsReport: vi.fn(),
+        getPlatformReport: vi.fn()
+      }
+    })
+
+    const result = await runner.run([
+      '--task=agent-report-overview',
+      '--platformCode=baemin',
+      '--reason=source_missing_review',
+      '--limit=3'
+    ])
+
+    expect(getOverviewReport).toHaveBeenCalledWith({
+      platformCode: 'baemin',
+      menuId: null,
+      platformMenuId: null,
+      reason: 'source_missing_review',
+      limit: 3
+    })
+    expect(result?.exitCode).toBe(0)
+  })
+
+  it('requires menuId for agent-report-menu', async () => {
+    const runner = new CliTaskRunner({
+      getSyncPreview: vi.fn().mockResolvedValue({ items: [], needsReview: [] }),
+      agentOperationsReportService: {
+        getOverviewReport: vi.fn(),
+        getReviewQueueReport: vi.fn(),
+        getMenuReport: vi.fn(),
+        getOptionsReport: vi.fn(),
+        getPlatformReport: vi.fn()
+      }
+    })
+
+    await expect(runner.run(['--task=agent-report-menu'])).resolves.toEqual({
+      exitCode: 1,
+      payload: { task: 'agent-report-menu', error: 'menu_id_required' }
+    })
+  })
 })
