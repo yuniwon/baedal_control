@@ -248,6 +248,7 @@ export interface SyncPreviewItem {
   executionMode?: 'managed_browser'
   platformMenuPriceCount?: number | null
   platformMenuGroupName?: string | null
+  platformMenuStatus?: string | null
   platformMenuPriceSummary?: string | null
   platformMenuPriceVariants?: PlatformMenuPriceVariantRecord[] | null
   platformMenuBindingSummary?: string | null

@@ -295,6 +295,7 @@ export class BaeminAdapter implements PlatformAdapter {
 
     page.on('response', onResponse)
 
+    await this.ensureMenuSearchStatusFilter(page, item.platformMenuStatus)
     await searchInput.fill(item.previousName)
     await searchInput.press('Enter')
     await this.waitFor(() => searchResultPages.has(0), 15000)
@@ -347,6 +348,35 @@ export class BaeminAdapter implements PlatformAdapter {
     } finally {
       page.off('response', onResponse)
     }
+  }
+
+  private getMenuSearchStatusFilterLabel(status?: string | null) {
+    const normalizedStatus = status?.trim() ?? ''
+    if (normalizedStatus.includes('숨김')) {
+      return '숨김'
+    }
+
+    if (normalizedStatus.includes('품절')) {
+      return '오늘만 품절'
+    }
+
+    return null
+  }
+
+  private async ensureMenuSearchStatusFilter(page: Page, status?: string | null) {
+    const filterLabel = this.getMenuSearchStatusFilterLabel(status)
+    if (!filterLabel) {
+      return
+    }
+
+    const buttons = page.getByRole('button', { name: filterLabel })
+    const buttonCount = await buttons.count().catch(() => 0)
+    if (buttonCount <= 0) {
+      return
+    }
+
+    await buttons.nth(0).click()
+    await page.waitForTimeout(500)
   }
 
   private async resolveMenuSearchResultIndex(
@@ -415,14 +445,19 @@ export class BaeminAdapter implements PlatformAdapter {
 
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const renderedCandidates = await this.readRenderedMenuSearchCandidates(page)
-      const pickedRenderedCandidate = renderedCandidates.length > 0
-        ? pickBaeminRenderedSearchResult(renderedCandidates, {
+      let pickedRenderedCandidate: { dataIndex: number } | null = null
+      if (renderedCandidates.length > 0) {
+        try {
+          pickedRenderedCandidate = pickBaeminRenderedSearchResult(renderedCandidates, {
             platformMenuId: item.platformMenuId,
             previousName: item.previousName,
             platformMenuBindingSummary: item.platformMenuBindingSummary,
             platformMenuPriceSummary: item.platformMenuPriceSummary
           })
-        : null
+        } catch {
+          pickedRenderedCandidate = null
+        }
+      }
       const targetSelector = pickedRenderedCandidate
         ? `[data-index="${pickedRenderedCandidate.dataIndex}"] button`
         : selector

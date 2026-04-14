@@ -398,6 +398,132 @@ describe('BaeminAdapter', () => {
     expect(matchedClick).toHaveBeenCalledTimes(1)
   })
 
+  it('falls back to the raw api index when rendered baemin candidates are still ambiguous', async () => {
+    const adapter = new BaeminAdapter({
+      username: 'owner-id',
+      password: 'secret'
+    }) as any
+
+    const exactClick = vi.fn().mockResolvedValue(undefined)
+    const exactLocator = {
+      first: vi.fn().mockReturnThis(),
+      count: vi.fn().mockResolvedValue(1),
+      scrollIntoViewIfNeeded: vi.fn().mockResolvedValue(undefined),
+      click: exactClick
+    }
+    const fakePage = {
+      locator: vi.fn().mockReturnValue(exactLocator),
+      evaluate: vi.fn().mockResolvedValue([
+        {
+          dataIndex: 0,
+          buttonText: '숨김피자\n배달1,000원\n픽업1,000원',
+          contextText:
+            '숨김\n숨김피자\n배달1,000원\n픽업1,000원\n[음식배달] 꾸버스피자 봉담점'
+        },
+        {
+          dataIndex: 1,
+          buttonText: '고르곤졸라(숨김피자)\n배달1,000원\n픽업1,000원',
+          contextText:
+            '숨김\n고르곤졸라(숨김피자)\n배달1,000원\n픽업1,000원\n[음식배달] 꾸버스피자 봉담점'
+        }
+      ]),
+      waitForTimeout: vi.fn().mockResolvedValue(undefined)
+    }
+
+    await expect(
+      adapter.clickMenuSearchResultByIndex(fakePage, 0, {
+        platformMenuId: '1037277670',
+        previousName: '숨김피자',
+        platformMenuBindingSummary: '[음식배달] 꾸버스피자 봉담점',
+        platformMenuPriceSummary: '배달 1,000원 · 픽업 1,000원'
+      })
+    ).resolves.toBeUndefined()
+
+    expect(fakePage.locator).toHaveBeenCalledWith('[data-index=\"0\"] button')
+    expect(exactClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('selects the hidden status filter before searching a hidden baemin menu', async () => {
+    const adapter = new BaeminAdapter({
+      username: 'owner-id',
+      password: 'secret'
+    }) as any
+
+    const click = vi.fn().mockResolvedValue(undefined)
+    const hiddenButtons = {
+      count: vi.fn().mockResolvedValue(2),
+      nth: vi.fn().mockReturnValue({
+        click
+      })
+    }
+    const fakePage = {
+      getByRole: vi.fn().mockImplementation((_role: string, options?: { name?: string }) => {
+        if (options?.name === '숨김') {
+          return hiddenButtons
+        }
+
+        throw new Error('unexpected_button_lookup')
+      }),
+      waitForTimeout: vi.fn().mockResolvedValue(undefined)
+    }
+
+    await expect(adapter.ensureMenuSearchStatusFilter(fakePage, '숨김')).resolves.toBeUndefined()
+
+    expect(hiddenButtons.count).toHaveBeenCalledTimes(1)
+    expect(hiddenButtons.nth).toHaveBeenCalledWith(0)
+    expect(click).toHaveBeenCalledTimes(1)
+    expect(fakePage.waitForTimeout).toHaveBeenCalled()
+  })
+
+  it('selects the sold-out status filter before searching a sold-out baemin menu', async () => {
+    const adapter = new BaeminAdapter({
+      username: 'owner-id',
+      password: 'secret'
+    }) as any
+
+    const click = vi.fn().mockResolvedValue(undefined)
+    const soldOutButtons = {
+      count: vi.fn().mockResolvedValue(1),
+      nth: vi.fn().mockReturnValue({
+        click
+      })
+    }
+    const fakePage = {
+      getByRole: vi.fn().mockImplementation((_role: string, options?: { name?: string }) => {
+        if (options?.name === '오늘만 품절') {
+          return soldOutButtons
+        }
+
+        throw new Error('unexpected_button_lookup')
+      }),
+      waitForTimeout: vi.fn().mockResolvedValue(undefined)
+    }
+
+    await expect(adapter.ensureMenuSearchStatusFilter(fakePage, '품절')).resolves.toBeUndefined()
+
+    expect(soldOutButtons.count).toHaveBeenCalledTimes(1)
+    expect(soldOutButtons.nth).toHaveBeenCalledWith(0)
+    expect(click).toHaveBeenCalledTimes(1)
+    expect(fakePage.waitForTimeout).toHaveBeenCalled()
+  })
+
+  it('does not touch the status filter when the baemin menu is already in the normal sale state', async () => {
+    const adapter = new BaeminAdapter({
+      username: 'owner-id',
+      password: 'secret'
+    }) as any
+
+    const fakePage = {
+      getByRole: vi.fn(),
+      waitForTimeout: vi.fn()
+    }
+
+    await expect(adapter.ensureMenuSearchStatusFilter(fakePage, '판매중')).resolves.toBeUndefined()
+
+    expect(fakePage.getByRole).not.toHaveBeenCalled()
+    expect(fakePage.waitForTimeout).not.toHaveBeenCalled()
+  })
+
   it('returns a create-wizard specific failure when 메뉴 추가 does not open the first step', async () => {
     const adapter = new BaeminAdapter({
       username: 'owner-id',
