@@ -72,7 +72,7 @@ export class DdangyoAdapter implements PlatformAdapter {
     try {
       await this.openMenuManagement(page)
       await this.openMenuInfoEditor(page, item.platformMenuId)
-      await this.applyMenuInfoChanges(page, item)
+      await this.applyMenuInfoChanges(page, item, { priceChanged })
     } finally {
       await browser.close()
     }
@@ -228,15 +228,19 @@ export class DdangyoAdapter implements PlatformAdapter {
     return null
   }
 
-  private async applyMenuInfoChanges(page: Page, item: SyncPreviewItem) {
+  private async applyMenuInfoChanges(
+    page: Page,
+    item: SyncPreviewItem,
+    options: { priceChanged: boolean }
+  ) {
     const priceInputIds = await this.findVisibleInputIds(page, /_ibx_menuPrc\d+$/)
 
-    if (priceInputIds.length === 0) {
+    if (options.priceChanged && priceInputIds.length === 0) {
       throw new Error('ddangyo_menu_price_input_not_found')
     }
 
     const updateState = await page.evaluate(
-      ({ framePrefix, nextName, nextPrice, priceInputIds }) => {
+      ({ framePrefix, nextName, nextPrice, priceInputIds, applyPriceChange }) => {
         const scopeName = `${framePrefix}_scwin`
         const dataName = `${framePrefix}_dma_para`
         const priceDataName = `${framePrefix}_dlt_menuPrc`
@@ -249,6 +253,7 @@ export class DdangyoAdapter implements PlatformAdapter {
               ibx_menuPrc_onkeyup?: (this: unknown, event: { keyCode: number }) => void
             }
           | undefined
+        const priceKeyupHandler = scope?.ibx_menuPrc_onkeyup
         const dmaPara = (window as unknown as Record<string, unknown>)[dataName] as
           | { get?: (key: string) => string | null }
           | undefined
@@ -264,7 +269,7 @@ export class DdangyoAdapter implements PlatformAdapter {
           throw new Error('ddangyo_menu_name_handler_not_found')
         }
 
-        if (!scope || typeof scope.ibx_menuPrc_onkeyup !== 'function') {
+        if (applyPriceChange && typeof priceKeyupHandler !== 'function') {
           throw new Error('ddangyo_menu_price_handler_not_found')
         }
 
@@ -279,17 +284,24 @@ export class DdangyoAdapter implements PlatformAdapter {
         nameComponent.setValue(nextName)
         scope.ibx_menuNm_onkeyup.call(nameComponent, { keyCode: 65 })
 
-        for (const priceInputId of priceInputIds) {
-          const priceComponent = getComponentById(priceInputId) as
-            | { setValue?: (value: string) => void }
-            | undefined
+        if (applyPriceChange) {
+          const assuredPriceKeyupHandler = priceKeyupHandler as (
+            this: { setValue?: (value: string) => void },
+            event: { keyCode: number }
+          ) => void
 
-          if (!priceComponent || typeof priceComponent.setValue !== 'function') {
-            continue
+          for (const priceInputId of priceInputIds) {
+            const priceComponent = getComponentById(priceInputId) as
+              | { setValue?: (value: string) => void }
+              | undefined
+
+            if (!priceComponent || typeof priceComponent.setValue !== 'function') {
+              continue
+            }
+
+            priceComponent.setValue(String(nextPrice))
+            assuredPriceKeyupHandler.call(priceComponent, { keyCode: 65 })
           }
-
-          priceComponent.setValue(String(nextPrice))
-          scope.ibx_menuPrc_onkeyup.call(priceComponent, { keyCode: 65 })
         }
 
         return {
@@ -301,7 +313,8 @@ export class DdangyoAdapter implements PlatformAdapter {
         framePrefix: this.menuInfoFramePrefix,
         nextName: item.nextName,
         nextPrice: item.nextPrice,
-        priceInputIds
+        priceInputIds,
+        applyPriceChange: options.priceChanged
       }
     )
 

@@ -214,7 +214,7 @@ describe('buildSyncPreview', () => {
     ])
   })
 
-  it('marks ddangyo multi-price menus with a changed name as needsReview instead of scheduling a write', () => {
+  it('still schedules a ddangyo multi-price menu when only the name changed', () => {
     const preview = buildSyncPreview({
       menus: [{ menuId: 'm6c', baseName: '칠성사이다 검증', basePrice: 1800, isDirty: 1, isManaged: 1 }],
       platformMenus: [],
@@ -235,13 +235,17 @@ describe('buildSyncPreview', () => {
       ]
     })
 
-    expect(preview.items).toEqual([])
-    expect(preview.needsReview).toEqual([
+    expect(preview.needsReview).toEqual([])
+    expect(preview.items).toEqual([
       expect.objectContaining({
         menuId: 'm6c',
         platformCode: 'ddangyo',
         platformMenuId: '10000039',
-        reason: 'price_variant_review'
+        previousName: '칠성사이다',
+        previousPrice: 1800,
+        nextName: '칠성사이다 검증',
+        nextPrice: 1800,
+        platformMenuPriceCount: 2
       })
     ])
   })

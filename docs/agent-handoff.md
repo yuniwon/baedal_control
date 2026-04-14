@@ -75,8 +75,9 @@ C:\Users\WON2\AppData\Roaming\delivery-menu-sync\credentials.json
 
 - 메뉴 import 가능
 - 단일 가격 메뉴의 이름/가격 변경은 실운영 왕복 검증 완료
-- 다중 가격 메뉴는 아직 안전하지 않아서 `price_variant_review`로 차단 중
-- 이유: WebSquare 저장 payload가 보이는 가격 행 전체를 다시 제출해서 다른 용량 가격이 평탄화될 수 있음
+- 다중 가격 메뉴는 `이름만 변경`하는 경우 반영 가능
+- 다중 가격 메뉴의 `가격 변경`은 아직 안전하지 않아서 `price_variant_review`로 차단 중
+- 이유: WebSquare 저장 payload가 가격 행 편집까지 들어가면 다른 용량 가격이 평탄화될 수 있음
 
 ## 5. 절대 건드리면 안 되는 것
 
@@ -90,7 +91,7 @@ C:\Users\WON2\AppData\Roaming\delivery-menu-sync\credentials.json
 
 1. 땡겨요 다중 가격 메뉴 편집 모델 설계
    - variant 행 단위 편집 구조
-   - 이름-only 변경도 안전하게 유지되는 저장 payload 설계
+   - 가격 채널별 부분 수정 payload 설계
 2. 배민 안전한 실저장 테스트 전략 확정
    - 숨김 테스트 메뉴 확보 또는 생성 후 비노출 정리 루틴 설계
 3. 옵션 편집/반영 모델 설계

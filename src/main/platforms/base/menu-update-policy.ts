@@ -18,7 +18,7 @@ const platformMenuUpdatePolicies: Record<PlatformCode, PlatformMenuUpdatePolicy>
     requiredExecutionMode: 'managed_browser'
   },
   ddangyo: {
-    multiPriceMenuUpdatePolicy: 'all_changes_require_review'
+    multiPriceMenuUpdatePolicy: 'price_change_requires_review'
   }
 }
 
