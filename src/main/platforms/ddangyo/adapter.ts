@@ -1,3 +1,5 @@
+import { appendFileSync, mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Page } from 'playwright'
 import type {
   PlatformInspectionReport,
@@ -13,6 +15,7 @@ import type {
 } from '../base/types'
 import { requiresMultiPriceMenuReview } from '../base/menu-update-policy'
 import { parseDdangyoMenus } from './parser'
+import { buildDdangyoPriceRowSnapshots } from './price-row-snapshots'
 import { ddangyoSelectors } from './selectors'
 import { launchPlaywrightChromium } from '../../services/playwright-runtime'
 
@@ -21,6 +24,8 @@ export class DdangyoAdapter implements PlatformAdapter {
   private readonly updateSuccessMessage = '적용 완료되었습니다.'
   private readonly menuInfoFramePrefix = 'mf_wfm_contents_wfm_tabcontents_SMWME01T120P40_wframe'
   private readonly priceInputIdPattern = /_gen_menuPrc_(\d+)_ibx_menuPrc(\d+)$/
+  private readonly enableSaveDebug = process.env.DDANGYO_DEBUG_SAVE === '1'
+  private readonly saveDebugPath = join(process.cwd(), '.tmp', 'ddangyo-save-debug.ndjson')
   private readonly priceChannelByInputIndex: Record<number, PlatformMenuPriceChannelCode> = {
     1: 'delivery',
     2: 'pickup',
@@ -50,6 +55,18 @@ export class DdangyoAdapter implements PlatformAdapter {
 
       const menus = await this.collectMenusFromAllGroups(page, inspection)
       return { menus, inspection }
+    } finally {
+      await browser.close()
+    }
+  }
+
+  async inspectMenuInfo(platformMenuId: string) {
+    const { browser, page } = await this.createAuthenticatedSession()
+
+    try {
+      await this.openMenuManagement(page)
+      await this.openMenuInfoEditor(page, platformMenuId)
+      return await this.readMenuInfoDebugState(page)
     } finally {
       await browser.close()
     }
@@ -91,6 +108,15 @@ export class DdangyoAdapter implements PlatformAdapter {
       await this.openMenuManagement(page)
       await this.openMenuInfoEditor(page, item.platformMenuId)
       await this.applyMenuInfoChanges(page, item, { priceChanged })
+      if (this.enableSaveDebug) {
+        await this.openMenuManagement(page)
+        await this.openMenuInfoEditor(page, item.platformMenuId)
+        this.writeSaveDebug({
+          stage: 'reopen-after-save',
+          platformMenuId: item.platformMenuId,
+          editorState: await this.readMenuInfoDebugState(page)
+        })
+      }
     } finally {
       await browser.close()
     }
@@ -253,13 +279,16 @@ export class DdangyoAdapter implements PlatformAdapter {
   ) {
     const priceInputIds = await this.findVisibleInputIds(page, /_ibx_menuPrc\d+$/)
     const priceUpdates = options.priceChanged ? this.buildPriceUpdates(item, priceInputIds) : []
+    const priceRowSnapshots = options.priceChanged
+      ? buildDdangyoPriceRowSnapshots(item.previousPriceVariants, item.nextPriceVariants)
+      : []
 
     if (options.priceChanged && priceInputIds.length === 0) {
       throw new Error('ddangyo_menu_price_input_not_found')
     }
 
     const updateState = await page.evaluate(
-      ({ framePrefix, nextName, nextPrice, priceUpdates, applyPriceChange }) => {
+      ({ framePrefix, nextName, nextPrice, priceUpdates, priceRowSnapshots, applyPriceChange }) => {
         const scopeName = `${framePrefix}_scwin`
         const dataName = `${framePrefix}_dma_para`
         const priceDataName = `${framePrefix}_dlt_menuPrc`
@@ -277,7 +306,7 @@ export class DdangyoAdapter implements PlatformAdapter {
           | { get?: (key: string) => string | null }
           | undefined
         const dltMenuPrc = (window as unknown as Record<string, unknown>)[priceDataName] as
-          | { getRowCount?: () => number }
+          | { getRowCount?: () => number; setCellData?: (rowIndex: number, columnId: string, value: unknown) => void }
           | undefined
 
         if (!getComponentById) {
@@ -323,6 +352,19 @@ export class DdangyoAdapter implements PlatformAdapter {
             priceComponent.setValue(String(priceUpdate.value))
             assuredPriceKeyupHandler.call(priceComponent, { keyCode: 65 })
           }
+
+          if (typeof dltMenuPrc?.setCellData === 'function' && priceRowSnapshots.length > 0) {
+            for (let rowIndex = 0; rowIndex < priceRowSnapshots.length; rowIndex += 1) {
+              const rowSnapshot = priceRowSnapshots[rowIndex]
+              for (const [columnId, value] of Object.entries(rowSnapshot)) {
+                if (value === undefined) {
+                  continue
+                }
+
+                dltMenuPrc.setCellData(rowIndex, columnId, value)
+              }
+            }
+          }
         }
 
         return {
@@ -335,6 +377,7 @@ export class DdangyoAdapter implements PlatformAdapter {
         nextName: item.nextName,
         nextPrice: item.nextPrice,
         priceUpdates,
+        priceRowSnapshots,
         applyPriceChange: options.priceChanged
       }
     )
@@ -343,8 +386,31 @@ export class DdangyoAdapter implements PlatformAdapter {
       throw new Error('ddangyo_menu_name_apply_failed')
     }
 
+    const saveNetworkEvents = this.enableSaveDebug ? this.attachSaveDebugListener(page) : null
+    if (this.enableSaveDebug) {
+      this.writeSaveDebug({
+        stage: 'before-save',
+        platformMenuId: item.platformMenuId,
+        nextName: item.nextName,
+        nextPriceVariants: item.nextPriceVariants ?? null,
+        updateState,
+        editorState: await this.readMenuInfoDebugState(page)
+      })
+    }
+
     await page.click(ddangyoSelectors.menuInfoApplyButton)
     await this.waitForApplySuccess(page)
+
+    if (this.enableSaveDebug && saveNetworkEvents) {
+      await page.waitForTimeout(1000).catch(() => undefined)
+      saveNetworkEvents.detach()
+      this.writeSaveDebug({
+        stage: 'after-save',
+        platformMenuId: item.platformMenuId,
+        editorState: await this.readMenuInfoDebugState(page),
+        networkEvents: saveNetworkEvents.events
+      })
+    }
   }
 
   private async waitForApplySuccess(page: Page, timeoutMs = 30000) {
@@ -353,6 +419,64 @@ export class DdangyoAdapter implements PlatformAdapter {
       this.updateSuccessMessage,
       { timeout: timeoutMs }
     )
+
+    const clearedWithoutInteraction = await this.waitForSuccessMessageToClear(page, 1200)
+    if (clearedWithoutInteraction) {
+      return
+    }
+
+    await this.dismissApplySuccessMessage(page)
+    await this.waitForSuccessMessageToClear(page, 5000)
+  }
+
+  private async waitForSuccessMessageToClear(page: Page, timeoutMs: number) {
+    return page
+      .waitForFunction(
+        (successMessage) => !document.body.innerText.includes(successMessage),
+        this.updateSuccessMessage,
+        { timeout: timeoutMs }
+      )
+      .then(() => true)
+      .catch(() => false)
+  }
+
+  private async dismissApplySuccessMessage(page: Page) {
+    const pageWithRole = page as Page & {
+      getByRole?: (role: string, options?: { name?: string }) => { click: (options?: { timeout?: number }) => Promise<void> }
+    }
+    const pageWithText = page as Page & {
+      getByText?: (text: string, options?: { exact?: boolean }) => { click: (options?: { timeout?: number }) => Promise<void> }
+    }
+    const dismissalAttempts: Array<() => Promise<void>> = []
+
+    if (pageWithRole.getByRole) {
+      dismissalAttempts.push(() =>
+        pageWithRole.getByRole?.('button', { name: '확인' }).click({ timeout: 1000 }) ?? Promise.resolve()
+      )
+      dismissalAttempts.push(() =>
+        pageWithRole.getByRole?.('button', { name: '닫기' }).click({ timeout: 1000 }) ?? Promise.resolve()
+      )
+    }
+
+    if (pageWithText.getByText) {
+      dismissalAttempts.push(() =>
+        pageWithText.getByText?.('확인', { exact: true }).click({ timeout: 1000 }) ?? Promise.resolve()
+      )
+      dismissalAttempts.push(() =>
+        pageWithText.getByText?.('닫기', { exact: true }).click({ timeout: 1000 }) ?? Promise.resolve()
+      )
+    }
+
+    for (const attempt of dismissalAttempts) {
+      const dismissed = await attempt()
+        .then(() => true)
+        .catch(() => false)
+      if (dismissed) {
+        return
+      }
+    }
+
+    await page.keyboard.press('Enter').catch(() => undefined)
   }
 
   private async waitForMenuInfoEditorLoaded(page: Page, platformMenuId: string) {
@@ -472,6 +596,130 @@ export class DdangyoAdapter implements PlatformAdapter {
     } catch {
       return ''
     }
+  }
+
+  private writeSaveDebug(payload: Record<string, unknown>) {
+    try {
+      mkdirSync(join(process.cwd(), '.tmp'), { recursive: true })
+      appendFileSync(
+        this.saveDebugPath,
+        `${JSON.stringify({ recordedAt: new Date().toISOString(), ...payload })}\n`,
+        'utf8'
+      )
+    } catch {
+      // ignore debug write failures
+    }
+  }
+
+  private attachSaveDebugListener(page: Page) {
+    const events: Array<{
+      url: string
+      method: string
+      resourceType: string
+      status: number | null
+      requestPreview?: string | null
+      bodyPreview?: string | null
+    }> = []
+    const listener = async (response: Awaited<ReturnType<Page['waitForResponse']>>) => {
+      try {
+        const request = response.request()
+        const resourceType = request.resourceType()
+        if (resourceType !== 'xhr' && resourceType !== 'fetch') {
+          return
+        }
+
+        const url = response.url()
+        if (!url.includes('ddangyo')) {
+          return
+        }
+
+        const requestPreview = request.postData()?.slice(0, 1000) ?? null
+        const bodyPreview = await response.text().then((value) => value.slice(0, 300)).catch(() => null)
+        events.push({
+          url,
+          method: request.method(),
+          resourceType,
+          status: response.status(),
+          requestPreview,
+          bodyPreview
+        })
+      } catch {
+        // ignore debug listener errors
+      }
+    }
+
+    page.on('response', listener)
+
+    return {
+      events,
+      detach: () => {
+        page.off('response', listener)
+      }
+    }
+  }
+
+  private async readMenuInfoDebugState(page: Page) {
+    return page.evaluate(({ framePrefix }) => {
+      const scopeName = `${framePrefix}_scwin`
+      const dataName = `${framePrefix}_dma_para`
+      const priceDataName = `${framePrefix}_dlt_menuPrc`
+      const getComponentById = (window as { $p?: { getComponentById?: (id: string) => unknown } }).$p
+        ?.getComponentById
+      const scope = (window as unknown as Record<string, unknown>)[scopeName] as Record<string, unknown> | undefined
+      const dmaPara = (window as unknown as Record<string, unknown>)[dataName] as
+        | { get?: (key: string) => string | null }
+        | undefined
+      const dltMenuPrc = (window as unknown as Record<string, unknown>)[priceDataName] as
+        | {
+            getRowCount?: () => number
+            getCellData?: (rowIndex: number, columnId: string) => unknown
+            getRowJSON?: (rowIndex: number) => unknown
+          }
+        | undefined
+
+      const visiblePriceInputs = [...document.querySelectorAll('input')]
+        .filter((element) => {
+          const html = element as HTMLInputElement
+          const style = window.getComputedStyle(html)
+          const rect = html.getBoundingClientRect()
+          return (
+            /_ibx_menuPrc\d+$/.test(html.id) &&
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            rect.width > 0 &&
+            rect.height > 0
+          )
+        })
+        .map((element) => {
+          const html = element as HTMLInputElement
+          const component = getComponentById?.(html.id) as { getValue?: () => string | number } | undefined
+          return {
+            inputId: html.id,
+            domValue: html.value,
+            componentValue: component?.getValue?.() ?? null
+          }
+        })
+
+      const rowCount = dltMenuPrc?.getRowCount?.() ?? 0
+      const datasetRows = Array.from({ length: rowCount }, (_, rowIndex) => ({
+        rowIndex,
+        menuPrc: dltMenuPrc?.getCellData?.(rowIndex, 'menuPrc') ?? null,
+        menuPrc1: dltMenuPrc?.getCellData?.(rowIndex, 'menuPrc1') ?? null,
+        menuPrc2: dltMenuPrc?.getCellData?.(rowIndex, 'menuPrc2') ?? null,
+        menuPrc3: dltMenuPrc?.getCellData?.(rowIndex, 'menuPrc3') ?? null,
+        rowJson: dltMenuPrc?.getRowJSON?.(rowIndex) ?? null
+      }))
+
+      return {
+        menuId: dmaPara?.get?.('menu_id') ?? null,
+        menuName: dmaPara?.get?.('menu_nm') ?? null,
+        scopeKeys: scope ? Object.keys(scope).filter((key) => key.includes('menuPrc')).slice(0, 20) : [],
+        visiblePriceInputs,
+        datasetRows
+      }
+    }, {
+      framePrefix: this.menuInfoFramePrefix
+    })
   }
 
   private deduplicateMenus(menus: PlatformMenuSnapshot[]) {

@@ -8,6 +8,34 @@ import {
 export class MenuRepository {
   constructor(private readonly db: DatabaseConnection) {}
 
+  get(menuId: string): MenuRecord | null {
+    const row = this.db.prepare(`
+      select
+        menu_id as menuId,
+        base_name as baseName,
+        base_price as basePrice,
+        base_price_variants_json as basePriceVariantsJson,
+        is_dirty as isDirty,
+        is_managed as isManaged,
+        created_at as createdAt,
+        updated_at as updatedAt
+      from menus
+      where menu_id = ?
+    `).get(menuId) as
+      | (MenuRecord & { basePriceVariantsJson?: string | null })
+      | undefined
+
+    if (!row) {
+      return null
+    }
+
+    const { basePriceVariantsJson, ...record } = row
+    return {
+      ...record,
+      basePriceVariants: parsePlatformMenuPriceVariants(basePriceVariantsJson)
+    }
+  }
+
   remove(menuId: string) {
     this.db.prepare(`
       delete from menus
@@ -55,5 +83,15 @@ export class MenuRepository {
       ...record,
       basePriceVariants: parsePlatformMenuPriceVariants(basePriceVariantsJson)
     }))
+  }
+
+  setDirty(menuId: string, isDirty: number) {
+    this.db.prepare(`
+      update menus
+      set
+        is_dirty = ?,
+        updated_at = current_timestamp
+      where menu_id = ?
+    `).run(isDirty, menuId)
   }
 }

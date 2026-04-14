@@ -83,6 +83,10 @@ C:\Users\WON2\AppData\Roaming\delivery-menu-sync\credentials.json
 - 메뉴 import 가능
 - 단일 가격 메뉴의 이름/가격 변경은 실운영 왕복 검증 완료
 - 다중 가격 메뉴도 `variant 구조가 현재 플랫폼과 같을 때`는 가격 변경까지 실행 가능
+- 숨김 다중 가격 메뉴 `칠성사이다` 기준 `2,900원 -> 3,000원 -> 2,900원` 실운영 왕복 검증 완료
+- 저장 성공 메시지 `적용 완료되었습니다.`가 남아 다음 동작을 막지 않도록 성공 후 `확인/닫기` 정리 로직이 들어가 있음
+- 성공 직후 `SyncSuccessReconciler`가 mapping / platform_menus를 낙관적으로 갱신하고, 같은 기준 메뉴에 남은 작업이 없으면 `menus.is_dirty = 0`으로 자동 정리함
+- 단일 플랫폼 숨김 메뉴 `고구마베이컨 피자` 기준 `21,900원 -> 22,000원 -> 21,900원` 실운영 왕복 검증에서 clean 자동 정리 확인
 - planner와 adapter가 `previousPriceVariants / nextPriceVariants`를 사용해 구조를 비교한다.
 - WebSquare 입력 ID `gen_menuPrc_{row}_ibx_menuPrc{channel}` 기준으로 행/채널별 금액을 개별 입력한다.
 - 구조가 다르거나 variant 정보가 비어 있으면 계속 `price_variant_review`로 차단한다.
@@ -97,18 +101,14 @@ C:\Users\WON2\AppData\Roaming\delivery-menu-sync\credentials.json
 
 ## 6. 다음 우선순위
 
-1. 땡겨요 다중 가격 실운영 왕복 검증
-   - 숨김 안전 메뉴 기준으로 variant 가격 변경 저장
-   - 재수집 후 플랫폼 카탈로그/매핑/실행 기록 확인
-   - 원복까지 포함한 검증 로그 문서화
-2. 배민 안전한 실저장 테스트 전략 확정
+1. 배민 안전한 실저장 테스트 전략 확정
    - 숨김 테스트 메뉴 확보 또는 생성 후 비노출 정리 루틴 설계
-3. 옵션 편집/반영 모델 설계
+2. 옵션 편집/반영 모델 설계
    - 옵션 그룹
    - 옵션 항목
    - 옵션 가격
    - 메뉴 연결 범위
-4. 쿠팡이츠 현재 세션 경로 진단 강화
+3. 쿠팡이츠 현재 세션 경로 진단 강화
    - 실패 단계, 현재 탭 상태, 저장 결과 검증을 더 선명하게 남기기
 
 ## 7. 주요 파일
@@ -121,6 +121,8 @@ C:\Users\WON2\AppData\Roaming\delivery-menu-sync\credentials.json
 - 쿠팡이츠 전용 크롬 반영: `src/main/platforms/coupangeats/managed-browser-updater.ts`
 - 쿠팡이츠 세션 수집: `src/main/platforms/coupangeats/browser-session-parser.ts`
 - 땡겨요 어댑터: `src/main/platforms/ddangyo/adapter.ts`
+- sync 성공 후 정리: `src/main/services/sync-success-reconciler.ts`
+- 공용 가격 요약: `src/shared/platform-menu-price-summary.ts`
 - 옵션 통합 뷰 서비스: `src/main/services/logical-option-group-service.ts`
 - 옵션 화면: `src/renderer/src/pages/OptionPage.tsx`
 

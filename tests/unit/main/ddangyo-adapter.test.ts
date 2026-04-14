@@ -365,6 +365,18 @@ describe('DdangyoAdapter', () => {
       nextName: '칠성사이다',
       nextPrice: 1800,
       applyPriceChange: true,
+      priceRowSnapshots: [
+        {
+          prce_div_contBefore: '500ml',
+          menu_unitprc: 1900,
+          menu_unitprcBefore: 1800
+        },
+        {
+          prce_div_contBefore: '1.25L',
+          menu_unitprc: 2900,
+          menu_unitprcBefore: 2800
+        }
+      ],
       priceUpdates: [
         {
           inputId:
@@ -516,6 +528,142 @@ describe('DdangyoAdapter', () => {
     expect(click).toHaveBeenCalledWith(ddangyoSelectors.menuInfoApplyButton)
     expect(evaluate).toHaveBeenCalledTimes(2)
     expect(waitForFunction).toHaveBeenCalled()
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  it('dismisses the success confirmation before continuing after save', async () => {
+    const state = {
+      currentGroupIndex: -1
+    }
+    const groups = [
+      {
+        name: '음료',
+        menus: [{ platformMenuId: '10000039' }]
+      }
+    ]
+
+    const fill = vi.fn().mockResolvedValue(undefined)
+    const click = vi.fn().mockResolvedValue(undefined)
+    const waitForSelector = vi.fn().mockResolvedValue(undefined)
+    const waitForFunction = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('success_message_still_visible'))
+      .mockResolvedValueOnce(undefined)
+    const waitForLoadState = vi.fn().mockResolvedValue(undefined)
+    const waitForTimeout = vi.fn().mockResolvedValue(undefined)
+    const confirmClick = vi.fn().mockResolvedValue(undefined)
+    const getByRole = vi.fn().mockImplementation((_role: string, options?: { name?: string }) => ({
+      click: options?.name === '확인' ? confirmClick : vi.fn().mockResolvedValue(undefined),
+      first: vi.fn().mockReturnThis()
+    }))
+    const evaluate = vi
+      .fn()
+      .mockResolvedValueOnce([
+        'mf_wfm_contents_wfm_tabcontents_SMWME01T120P40_wframe_gen_menuPrc_0_ibx_menuPrc1'
+      ])
+      .mockResolvedValueOnce({
+        menuName: '칠성사이다 검증',
+        priceRowCount: 1
+      })
+
+    const fakePage = {
+      goto: vi.fn().mockResolvedValue(undefined),
+      fill,
+      click,
+      waitForSelector,
+      waitForFunction,
+      waitForLoadState,
+      waitForTimeout,
+      evaluate,
+      getByRole,
+      getByText: vi.fn().mockImplementation((text: string) => ({
+        first: vi.fn().mockReturnThis(),
+        click: vi.fn().mockImplementation(async () => {
+          if (text === '메뉴관리') {
+            state.currentGroupIndex = -1
+          }
+        })
+      })),
+      locator: vi.fn().mockImplementation((selector: string) => {
+        if (selector === ddangyoSelectors.groupLink) {
+          return {
+            count: vi.fn().mockResolvedValue(groups.length),
+            nth: vi.fn().mockImplementation((index: number) => ({
+              innerText: vi.fn().mockResolvedValue(groups[index]?.name ?? ''),
+              click: vi.fn().mockImplementation(async () => {
+                state.currentGroupIndex = index
+              })
+            }))
+          }
+        }
+
+        if (selector === ddangyoSelectors.menuList) {
+          const currentMenus =
+            state.currentGroupIndex >= 0 ? groups[state.currentGroupIndex].menus : []
+
+          return {
+            count: vi.fn().mockResolvedValue(currentMenus.length),
+            nth: vi.fn().mockImplementation((index: number) => {
+              const menu = currentMenus[index]
+              return {
+                locator: vi.fn().mockImplementation((nestedSelector: string) => {
+                  if (nestedSelector === ddangyoSelectors.menuId) {
+                    return {
+                      innerText: vi.fn().mockResolvedValue(menu?.platformMenuId ?? '')
+                    }
+                  }
+
+                  if (nestedSelector === ddangyoSelectors.menuManageButton) {
+                    return {
+                      click: vi.fn().mockResolvedValue(undefined)
+                    }
+                  }
+
+                  return {
+                    innerText: vi.fn().mockResolvedValue(''),
+                    click: vi.fn().mockResolvedValue(undefined)
+                  }
+                })
+              }
+            })
+          }
+        }
+
+        return {
+          count: vi.fn().mockResolvedValue(0),
+          nth: vi.fn()
+        }
+      })
+    }
+
+    const close = vi.fn().mockResolvedValue(undefined)
+    launchPlaywrightChromium.mockResolvedValue({
+      close,
+      newPage: async () => fakePage
+    })
+
+    const adapter = new DdangyoAdapter({
+      username: 'owner-id',
+      password: 'secret'
+    })
+
+    await expect(
+      adapter.applyMenuUpdate({
+        platformCode: 'ddangyo',
+        menuId: 'menu-4',
+        platformMenuId: '10000039',
+        previousName: '칠성사이다',
+        previousPrice: 1800,
+        nextName: '칠성사이다 검증',
+        nextPrice: 1900
+      })
+    ).resolves.toBeUndefined()
+
+    expect(getByRole).toHaveBeenCalledWith('button', { name: '확인' })
+    expect(confirmClick).toHaveBeenCalledTimes(1)
     expect(close).toHaveBeenCalledTimes(1)
   })
 })

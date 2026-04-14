@@ -32,11 +32,16 @@ interface FailureContextCollectorLike {
   ) => Promise<SyncRunItemRecord['failureContext']> | SyncRunItemRecord['failureContext']
 }
 
+interface SuccessStateReconcilerLike {
+  reconcile: (item: SyncPreviewItem) => Promise<void> | void
+}
+
 export class SyncEngine {
   constructor(
     private readonly adapterRegistry: AdapterRegistryLike,
     private readonly runLogger: SyncRunLogger,
-    private readonly failureContextCollector?: FailureContextCollectorLike
+    private readonly failureContextCollector?: FailureContextCollectorLike,
+    private readonly successStateReconciler?: SuccessStateReconcilerLike
   ) {}
 
   async run(items: SyncPreviewItem[]) {
@@ -53,6 +58,7 @@ export class SyncEngine {
     for (const item of items) {
       try {
         await this.adapterRegistry.get(item.platformCode).applyMenuUpdate(item)
+        await this.successStateReconciler?.reconcile(item)
         successCount += 1
         this.runLogger.addItem({
           syncRunItemId: randomUUID(),

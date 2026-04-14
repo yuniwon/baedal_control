@@ -16,6 +16,60 @@ interface PlatformMenuPresenceUpdate {
 export class PlatformMenuRepository {
   constructor(private readonly db: DatabaseConnection) {}
 
+  upsert(record: PlatformMenuCatalogRecord) {
+    this.db.prepare(`
+      insert into platform_menus (
+        platform_code,
+        platform_menu_id,
+        platform_menu_name,
+        platform_menu_current_price,
+        platform_menu_price_count,
+        platform_menu_group_name,
+        platform_menu_status,
+        platform_menu_price_summary,
+        platform_menu_price_variants_json,
+        platform_menu_binding_summary,
+        platform_menu_binding_status,
+        last_seen_import_id,
+        last_seen_at,
+        missing_streak,
+        presence_status,
+        presence_changed_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, current_timestamp, ?, coalesce(?, 'present'), ?)
+      on conflict(platform_code, platform_menu_id) do update set
+        platform_menu_name = excluded.platform_menu_name,
+        platform_menu_current_price = excluded.platform_menu_current_price,
+        platform_menu_price_count = excluded.platform_menu_price_count,
+        platform_menu_group_name = excluded.platform_menu_group_name,
+        platform_menu_status = excluded.platform_menu_status,
+        platform_menu_price_summary = excluded.platform_menu_price_summary,
+        platform_menu_price_variants_json = excluded.platform_menu_price_variants_json,
+        platform_menu_binding_summary = excluded.platform_menu_binding_summary,
+        platform_menu_binding_status = excluded.platform_menu_binding_status,
+        last_seen_import_id = coalesce(excluded.last_seen_import_id, platform_menus.last_seen_import_id),
+        last_seen_at = current_timestamp,
+        missing_streak = coalesce(excluded.missing_streak, platform_menus.missing_streak, 0),
+        presence_status = coalesce(excluded.presence_status, platform_menus.presence_status, 'present'),
+        presence_changed_at = coalesce(excluded.presence_changed_at, platform_menus.presence_changed_at)
+    `).run(
+      record.platformCode,
+      record.platformMenuId,
+      record.platformMenuName,
+      record.platformMenuCurrentPrice ?? null,
+      record.platformMenuPriceCount ?? null,
+      record.platformMenuGroupName ?? null,
+      record.platformMenuStatus ?? null,
+      record.platformMenuPriceSummary ?? null,
+      stringifyPlatformMenuPriceVariants(record.platformMenuPriceVariants),
+      record.platformMenuBindingSummary ?? null,
+      record.platformMenuBindingStatus ?? null,
+      record.lastSeenImportId ?? null,
+      record.missingStreak ?? 0,
+      record.presenceStatus ?? 'present',
+      record.presenceChangedAt ?? null
+    )
+  }
+
   replaceForPlatform(platformCode: PlatformCode, records: PlatformMenuCatalogRecord[]) {
     withSavepoint(this.db, () => {
       this.db.prepare(`

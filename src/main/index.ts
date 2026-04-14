@@ -21,6 +21,7 @@ import { DdangyoAdapter } from './platforms/ddangyo/adapter'
 import { CredentialVault } from './services/credential-vault'
 import { BrowserInspectorBridge } from './services/browser-inspector-bridge'
 import { createCatalogImportOrchestrator } from './services/catalog-import-orchestrator'
+import { CliTaskRunner } from './services/cli-task-runner'
 import { buildLogicalOptionGroups } from './services/logical-option-group-service'
 import { ManagedChromeLauncher } from './services/managed-chrome-launcher'
 import { ManagedChromeLoginAutomator } from './services/managed-chrome-login-automator'
@@ -32,6 +33,8 @@ import {
   SyncFailureContextCollector
 } from './services/sync-failure-context'
 import { SyncEngine } from './services/sync-engine'
+import { SyncSuccessReconciler } from './services/sync-success-reconciler'
+import { buildSyncPreview } from './services/sync-planner'
 
 type PlatformCredential = NonNullable<ReturnType<CredentialVault['get']>>
 type PlatformAdapterFactory = (credential: PlatformCredential) => BaeminAdapter | CoupangEatsAdapter | DdangyoAdapter
@@ -59,7 +62,7 @@ const createWindow = () => {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const db = createConnection(join(app.getPath('userData'), 'delivery-menu-sync.db'))
   migrate(db)
 
@@ -100,6 +103,13 @@ app.whenReady().then(() => {
     })
   ])
   const adapterRegistry = new PlatformAdapterRegistry()
+  const syncSuccessReconciler = new SyncSuccessReconciler({
+    menuRepository,
+    mappingRepository,
+    platformMenuRepository,
+    platformImportRunRepository,
+    managedChromeSessionProvider: () => managedChromeSessionProbe.inspect()
+  })
   const adapterFactories: Record<PlatformCode, PlatformAdapterFactory> = {
     baemin: (credential) => new BaeminAdapter(credential),
     coupangeats: (credential) =>
@@ -140,7 +150,7 @@ app.whenReady().then(() => {
     create: (record) => syncRunRepository.create(record),
     finish: (record) => syncRunRepository.update(record),
     addItem: (record) => syncRunItemRepository.addItem(record)
-  }, syncFailureContextCollector)
+  }, syncFailureContextCollector, syncSuccessReconciler)
   const catalogImportOrchestrator = createCatalogImportOrchestrator({
     db,
     adapterRegistry,
@@ -152,6 +162,30 @@ app.whenReady().then(() => {
     platformImportChangeRepository
   });
   (Object.keys(adapterFactories) as PlatformCode[]).forEach(registerPlatformAdapter)
+
+  const getSyncPreview = async () =>
+    buildSyncPreview({
+      menus: menuRepository.list(),
+      mappings: mappingRepository.listAll(),
+      platformMenus: platformMenuRepository.listAll(),
+      platformImportRuns: platformImportRunRepository.listLatest(50),
+      managedChromeSession: await managedChromeSessionProbe.inspect()
+    })
+
+  const cliTaskRunner = new CliTaskRunner({
+    getSyncPreview,
+    syncEngine,
+    platformMenuImporter: catalogImportOrchestrator,
+    hasCredential: (platformCode) => Boolean(credentialVault.get(platformCode))
+  })
+  const cliTaskResult = await cliTaskRunner.run(process.argv.slice(2))
+
+  if (cliTaskResult) {
+    process.stdout.write(`${JSON.stringify(cliTaskResult.payload, null, 2)}\n`)
+    app.exit(cliTaskResult.exitCode)
+    return
+  }
+
   void browserInspectorBridge.start().catch((error) => {
     console.error('Failed to start browser inspector bridge', error)
   })

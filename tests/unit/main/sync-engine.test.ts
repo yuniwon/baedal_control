@@ -105,4 +105,49 @@ describe('SyncEngine', () => {
     )
     expect(failureContextCollector.capture).toHaveBeenCalledTimes(1)
   })
+
+  it('reconciles local dirty state after a successful platform write', async () => {
+    const reconcile = vi.fn().mockResolvedValue(undefined)
+    const engine = new SyncEngine(
+      {
+        get: () => ({
+          applyMenuUpdate: vi.fn().mockResolvedValue(undefined)
+        })
+      } as never,
+      {
+        create: vi.fn(),
+        finish: vi.fn(),
+        addItem: vi.fn()
+      } as never,
+      undefined,
+      { reconcile }
+    )
+
+    const item = {
+      platformCode: 'ddangyo' as const,
+      menuId: 'm1',
+      platformMenuId: '10000039',
+      previousName: '칠성사이다',
+      previousPrice: 1800,
+      nextName: '칠성사이다',
+      nextPrice: 1800,
+      nextPriceVariants: [
+        {
+          variantLabel: '500ml',
+          channels: [
+            {
+              channelCode: 'delivery' as const,
+              channelLabel: '배달',
+              amount: 1800,
+              amountText: '1,800원'
+            }
+          ]
+        }
+      ]
+    }
+
+    await engine.run([item])
+
+    expect(reconcile).toHaveBeenCalledWith(item)
+  })
 })
