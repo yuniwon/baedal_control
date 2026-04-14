@@ -350,32 +350,39 @@ export class BaeminAdapter implements PlatformAdapter {
     }
   }
 
-  private getMenuSearchStatusFilterLabel(status?: string | null) {
+  private getMenuSearchStatusFilterOptionLabel(status?: string | null) {
     const normalizedStatus = status?.trim() ?? ''
     if (normalizedStatus.includes('숨김')) {
       return '숨김'
     }
 
     if (normalizedStatus.includes('품절')) {
-      return '오늘만 품절'
+      return '품절'
     }
 
     return null
   }
 
   private async ensureMenuSearchStatusFilter(page: Page, status?: string | null) {
-    const filterLabel = this.getMenuSearchStatusFilterLabel(status)
-    if (!filterLabel) {
+    const optionLabel = this.getMenuSearchStatusFilterOptionLabel(status)
+    if (!optionLabel) {
       return
     }
 
-    const buttons = page.getByRole('button', { name: filterLabel })
-    const buttonCount = await buttons.count().catch(() => 0)
-    if (buttonCount <= 0) {
+    const filterButtons = page.getByRole('button', { name: '판매상태 전체' })
+    const filterButtonCount = await filterButtons.count().catch(() => 0)
+    if (filterButtonCount <= 0) {
       return
     }
 
-    await buttons.nth(0).click()
+    await filterButtons.first().click()
+    const filterOptions = page.getByRole('option', { name: optionLabel, exact: true })
+    const filterOptionCount = await filterOptions.count().catch(() => 0)
+    if (filterOptionCount <= 0) {
+      return
+    }
+
+    await filterOptions.first().click()
     await page.waitForTimeout(500)
   }
 

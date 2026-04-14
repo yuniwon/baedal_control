@@ -449,29 +449,45 @@ describe('BaeminAdapter', () => {
       password: 'secret'
     }) as any
 
-    const click = vi.fn().mockResolvedValue(undefined)
-    const hiddenButtons = {
-      count: vi.fn().mockResolvedValue(2),
-      nth: vi.fn().mockReturnValue({
-        click
+    const filterButtonClick = vi.fn().mockResolvedValue(undefined)
+    const hiddenOptionClick = vi.fn().mockResolvedValue(undefined)
+    const filterButtons = {
+      count: vi.fn().mockResolvedValue(1),
+      first: vi.fn().mockReturnValue({
+        click: filterButtonClick
+      })
+    }
+    const hiddenOptions = {
+      count: vi.fn().mockResolvedValue(1),
+      first: vi.fn().mockReturnValue({
+        click: hiddenOptionClick
       })
     }
     const fakePage = {
-      getByRole: vi.fn().mockImplementation((_role: string, options?: { name?: string }) => {
-        if (options?.name === '숨김') {
-          return hiddenButtons
-        }
+      getByRole: vi.fn().mockImplementation(
+        (role: string, options?: { name?: string; exact?: boolean }) => {
+          if (role === 'button' && options?.name === '판매상태 전체') {
+            return filterButtons
+          }
 
-        throw new Error('unexpected_button_lookup')
-      }),
+          if (role === 'option' && options?.name === '숨김' && options.exact === true) {
+            return hiddenOptions
+          }
+
+          throw new Error('unexpected_role_lookup')
+        }
+      ),
       waitForTimeout: vi.fn().mockResolvedValue(undefined)
     }
 
     await expect(adapter.ensureMenuSearchStatusFilter(fakePage, '숨김')).resolves.toBeUndefined()
 
-    expect(hiddenButtons.count).toHaveBeenCalledTimes(1)
-    expect(hiddenButtons.nth).toHaveBeenCalledWith(0)
-    expect(click).toHaveBeenCalledTimes(1)
+    expect(filterButtons.count).toHaveBeenCalledTimes(1)
+    expect(filterButtons.first).toHaveBeenCalledTimes(1)
+    expect(filterButtonClick).toHaveBeenCalledTimes(1)
+    expect(hiddenOptions.count).toHaveBeenCalledTimes(1)
+    expect(hiddenOptions.first).toHaveBeenCalledTimes(1)
+    expect(hiddenOptionClick).toHaveBeenCalledTimes(1)
     expect(fakePage.waitForTimeout).toHaveBeenCalled()
   })
 
@@ -481,29 +497,45 @@ describe('BaeminAdapter', () => {
       password: 'secret'
     }) as any
 
-    const click = vi.fn().mockResolvedValue(undefined)
-    const soldOutButtons = {
+    const filterButtonClick = vi.fn().mockResolvedValue(undefined)
+    const soldOutOptionClick = vi.fn().mockResolvedValue(undefined)
+    const filterButtons = {
       count: vi.fn().mockResolvedValue(1),
-      nth: vi.fn().mockReturnValue({
-        click
+      first: vi.fn().mockReturnValue({
+        click: filterButtonClick
+      })
+    }
+    const soldOutOptions = {
+      count: vi.fn().mockResolvedValue(1),
+      first: vi.fn().mockReturnValue({
+        click: soldOutOptionClick
       })
     }
     const fakePage = {
-      getByRole: vi.fn().mockImplementation((_role: string, options?: { name?: string }) => {
-        if (options?.name === '오늘만 품절') {
-          return soldOutButtons
-        }
+      getByRole: vi.fn().mockImplementation(
+        (role: string, options?: { name?: string; exact?: boolean }) => {
+          if (role === 'button' && options?.name === '판매상태 전체') {
+            return filterButtons
+          }
 
-        throw new Error('unexpected_button_lookup')
-      }),
+          if (role === 'option' && options?.name === '품절' && options.exact === true) {
+            return soldOutOptions
+          }
+
+          throw new Error('unexpected_role_lookup')
+        }
+      ),
       waitForTimeout: vi.fn().mockResolvedValue(undefined)
     }
 
     await expect(adapter.ensureMenuSearchStatusFilter(fakePage, '품절')).resolves.toBeUndefined()
 
-    expect(soldOutButtons.count).toHaveBeenCalledTimes(1)
-    expect(soldOutButtons.nth).toHaveBeenCalledWith(0)
-    expect(click).toHaveBeenCalledTimes(1)
+    expect(filterButtons.count).toHaveBeenCalledTimes(1)
+    expect(filterButtons.first).toHaveBeenCalledTimes(1)
+    expect(filterButtonClick).toHaveBeenCalledTimes(1)
+    expect(soldOutOptions.count).toHaveBeenCalledTimes(1)
+    expect(soldOutOptions.first).toHaveBeenCalledTimes(1)
+    expect(soldOutOptionClick).toHaveBeenCalledTimes(1)
     expect(fakePage.waitForTimeout).toHaveBeenCalled()
   })
 
