@@ -8,7 +8,7 @@ import type {
   SyncRunRecord
 } from '../../../shared/contracts'
 import {
-  formatSyncErrorMessage,
+  describeSyncFailure,
   formatSyncFailureContext
 } from '../../../shared/sync-error-catalog'
 import { formatDateTimeLabel, getPlatformLabel } from '../lib/menu-source-labels'
@@ -159,10 +159,11 @@ export const HistoryPage = ({ initialRuns = [] as HistoryRun[] }) => {
                 <div className="history-item-list">
                   {run.items.map((item) => {
                     const summary = summarizeItem(item)
-                    const errorMessage = formatSyncErrorMessage(
+                    const failureDescriptor = describeSyncFailure(
                       item.errorCode,
                       item.errorMessage
                     )
+                    const errorMessage = failureDescriptor.message
                     const failureContext = formatSyncFailureContext(item.failureContext)
 
                     return (
@@ -178,6 +179,11 @@ export const HistoryPage = ({ initialRuns = [] as HistoryRun[] }) => {
                         <span className="history-item-detail">{summary.detail}</span>
                         {errorMessage ? (
                           <p className="history-item-error">{errorMessage}</p>
+                        ) : null}
+                        {item.status === 'failed' && failureDescriptor.action ? (
+                          <p className="history-item-context-meta">
+                            다음 조치 {failureDescriptor.action}
+                          </p>
                         ) : null}
                         {failureContext ? (
                           <div className="history-item-context">

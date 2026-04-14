@@ -81,6 +81,9 @@ describe('HistoryPage', () => {
     expect(screen.getByText('메뉴 1건')).toBeTruthy()
     expect(screen.getByText("배민 · 포테이토골드 -> 포테이토골드피자 · 21,000원")).toBeTruthy()
     expect(screen.getByText("금칙어 '!'은 입력할 수 없습니다.")).toBeTruthy()
+    expect(
+      screen.getByText('다음 조치 기존 메뉴 설명, 구성, 메뉴명에 금칙어가 없는지 확인한 뒤 다시 실행해 주세요.')
+    ).toBeTruthy()
     expect(screen.getByText('가져오기 기록')).toBeTruthy()
     expect(screen.getByText('배민 · 일부 실패')).toBeTruthy()
     expect(screen.getByText('메뉴 목록을 끝까지 읽지 못했습니다. 페이지를 다시 가져오거나 수집 검사를 확인해 주세요.')).toBeTruthy()
@@ -135,6 +138,9 @@ describe('HistoryPage', () => {
     })
 
     expect(
+      screen.getByText('다음 조치 전용 크롬에서 메뉴 목록 첫 화면을 다시 연 뒤 다시 실행해 주세요.')
+    ).toBeTruthy()
+    expect(
       screen.getByText('실패 당시 탭: 쿠팡이츠 메뉴 관리 · 메뉴 35개 · 옵션 그룹 26개')
     ).toBeTruthy()
     expect(screen.getByText('캡처 시각 2026. 04. 14. 10:25')).toBeTruthy()
@@ -183,6 +189,9 @@ describe('HistoryPage', () => {
       expect(screen.getByText('검색 결과에서 메뉴를 다시 찾지 못했습니다.')).toBeTruthy()
     })
 
+    expect(
+      screen.getByText('다음 조치 배민 메뉴를 다시 가져온 뒤 다시 실행해 주세요.')
+    ).toBeTruthy()
     expect(screen.getByText('실패 당시 화면: 배민 메뉴 관리 · 상세 패널')).toBeTruthy()
     expect(
       screen.getByText(

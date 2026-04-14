@@ -1,7 +1,7 @@
 # Delivery Menu Sync 에이전트 인수인계
 
 - 기준일: 2026-04-14
-- 작업 브랜치: `feature/platform-absence-option-management`
+- 작업 브랜치: `main`
 - 저장소: `https://github.com/yuniwon/baedal_control.git`
 - 현재 목표: 로컬 Electron 앱 하나에서 배민 / 쿠팡이츠 / 땡겨요 메뉴와 옵션 구조를 읽고, 기준 메뉴를 한 번 수정해서 여러 플랫폼에 반영하는 통합 운영 도구 완성
 
@@ -59,6 +59,9 @@
   - 배민 쓰기 실패 시 어댑터가 현재 페이지 스냅샷(`platform_page_snapshot`)을 에러에 부착하고, sync 엔진이 이를 실행 기록의 `failure_context_json`으로 저장하도록 보강
     - 현재 화면 종류뿐 아니라 `operationStage`도 함께 남김
   - 실행 기록 UI가 배민 실패 당시 본문 텍스트 일부까지 보여주도록 보강
+  - 공용 실패 분류기(`src/shared/sync-error-catalog.ts`)를 확장해
+    - 배민 raw 오류 문자열을 구조화된 `errorCode`로 정리하고
+    - 실행 기록 UI에서 `다음 조치 ...` 문구까지 바로 보여주도록 보강
   - 배민 생성 마법사 읽기 전용 CLI 점검 경로 추가
     - `inspect-create-menu-flow`
     - 메뉴 목록 단계에서는 `메뉴 추가` 같은 핵심 컨트롤을 먼저 노출
