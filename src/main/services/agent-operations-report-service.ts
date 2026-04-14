@@ -26,6 +26,12 @@ import type {
   SyncRunItemRecord,
   SyncRunRecord
 } from '../../shared/contracts'
+import {
+  buildPlatformMenuPriceSummary
+} from '../../shared/platform-menu-price-summary'
+import {
+  comparePlatformMenuPriceVariants
+} from '../../shared/platform-menu-price-variants'
 import { describeSyncFailure } from '../../shared/sync-error-catalog'
 import { buildLogicalOptionGroups } from './logical-option-group-service'
 
@@ -218,6 +224,59 @@ const buildOptionReviewEvidence = (groups: LogicalOptionGroupRecord[]) => {
   ]
 }
 
+const buildExecutableActionCopy = (
+  item: SyncPreviewItem,
+  menuName: string
+) => {
+  const nameChanged = item.previousName !== item.nextName
+  const variantComparison = comparePlatformMenuPriceVariants(
+    item.previousPriceVariants,
+    item.nextPriceVariants
+  )
+  const previousPriceSummary = buildPlatformMenuPriceSummary(
+    item.previousPriceVariants,
+    item.previousPrice
+  )
+  const nextPriceSummary = buildPlatformMenuPriceSummary(
+    item.nextPriceVariants,
+    item.nextPrice
+  )
+  const priceChanged = previousPriceSummary !== nextPriceSummary
+  const changeLabels: string[] = []
+  const evidence = [`기준 메뉴: ${menuName}`]
+
+  if (nameChanged) {
+    changeLabels.push('이름')
+    evidence.push(`이름: ${item.previousName} -> ${item.nextName}`)
+  }
+
+  if (priceChanged) {
+    const priceLabel = variantComparison.hasVariantData ? '가격 구조' : '가격'
+    changeLabels.push(priceLabel)
+    evidence.push(
+      `${priceLabel}: ${previousPriceSummary ?? '가격 미확인'} -> ${nextPriceSummary ?? '가격 미확인'}`
+    )
+  }
+
+  if (item.executionMode === 'managed_browser') {
+    evidence.push('반영 방식: 현재 전용 크롬 탭')
+  }
+
+  if (evidence.length === 1 && item.previousName.trim().length > 0) {
+    evidence.push(`플랫폼 메뉴: ${item.previousName}`)
+  }
+
+  const detail =
+    changeLabels.length > 0
+      ? `${menuName} ${changeLabels.join(', ')} 변경을 지금 바로 반영할 수 있습니다.`
+      : `${menuName} 변경사항을 지금 바로 반영할 수 있습니다.`
+
+  return {
+    detail,
+    evidence
+  }
+}
+
 const filterPreviewItem = (
   item: Pick<SyncPreviewItem, 'platformCode' | 'menuId' | 'platformMenuId'>,
   filters: AgentReportFilterInput
@@ -329,6 +388,9 @@ export class AgentOperationsReportService {
 
     for (const item of preview.items.filter((previewItem) => filterPreviewItem(previewItem, filters))) {
       const menu = menuIndex.get(item.menuId)
+      const menuName = menu?.baseName ?? item.nextName
+      const actionCopy = buildExecutableActionCopy(item, menuName)
+
       actions.push({
         id: `run:${item.platformCode}:${item.menuId}:${item.platformMenuId}`,
         kind: 'run_executable',
@@ -337,12 +399,8 @@ export class AgentOperationsReportService {
         menuId: item.menuId,
         platformMenuId: item.platformMenuId,
         title: `${PLATFORM_LABELS[item.platformCode]} 메뉴 동기화 실행`,
-        detail: `${menu?.baseName ?? item.nextName} 변경사항을 지금 바로 반영할 수 있습니다.`,
-        evidence: [
-          `기준 메뉴: ${menu?.baseName ?? item.nextName}`,
-          `플랫폼 메뉴 ID: ${item.platformMenuId}`,
-          `변경 가격: ${formatPrice(item.previousPrice)} -> ${formatPrice(item.nextPrice)}`
-        ],
+        detail: actionCopy.detail,
+        evidence: actionCopy.evidence,
         commands: [
           {
             task: 'sync-run-item',

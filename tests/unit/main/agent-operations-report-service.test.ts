@@ -455,6 +455,93 @@ describe('AgentOperationsReportService', () => {
     )
   })
 
+  it('describes executable item changes without showing unchanged scalar prices', async () => {
+    const service = createService({
+      preview: {
+        items: [
+          {
+            platformCode: 'baemin',
+            menuId: 'menu-1',
+            platformMenuId: 'platform-1',
+            previousName: '왕새우갈비',
+            previousPrice: 1800,
+            previousPriceVariants: [
+              {
+                variantLabel: '500ml',
+                channels: [
+                  {
+                    channelCode: 'delivery',
+                    channelLabel: '배달',
+                    amount: 1800,
+                    amountText: '1,800원'
+                  }
+                ]
+              },
+              {
+                variantLabel: '1.25L',
+                channels: [
+                  {
+                    channelCode: 'delivery',
+                    channelLabel: '배달',
+                    amount: 2600,
+                    amountText: '2,600원'
+                  }
+                ]
+              }
+            ],
+            nextName: '왕새우갈비',
+            nextPrice: 1800,
+            nextPriceVariants: [
+              {
+                variantLabel: '500ml',
+                channels: [
+                  {
+                    channelCode: 'delivery',
+                    channelLabel: '배달',
+                    amount: 1800,
+                    amountText: '1,800원'
+                  }
+                ]
+              },
+              {
+                variantLabel: '1.25L',
+                channels: [
+                  {
+                    channelCode: 'delivery',
+                    channelLabel: '배달',
+                    amount: 2800,
+                    amountText: '2,800원'
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        needsReview: []
+      },
+      optionGroups: [],
+      syncRuns: [],
+      syncRunItems: []
+    })
+
+    const report = await service.getNextActionPlan({ platformCode: 'baemin', limit: 5 })
+
+    expect(report.data.items).toHaveLength(1)
+    expect(report.data.items[0].detail).toContain('가격 구조 변경')
+    expect(report.data.items[0].evidence).toEqual(
+      expect.arrayContaining([
+        '기준 메뉴: 왕새우갈비',
+        expect.stringContaining('가격 구조:'),
+        expect.stringContaining('1.25L'),
+        expect.stringContaining('2,600원'),
+        expect.stringContaining('2,800원')
+      ])
+    )
+    expect(report.data.items[0].evidence).not.toEqual(
+      expect.arrayContaining(['변경 가격: 1,800원 -> 1,800원'])
+    )
+  })
+
   it('returns a single idle action when there is no pending work', async () => {
     const service = createService({
       preview: { items: [], needsReview: [] },
