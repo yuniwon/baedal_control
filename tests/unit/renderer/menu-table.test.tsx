@@ -11,6 +11,7 @@ describe('MenuTable', () => {
         menus={[{ menuId: 'm1', baseName: '콤비네이션', basePrice: 22900, isDirty: 0 }]}
         onChange={onChange}
         onDelete={onDelete}
+        showSourceDetails={false}
       />
     )
 
@@ -64,6 +65,7 @@ describe('MenuTable', () => {
         ]}
         onChange={onChange}
         onDelete={onDelete}
+        showSourceDetails
       />
     )
 
@@ -107,6 +109,7 @@ describe('MenuTable', () => {
         ]}
         onChange={onChange}
         onDelete={onDelete}
+        showSourceDetails={false}
       />
     )
 
@@ -154,6 +157,7 @@ describe('MenuTable', () => {
         ]}
         onChange={onChange}
         onDelete={onDelete}
+        showSourceDetails={false}
       />
     )
 

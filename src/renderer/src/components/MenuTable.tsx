@@ -129,11 +129,13 @@ const buildOptionSampleLabel = (optionGroup: MenuSourceOptionGroupInfo) => {
 export const MenuTable = ({
   menus,
   onChange,
-  onDelete
+  onDelete,
+  showSourceDetails = false
 }: {
   menus: MenuRow[]
   onChange: (menuId: string, patch: Partial<MenuRow>) => void
   onDelete: (menuId: string) => void
+  showSourceDetails?: boolean
 }) => {
   const [drafts, setDrafts] = useState<Record<string, MenuDraft>>(() => buildDrafts(menus))
 
@@ -315,10 +317,10 @@ export const MenuTable = ({
                               ))}
                             </div>
                           ) : null}
-                          {source.platformMenuBindingSummary ? (
+                          {showSourceDetails && source.platformMenuBindingSummary ? (
                             <p className="source-note">{source.platformMenuBindingSummary}</p>
                           ) : null}
-                          {source.platformMenuPriceVariants?.length ? (
+                          {showSourceDetails && source.platformMenuPriceVariants?.length ? (
                             <div className="source-price-variant-list">
                               {flattenPlatformMenuPriceVariants(
                                 source.platformMenuPriceVariants
@@ -339,12 +341,12 @@ export const MenuTable = ({
                               ) : null}
                             </div>
                           ) : null}
-                          {source.lastSeenAt ? (
+                          {showSourceDetails && source.lastSeenAt ? (
                             <p className="source-note source-note-muted">
                               {`마지막 확인 ${formatDateTimeLabel(source.lastSeenAt)}`}
                             </p>
                           ) : null}
-                          {source.optionGroups?.length ? (
+                          {showSourceDetails && source.optionGroups?.length ? (
                             <div className="source-option-list">
                               {source.optionGroups.slice(0, 3).map((optionGroup) => (
                                 <p

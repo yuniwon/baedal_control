@@ -209,6 +209,7 @@ export const MenuPage = () => {
   const [menus, setMenus] = useState<MenuRow[]>([])
   const [filter, setFilter] = useState<MenuFilter>('all')
   const [search, setSearch] = useState('')
+  const [showSourceDetails, setShowSourceDetails] = useState(false)
 
   useEffect(() => {
     void Promise.all([
@@ -381,8 +382,8 @@ export const MenuPage = () => {
   return (
     <section className="page">
       <header className="page-header">
-        <h1>메뉴 관리</h1>
-        <p>메뉴명과 가격을 수정하고, 관리할 메뉴만 남겨서 반영 전에 다시 확인합니다.</p>
+        <h1>메뉴</h1>
+        <p>기준 메뉴명과 가격을 먼저 정리하고, 원본 상세는 필요할 때만 펼쳐서 확인합니다.</p>
       </header>
 
       <section className="panel panel-flat">
@@ -424,6 +425,13 @@ export const MenuPage = () => {
                   value={search}
                 />
               </label>
+              <button
+                className="secondary-button"
+                onClick={() => setShowSourceDetails((current) => !current)}
+                type="button"
+              >
+                {showSourceDetails ? '원본 상세 접기' : '원본 상세 보기'}
+              </button>
               <button className="secondary-button" onClick={handleAddMenu} type="button">
                 메뉴 추가
               </button>
@@ -439,7 +447,12 @@ export const MenuPage = () => {
                   <h2>{group.categoryName}</h2>
                   <span>{`메뉴 ${group.menus.length}개`}</span>
                 </header>
-                <MenuTable menus={group.menus} onChange={handleChange} onDelete={handleDelete} />
+                <MenuTable
+                  menus={group.menus}
+                  onChange={handleChange}
+                  onDelete={handleDelete}
+                  showSourceDetails={showSourceDetails}
+                />
               </section>
             ))}
           </div>

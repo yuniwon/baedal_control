@@ -112,6 +112,7 @@ export const DashboardPage = () => {
     null
   )
   const [previewDialog, setPreviewDialog] = useState<SyncPreviewResult | null>(null)
+  const [showImportChanges, setShowImportChanges] = useState(false)
   const [summary, setSummary] = useState('아직 반영한 기록이 없습니다.')
   const [platformStatuses, setPlatformStatuses] = useState<PlatformStatus[]>(defaultPlatformStatuses)
   const [importChanges, setImportChanges] = useState<PlatformImportChangeRecord[]>([])
@@ -217,8 +218,8 @@ export const DashboardPage = () => {
   return (
     <section className="page">
       <header className="page-header">
-        <h1>대시보드</h1>
-        <p>저장한 메뉴를 확인하고 배달앱 반영 준비 상태를 점검합니다.</p>
+        <h1>홈</h1>
+        <p>지금 처리할 일과 플랫폼 상태만 먼저 보고, 세부 변화는 필요할 때 펼쳐 확인합니다.</p>
       </header>
 
       <div className="summary-grid">
@@ -335,8 +336,8 @@ export const DashboardPage = () => {
 
       <section className="panel">
         <div className="page-header">
-          <h2>플랫폼 최근 가져오기</h2>
-          <p>플랫폼별 마지막 수집 상태를 짧게 다시 확인합니다.</p>
+          <h2>플랫폼 상태</h2>
+          <p>수집이 멈췄는지, 다시 가져와야 하는지만 먼저 확인합니다.</p>
         </div>
         <div className="status-list">
           {defaultPlatformStatuses.map((platform) => {
@@ -359,32 +360,38 @@ export const DashboardPage = () => {
       </section>
 
       <section className="panel">
-        <div className="page-header">
-          <h2>이번 가져오기 변경점</h2>
-          <p>가장 최근 수집 1회에서 바뀐 메뉴와 옵션만 짧게 다시 확인합니다.</p>
-        </div>
-        {importChangeSummaries.length ? (
-          <div className="change-summary-list">
-            {importChangeSummaries.map((item) => (
-              <article key={item.label} className="change-summary-row">
-                <strong>{`${item.label} ${item.count}개`}</strong>
-              </article>
-            ))}
+        <div className="panel-toolbar dashboard-detail-toolbar">
+          <div className="workspace-toolbar-copy">
+            <strong>최근 변화</strong>
+            <span>가장 최근 수집에서 바뀐 메뉴와 옵션만 필요할 때 펼쳐 확인합니다.</span>
           </div>
-        ) : (
-          <p className="source-empty">최근 가져오기 변경점이 없습니다.</p>
-        )}
-      </section>
-
-      <section className="status-list">
-        {platformStatuses.map((platform) => (
-          <article key={platform.name} className="status-row">
-            <strong>{platform.name}</strong>
-            <span className={`status-pill ${platform.connected ? 'connected' : 'pending'}`}>
-              {platform.connected ? '연결됨' : '연결 대기'}
-            </span>
-          </article>
-        ))}
+          <button
+            className="secondary-button"
+            onClick={() => setShowImportChanges((current) => !current)}
+            type="button"
+          >
+            {showImportChanges ? '최근 변화 접기' : '최근 변화 보기'}
+          </button>
+        </div>
+        {showImportChanges ? (
+          <div className="dashboard-detail-content">
+            <div className="page-header">
+              <h2>이번 가져오기 변경점</h2>
+              <p>가장 최근 수집 1회에서 바뀐 메뉴와 옵션만 짧게 다시 확인합니다.</p>
+            </div>
+            {importChangeSummaries.length ? (
+              <div className="change-summary-list">
+                {importChangeSummaries.map((item) => (
+                  <article key={item.label} className="change-summary-row">
+                    <strong>{`${item.label} ${item.count}개`}</strong>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="source-empty">최근 가져오기 변경점이 없습니다.</p>
+            )}
+          </div>
+        ) : null}
       </section>
     </section>
   )

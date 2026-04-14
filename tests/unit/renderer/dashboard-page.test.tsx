@@ -287,26 +287,21 @@ vi.mock('../../../src/renderer/src/lib/api', () => ({
 import { DashboardPage } from '../../../src/renderer/src/pages/DashboardPage'
 
 describe('DashboardPage', () => {
-  it('shows live connection state and the latest sync summary instead of placeholder values', async () => {
+  it('keeps the home screen focused and opens recent import changes on demand', async () => {
     render(<DashboardPage />)
 
+    expect(await screen.findByRole('heading', { name: '홈' })).toBeTruthy()
     expect(await screen.findByText('1 / 3')).toBeTruthy()
     expect(screen.getByText('2')).toBeTruthy()
     expect(screen.getByText('성공 1건, 실패 0건')).toBeTruthy()
     expect(screen.getByRole('button', { name: '반영 미리보기' })).toBeTruthy()
-    expect(screen.getByText('연결됨')).toBeTruthy()
-    expect(screen.getAllByText('연결 대기').length).toBe(2)
-    expect(screen.getByText('이번 가져오기 변경점')).toBeTruthy()
-    expect(screen.getByText('새 메뉴 1개')).toBeTruthy()
-    expect(screen.getByText('누락 의심 메뉴 1개')).toBeTruthy()
-    expect(screen.getByText('플랫폼에 없음 메뉴 1개')).toBeTruthy()
-    expect(screen.getByText('누락 의심 옵션 1개')).toBeTruthy()
-    expect(screen.getByText('재등장 항목 1개')).toBeTruthy()
+    expect(screen.getByText('플랫폼 상태')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '최근 변화 보기' })).toBeTruthy()
+    expect(screen.queryByText('이번 가져오기 변경점')).toBeNull()
     expect(screen.getByText('원본 메뉴 확인 필요')).toBeTruthy()
     expect(screen.queryByText('새 메뉴 2개')).toBeNull()
     expect(screen.getByText('배민 · 메뉴 검토용 피자')).toBeTruthy()
     expect(screen.queryByText(/menu-2/)).toBeNull()
-    expect(screen.getByText('플랫폼 최근 가져오기')).toBeTruthy()
     expect(screen.getByText('배민 · 메뉴 46개 확인 · 기존 연결 46개 유지')).toBeTruthy()
     expect(screen.getByText('쿠팡이츠 · 계정 정보를 다시 확인해 주세요.')).toBeTruthy()
     expect(screen.getByText('땡겨요 · 가져오기를 진행하고 있습니다.')).toBeTruthy()
@@ -317,6 +312,15 @@ describe('DashboardPage', () => {
     expect(screen.getByText('배민 최근 실패 점검')).toBeTruthy()
     expect(screen.getByText('검색 결과에서 메뉴를 다시 찾지 못했습니다. 2건')).toBeTruthy()
     expect(screen.getByText('이 메뉴만 즉시 반영')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '최근 변화 보기' }))
+
+    expect(await screen.findByText('이번 가져오기 변경점')).toBeTruthy()
+    expect(screen.getByText('새 메뉴 1개')).toBeTruthy()
+    expect(screen.getByText('누락 의심 메뉴 1개')).toBeTruthy()
+    expect(screen.getByText('플랫폼에 없음 메뉴 1개')).toBeTruthy()
+    expect(screen.getByText('누락 의심 옵션 1개')).toBeTruthy()
+    expect(screen.getByText('재등장 항목 1개')).toBeTruthy()
   })
 
   it('opens a preview first and only runs sync after confirmation', async () => {
@@ -333,6 +337,8 @@ describe('DashboardPage', () => {
     listImportRuns.mockResolvedValueOnce([])
 
     render(<DashboardPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '최근 변화 보기' }))
 
     expect(await screen.findByText('최근 가져오기 변경점이 없습니다.')).toBeTruthy()
     expect(screen.queryByText('새 메뉴 1개')).toBeNull()

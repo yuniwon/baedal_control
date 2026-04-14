@@ -570,6 +570,17 @@
   font-size: 13px;
 }
 
+.dashboard-detail-toolbar {
+  margin: 0;
+}
+
+.dashboard-detail-content {
+  display: grid;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #eaecf0;
+}
+
 .toolbar-search {
   width: min(320px, 100%);
 }

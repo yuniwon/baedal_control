@@ -256,7 +256,7 @@ describe('MenuPage', () => {
     expect(screen.getByDisplayValue('테스트 메뉴')).toBeTruthy()
   })
 
-  it('shows source metadata alongside the imported menu', async () => {
+  it('keeps source details collapsed until the operator opens them', async () => {
     render(<MenuPage />)
 
     expect((await screen.findAllByText('배민')).length).toBeGreaterThan(0)
@@ -264,13 +264,21 @@ describe('MenuPage', () => {
     expect(screen.getByText('확인됨')).toBeTruthy()
     expect(screen.getAllByText(/숨김 메뉴/).length).toBeGreaterThan(0)
     expect(screen.getByText('배달 22,900원')).toBeTruthy()
-    expect(screen.getByText(/기본 · 배달 22,900원/)).toBeTruthy()
+    expect(screen.queryByText(/기본 · 배달 22,900원/)).toBeNull()
+    expect(screen.queryByText(/\[음식배달\] 꾸버스피자 봉담점/)).toBeNull()
+    expect(screen.queryByText(/마지막 확인 2026\. 04\. 13\. 09:00/)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '원본 상세 보기' }))
+
+    expect(await screen.findByText(/기본 · 배달 22,900원/)).toBeTruthy()
     expect(screen.getByText(/\[음식배달\] 꾸버스피자 봉담점/)).toBeTruthy()
     expect(screen.getByText(/마지막 확인 2026\. 04\. 13\. 09:00/)).toBeTruthy()
   })
 
   it('shows option group summaries for linked platform menus', async () => {
     render(<MenuPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '원본 상세 보기' }))
 
     expect(await screen.findByText('옵션그룹 1개')).toBeTruthy()
     expect(screen.getByText(/사이즈 추가선택/)).toBeTruthy()
@@ -347,7 +355,7 @@ describe('MenuPage', () => {
 
     expect(screen.queryByDisplayValue('콤비네이션')).toBeNull()
     expect(screen.getByDisplayValue('핫소스')).toBeTruthy()
-    expect(screen.getAllByText(/연결 가게 없음/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/가게 연결 없음/).length).toBeGreaterThan(0)
   })
 
   it('filters menus by source presence state', async () => {
