@@ -51,6 +51,7 @@ type BaeminCreateWizardEntryState = {
   centerHitClassName: string | null
   centerHitHtmlSnippet: string | null
   centerHitOwnsButton: boolean | null
+  visibleOverlays: string[]
   hasReactFiber: boolean
   reactLimitBranchDetected: boolean
   bodyLimitMessage: string | null
@@ -109,6 +110,7 @@ export class BaeminAdapter implements PlatformAdapter {
 
       const preClickCreateWizardEntryState = await this.inspectCreateWizardEntryState(page)
       await page.getByRole('button', { name: '메뉴 추가' }).first().click({ timeout: 10000 })
+      await this.selectCreateWizardMenuTypeIfVisible(page)
       await this.waitForCreateWizardNameInput(page, preClickCreateWizardEntryState)
       await this.captureCreateWizardStep(
         inspection,
@@ -119,10 +121,9 @@ export class BaeminAdapter implements PlatformAdapter {
 
       const nameInput = page.getByPlaceholder('예) 국물떡볶이')
       const confirmButton = page.getByRole('button', { name: '확인' })
-      const applyButton = page.getByRole('button', { name: '적용하기' })
       await nameInput.fill('갈릭소스추가')
       await confirmButton.click()
-      await this.waitForNameApplyReady(page, applyButton, {
+      const advanceButton = await this.waitForCreateWizardAdvanceReady(page, {
         accepted: null,
         message: null
       })
@@ -133,7 +134,7 @@ export class BaeminAdapter implements PlatformAdapter {
         '사용 가능한 메뉴명으로 다음 단계 진입 직전 상태입니다.'
       )
 
-      await applyButton.click()
+      await advanceButton.click()
       const groupSelect = await this.findCreateWizardGroupSelect(page)
       await groupSelect.waitFor({ timeout: 10000 })
       await this.captureCreateWizardStep(
@@ -1035,6 +1036,37 @@ export class BaeminAdapter implements PlatformAdapter {
     )
   }
 
+  private async waitForCreateWizardAdvanceReady(
+    page: Page,
+    nameCheckState: { accepted: boolean | null; message: string | null }
+  ) {
+    const startedAt = Date.now()
+
+    while (Date.now() - startedAt < 30000) {
+      const advanceButton = await this.findVisibleCreateWizardAdvanceButton(page)
+      if (advanceButton && (await this.isEnabled(advanceButton))) {
+        return advanceButton
+      }
+
+      if (nameCheckState.accepted === false) {
+        throw new Error(
+          `baemin_menu_name_rejected:${nameCheckState.message ?? 'unknown_rejection'}`
+        )
+      }
+
+      const visibleBlockerMessage = await this.readNameCheckBlockerMessageFromPage(page)
+      if (visibleBlockerMessage) {
+        throw new Error(`baemin_menu_name_rejected:${visibleBlockerMessage}`)
+      }
+
+      await page.waitForTimeout(250)
+    }
+
+    throw new Error(
+      `baemin_menu_name_apply_button_timeout:${JSON.stringify(nameCheckState)}:${await this.describePage(page)}`
+    )
+  }
+
   private async readNameCheckBlockerMessageFromPage(page: Page) {
     const visibleText = await page.locator('body').innerText().catch(() => '')
     return this.extractNameCheckBlockerMessage(visibleText)
@@ -1351,6 +1383,22 @@ export class BaeminAdapter implements PlatformAdapter {
     }
   }
 
+  private async selectCreateWizardMenuTypeIfVisible(page: Page) {
+    const normalMenuOption = page.getByRole('option', { name: '일반메뉴', exact: true }).first()
+    const chooserVisible = await normalMenuOption
+      .waitFor({ state: 'visible', timeout: 1500 })
+      .then(() => true)
+      .catch(() => false)
+
+    if (!chooserVisible) {
+      return false
+    }
+
+    await normalMenuOption.click({ timeout: 5000 })
+    await page.waitForTimeout(300)
+    return true
+  }
+
   private extractCreateWizardLimitMessage(visibleText: string) {
     const normalizedText = visibleText.replace(/\s+/g, ' ').trim()
     const directMatch = normalizedText.match(/메뉴는 .*?개 까지 추가할 수 있어요\.?/u)
@@ -1432,6 +1480,25 @@ export class BaeminAdapter implements PlatformAdapter {
             return [placeholder || '(placeholder 없음)', value || '(값 없음)', current.type].join(' | ')
           })
           .slice(0, 8)
+        const visibleOverlays = Array.from(
+          document.querySelectorAll(
+            '[data-testid], [role=\"dialog\"], [role=\"menu\"], [role=\"listbox\"], [class*=\"Dropdown\"], [data-state=\"open\"]'
+          )
+        )
+          .filter(isVisible)
+          .map((element) => {
+            const current = element as HTMLElement
+            const parts = [
+              current.tagName.toLowerCase(),
+              current.getAttribute('role'),
+              current.getAttribute('data-testid'),
+              normalize(current.className),
+              normalize(current.textContent).slice(0, 120)
+            ].filter((value) => typeof value === 'string' && value.length > 0)
+            return parts.join(' | ')
+          })
+          .filter((value, index, values) => value.length > 0 && values.indexOf(value) === index)
+          .slice(0, 8)
 
         const menuAddButtons = Array.from(document.querySelectorAll('button')).filter((button) =>
           normalize(button.textContent).includes('메뉴 추가')
@@ -1511,6 +1578,7 @@ export class BaeminAdapter implements PlatformAdapter {
           centerHitOwnsButton: menuAddButton && centerHitElement
             ? centerHitElement === menuAddButton || menuAddButton.contains(centerHitElement)
             : null,
+          visibleOverlays,
           hasReactFiber,
           reactLimitBranchDetected,
           bodyLimitMessage,
@@ -1522,7 +1590,9 @@ export class BaeminAdapter implements PlatformAdapter {
   }
 
   private async findCreateWizardGroupSelect(page: Page) {
-    const selectLocator = page.locator('select').first()
+    const dialog = page.getByRole('dialog').first()
+    await dialog.waitFor({ timeout: 10000 })
+    const selectLocator = dialog.locator('select').first()
     await selectLocator.waitFor({ timeout: 10000 })
     return selectLocator
   }
@@ -1537,7 +1607,26 @@ export class BaeminAdapter implements PlatformAdapter {
   }
 
   private async clickCreateWizardAdvanceButton(page: Page) {
-    const visibleLabels = await page.evaluate(() => {
+    const advanceButton = await this.findVisibleCreateWizardAdvanceButton(page)
+    if (!advanceButton) {
+      throw new Error('baemin_create_wizard_advance_button_not_found')
+    }
+
+    await advanceButton.click()
+  }
+
+  private async findVisibleCreateWizardAdvanceButton(page: Page) {
+    const visibleLabels = await this.readVisibleCreateWizardButtonLabels(page)
+    const nextLabel = pickBaeminCreateWizardAdvanceButtonLabel(visibleLabels)
+    if (!nextLabel) {
+      return null
+    }
+
+    return page.getByRole('button', { name: nextLabel }).first()
+  }
+
+  private async readVisibleCreateWizardButtonLabels(page: Page) {
+    return await page.evaluate(() => {
       const isVisible = (element: Element) => {
         if (!(element instanceof HTMLElement)) {
           return false
@@ -1553,13 +1642,6 @@ export class BaeminAdapter implements PlatformAdapter {
         .map((button) => button.textContent?.replace(/\s+/g, ' ').trim() ?? '')
         .filter((value) => value.length > 0)
     })
-
-    const nextLabel = pickBaeminCreateWizardAdvanceButtonLabel(visibleLabels)
-    if (!nextLabel) {
-      throw new Error('baemin_create_wizard_advance_button_not_found')
-    }
-
-    await page.getByRole('button', { name: nextLabel }).first().click()
   }
 
   private async findCreateWizardPriceInput(page: Page) {

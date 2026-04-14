@@ -25,23 +25,23 @@
 ## 2. 이번 커밋 직전 검증 결과
 
 - `npm test`
-  - 60개 파일, 248개 테스트 통과
+  - 60개 파일, 254개 테스트 통과
 - `npm run lint:types`
   - 통과
 - `npm run build`
   - 통과
 - `npx electron out/main/index.js --task=inspect-create-menu-flow --platformCode=baemin`
   - 통과
-  - 저장된 배민 계정으로 로그인 후 메뉴 목록과 `메뉴 추가` 버튼 존재까지는 확인
-  - 하지만 자동화 클릭 후에도 생성 1단계가 열리지 않아 `baemin_create_wizard_not_opened`로 종료
-  - 2026-04-14 16:25 KST 기준 최신 진단값
-    - 클릭 전: 버튼 `aria-disabled=false`, `data-disabled=false`, `React fiber 있음`
-    - 클릭 전 center hit: 버튼 내부 `span("메뉴 추가")`
-    - 클릭 후 center hit: `div[data-testid="backdrop"]`
-    - 클릭 후 center hit class: `Dropdown_b_s4m8_jr2uxl4 ...`
-    - `reactLimitBranchDetected=false`, 본문 limit 문구 없음
-  - 즉, 현재 fresh Playwright 세션에서 확인된 직접 증거는 `메뉴 개수 상한`보다 `메뉴 추가 클릭 뒤 backdrop만 생기고 생성 1단계는 열리지 않음`이다.
-  - 예전 managed Chrome live DOM에서 `메뉴는 N개까지 추가할 수 있어요` 분기 흔적을 본 적은 있지만, 지금은 확정 원인이 아니라 보조 단서로만 취급한다.
+  - 저장된 배민 계정으로 로그인 후 `메뉴 추가` 읽기 전용 점검이 `1/4 -> 2/4 -> 3/4 -> 4/4`까지 완료됨
+  - 이번 보강으로 정리된 실제 원인
+    - `메뉴 추가` 클릭 뒤 바로 1단계가 뜨는 게 아니라 `추가 메뉴 유형 선택` 드롭다운이 먼저 열림
+    - 1단계 진행 버튼은 `적용하기`가 아니라 실제로는 `다음`이 먼저 보이는 경우가 있음
+    - 2단계 직후에는 로딩 스피너가 잠깐 뜨며, 페이지 전체의 첫 번째 `select`를 잡으면 헤더 서비스 선택기를 잘못 집게 됨
+  - 조치 후 현재 동작
+    - 드롭다운에서 `일반메뉴` 자동 선택
+    - 1단계에서 보이는 진행 버튼(`다음 -> 적용하기 -> 확인`) 중 활성 버튼 대기
+    - 2단계 메뉴그룹 `select`는 페이지 전체가 아니라 모달 내부에서 탐색
+  - 최종 저장은 하지 않으므로 운영 카탈로그 변경 없음
 - `npx electron out/main/index.js --task=sync-preview --platformCode=baemin`
   - 통과
   - 실제 운영 DB 기준으로 `칠성사이다(59707776)`가 더 이상 `price_variant_review`가 아니라 실행 항목으로 내려오는 것 확인
@@ -62,7 +62,8 @@
   - 배민 생성 마법사 읽기 전용 CLI 점검 경로 추가
     - `inspect-create-menu-flow`
     - 메뉴 목록 단계에서는 `메뉴 추가` 같은 핵심 컨트롤을 먼저 노출
-    - 생성 1단계가 안 열리면 raw timeout 대신 `baemin_create_wizard_not_opened:{page summary}`로 명확히 실패 기록
+    - 현재는 `일반메뉴` 선택, 1단계 진행 버튼 대기, 2단계 모달 내부 select 탐색까지 포함해 4단계 읽기 전용 점검 완료
+    - 초기에 막혔던 경우에는 raw timeout 대신 `baemin_create_wizard_not_opened:{page summary}`로 명확히 실패 기록하고 `createWizardEntryState.beforeClick/afterClick`까지 남긴다
   - 배민 다중 가격 1차 쓰기 경로 추가
     - 기준 메뉴의 공용 `basePriceVariants`를 플랫폼별 채널 구조로 투영한 뒤 비교
     - 배민 어댑터가 이제 secondary variant 가격 차이도 실제 가격 변경으로 인식
@@ -125,16 +126,14 @@ C:\Users\WON2\AppData\Roaming\delivery-menu-sync\credentials.json
 - 어댑터도 `previousPriceVariants / nextPriceVariants` 차이를 가격 변경으로 인식하고, 배달 가격 입력칸을 variant 행별로 채울 준비가 되어 있다.
 - 단일 가격 숨김 메뉴의 이름/가격 수정은 실운영 왕복 검증까지 완료했다.
 - 다만 최신 import 기준으로 기존 테스트 메뉴 `숨김피자`가 `판매중`이라 현재는 안전한 숨김 검증 대상이 없다.
-- 다만 다중 가격 실운영 저장 검증과 새 메뉴 생성/삭제 자동화는 아직 보류 상태다.
+- 다만 다중 가격 실운영 저장 검증과 새 메뉴 생성/삭제 **실저장** 자동화는 아직 보류 상태다.
   - 현재 배민 `present + multi-price` 메뉴는 모두 판매중이라 바로 실저장하기 위험
-  - 생성 마법사 자동화가 여전히 `baemin_create_wizard_not_opened`에서 막혀 있음
-- 최신 fresh 세션 기준으로는 버튼 비활성/limit보다 dropdown backdrop 개입 가능성이 더 높다.
+  - 읽기 전용 생성 마법사 진입은 해결됐지만, 실제 저장 후 숨김 처리/삭제까지 검증할 안전 대상이 없음
 - 금칙어가 설명/구성에 남아 있으면 저장 전에 차단
 - legacy active 매핑이 `platform_menus`에 없더라도 import 2회로 `source_absent`까지 자동 정리됨
 - 쓰기 실패 시 현재 배민 화면 제목 / 화면 종류 / 실패 단계 / 본문 텍스트 일부를 `failure_context_json`으로 남긴다.
-- 생성 마법사 구조는 사용자 수동 캡처 기준으로 파악했지만, 현재 자동화 경로에서는 `메뉴 추가` 클릭 후 1단계가 열리지 않는다.
-- 최신 CLI 결과에는 `createWizardEntryState.beforeClick/afterClick`가 포함되어, 버튼 상태와 click 이후 덮는 backdrop까지 바로 확인할 수 있다.
-- 즉, 배민 새 테스트 메뉴 생성 자동화는 아직 미완료이며, 새 숨김 테스트 메뉴를 확보하기 전까지는 실저장 검증을 멈추는 편이 안전하다.
+- 생성 마법사 구조는 이제 fresh Playwright 기준으로도 4단계까지 자동 진입이 확인됐다.
+- 즉, 배민 새 테스트 메뉴 **읽기 전용 생성 점검**은 완료됐고, 남은 건 실저장 경로와 안전한 정리 자동화다.
 
 ### 쿠팡이츠
 
@@ -171,10 +170,10 @@ C:\Users\WON2\AppData\Roaming\delivery-menu-sync\credentials.json
 
 ## 6. 다음 우선순위
 
-1. 배민 `메뉴 추가 -> 숨김 처리 -> 필요 시 삭제` 자동화 경로 확보
+1. 배민 `최종 저장 -> 숨김 처리 -> 필요 시 삭제` 실저장 경로 확보
    - 과거 숨김 테스트 메뉴 기반 수정 왕복은 완료
-   - 하지만 지금은 안전 대상이 사라졌고, fresh 세션에서는 `메뉴 추가` 클릭 뒤 `Dropdown ... backdrop`이 버튼 위를 덮는 현상이 확인된다.
-   - 남은 핵심은 이 backdrop이 왜 생기는지, 실제로 어떤 hidden dropdown/portal이 열리는지 추적해서 생성 1단계 진입 조건을 여는 것
+   - 새 메뉴 생성 마법사 읽기 전용 4단계 진입도 확보
+   - 남은 핵심은 안전한 테스트 대상을 다시 확보한 뒤, 실제 저장 요청과 생성 직후 숨김/삭제 정리 순서를 검증하는 것
 2. 배민 저장 성공 후 후속 단계 진단 보강
    - 실패 직전 화면 기록은 붙었음
    - 다음은 저장 성공 직후 토스트/잔존 모달/재진입 지연 같은 후속 단계 로그를 더 선명하게 남기는 것

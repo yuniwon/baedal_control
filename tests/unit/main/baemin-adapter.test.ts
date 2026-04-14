@@ -122,6 +122,42 @@ describe('BaeminAdapter', () => {
     dateNowSpy.mockRestore()
   })
 
+  it('waits for the visible create-wizard advance button instead of assuming 적용하기', async () => {
+    const adapter = new BaeminAdapter({
+      username: 'owner-id',
+      password: 'secret'
+    }) as any
+
+    const nextButton = {
+      first: vi.fn().mockReturnThis(),
+      getAttribute: vi.fn().mockResolvedValue(null),
+      isDisabled: vi.fn().mockResolvedValue(false)
+    }
+    const fakePage = {
+      evaluate: vi.fn().mockResolvedValue(['메뉴 추가', '다음', '확인']),
+      getByRole: vi.fn().mockImplementation((role: string, options?: { name?: string }) => {
+        if (role === 'button' && options?.name === '다음') {
+          return nextButton
+        }
+
+        throw new Error('unexpected_role_lookup')
+      }),
+      locator: vi.fn().mockReturnValue({
+        innerText: vi.fn().mockResolvedValue('')
+      }),
+      waitForTimeout: vi.fn().mockResolvedValue(undefined)
+    }
+
+    await expect(
+      adapter.waitForCreateWizardAdvanceReady(fakePage, {
+        accepted: null,
+        message: null
+      })
+    ).resolves.toBe(nextButton)
+
+    expect(fakePage.getByRole).toHaveBeenCalledWith('button', { name: '다음' })
+  })
+
   it('skips browser work when neither the name nor price changed', async () => {
     const adapter = new BaeminAdapter({
       username: 'owner-id',
@@ -567,6 +603,11 @@ describe('BaeminAdapter', () => {
       first: vi.fn().mockReturnThis(),
       click: vi.fn().mockResolvedValue(undefined)
     }
+    const normalMenuOption = {
+      first: vi.fn().mockReturnThis(),
+      waitFor: vi.fn().mockRejectedValue(new Error('not visible')),
+      click: vi.fn().mockResolvedValue(undefined)
+    }
     const nameInput = {
       waitFor: vi.fn().mockRejectedValue(new Error('locator.waitFor timeout'))
     }
@@ -574,6 +615,10 @@ describe('BaeminAdapter', () => {
       getByRole: vi.fn().mockImplementation((_role: string, options?: { name?: string }) => {
         if (options?.name === '메뉴 추가') {
           return menuAddButton
+        }
+
+        if (_role === 'option' && options?.name === '일반메뉴') {
+          return normalMenuOption
         }
 
         throw new Error('unexpected_role_lookup')
@@ -639,6 +684,11 @@ describe('BaeminAdapter', () => {
       first: vi.fn().mockReturnThis(),
       click: vi.fn().mockResolvedValue(undefined)
     }
+    const normalMenuOption = {
+      first: vi.fn().mockReturnThis(),
+      waitFor: vi.fn().mockRejectedValue(new Error('not visible')),
+      click: vi.fn().mockResolvedValue(undefined)
+    }
     const nameInput = {
       waitFor: vi.fn().mockRejectedValue(new Error('locator.waitFor timeout'))
     }
@@ -646,6 +696,10 @@ describe('BaeminAdapter', () => {
       getByRole: vi.fn().mockImplementation((_role: string, options?: { name?: string }) => {
         if (options?.name === '메뉴 추가') {
           return menuAddButton
+        }
+
+        if (_role === 'option' && options?.name === '일반메뉴') {
+          return normalMenuOption
         }
 
         throw new Error('unexpected_role_lookup')
@@ -706,6 +760,11 @@ describe('BaeminAdapter', () => {
       first: vi.fn().mockReturnThis(),
       click: vi.fn().mockResolvedValue(undefined)
     }
+    const normalMenuOption = {
+      first: vi.fn().mockReturnThis(),
+      waitFor: vi.fn().mockRejectedValue(new Error('not visible')),
+      click: vi.fn().mockResolvedValue(undefined)
+    }
     const nameInput = {
       waitFor: vi.fn().mockRejectedValue(new Error('locator.waitFor timeout'))
     }
@@ -713,6 +772,10 @@ describe('BaeminAdapter', () => {
       getByRole: vi.fn().mockImplementation((_role: string, options?: { name?: string }) => {
         if (options?.name === '메뉴 추가') {
           return menuAddButton
+        }
+
+        if (_role === 'option' && options?.name === '일반메뉴') {
+          return normalMenuOption
         }
 
         throw new Error('unexpected_role_lookup')
@@ -760,6 +823,109 @@ describe('BaeminAdapter', () => {
     )
 
     expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  it('selects 일반메뉴 when the create-menu type chooser is visible', async () => {
+    const adapter = new BaeminAdapter({
+      username: 'owner-id',
+      password: 'secret'
+    }) as any
+
+    const normalMenuOption = {
+      first: vi.fn().mockReturnThis(),
+      waitFor: vi.fn().mockResolvedValue(undefined),
+      click: vi.fn().mockResolvedValue(undefined)
+    }
+    const fakePage = {
+      getByRole: vi.fn().mockImplementation((role: string, options?: { name?: string }) => {
+        if (role === 'option' && options?.name === '일반메뉴') {
+          return normalMenuOption
+        }
+
+        throw new Error('unexpected_role_lookup')
+      }),
+      waitForTimeout: vi.fn().mockResolvedValue(undefined)
+    }
+
+    await expect(adapter.selectCreateWizardMenuTypeIfVisible(fakePage)).resolves.toBe(true)
+
+    expect(normalMenuOption.first).toHaveBeenCalledTimes(1)
+    expect(normalMenuOption.waitFor).toHaveBeenCalledWith({ state: 'visible', timeout: 1500 })
+    expect(normalMenuOption.click).toHaveBeenCalledWith({ timeout: 5000 })
+    expect(fakePage.waitForTimeout).toHaveBeenCalledWith(300)
+  })
+
+  it('does nothing when the create-menu type chooser is not visible', async () => {
+    const adapter = new BaeminAdapter({
+      username: 'owner-id',
+      password: 'secret'
+    }) as any
+
+    const normalMenuOption = {
+      first: vi.fn().mockReturnThis(),
+      waitFor: vi.fn().mockRejectedValue(new Error('not visible')),
+      click: vi.fn().mockResolvedValue(undefined)
+    }
+    const fakePage = {
+      getByRole: vi.fn().mockImplementation((role: string, options?: { name?: string }) => {
+        if (role === 'option' && options?.name === '일반메뉴') {
+          return normalMenuOption
+        }
+
+        throw new Error('unexpected_role_lookup')
+      }),
+      waitForTimeout: vi.fn().mockResolvedValue(undefined)
+    }
+
+    await expect(adapter.selectCreateWizardMenuTypeIfVisible(fakePage)).resolves.toBe(false)
+
+    expect(normalMenuOption.first).toHaveBeenCalledTimes(1)
+    expect(normalMenuOption.click).not.toHaveBeenCalled()
+    expect(fakePage.waitForTimeout).not.toHaveBeenCalled()
+  })
+
+  it('finds the create-wizard group select inside the modal instead of using the page header select', async () => {
+    const adapter = new BaeminAdapter({
+      username: 'owner-id',
+      password: 'secret'
+    }) as any
+
+    const groupSelect = {
+      waitFor: vi.fn().mockResolvedValue(undefined)
+    }
+    const dialog = {
+      first: vi.fn().mockReturnThis(),
+      waitFor: vi.fn().mockResolvedValue(undefined),
+      locator: vi.fn().mockImplementation((selector: string) => {
+        if (selector === 'select') {
+          return {
+            first: vi.fn().mockReturnValue(groupSelect)
+          }
+        }
+
+        throw new Error('unexpected_dialog_locator')
+      })
+    }
+    const fakePage = {
+      getByRole: vi.fn().mockImplementation((role: string) => {
+        if (role === 'dialog') {
+          return dialog
+        }
+
+        throw new Error('unexpected_role_lookup')
+      }),
+      locator: vi.fn(() => {
+        throw new Error('page.locator_should_not_be_used')
+      })
+    }
+
+    await expect(adapter.findCreateWizardGroupSelect(fakePage)).resolves.toBe(groupSelect)
+
+    expect(fakePage.getByRole).toHaveBeenCalledWith('dialog')
+    expect(dialog.first).toHaveBeenCalledTimes(1)
+    expect(dialog.waitFor).toHaveBeenCalledWith({ timeout: 10000 })
+    expect(dialog.locator).toHaveBeenCalledWith('select')
+    expect(groupSelect.waitFor).toHaveBeenCalledWith({ timeout: 10000 })
   })
 
   it('collects baemin menu pages from the live screen responses while scrolling', async () => {
