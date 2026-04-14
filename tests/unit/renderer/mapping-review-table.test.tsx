@@ -56,6 +56,7 @@ describe('MappingReviewTable', () => {
     render(
       <MappingReviewTable
         catalog={catalog}
+        showDetails={false}
         rows={[
           {
             menuId: 'm1',
@@ -130,7 +131,7 @@ describe('MappingReviewTable', () => {
     expect(screen.queryByText(/ID p-11/)).toBeNull()
     expect(screen.getAllByText(/숨김 메뉴/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/연결 정상/).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/기본 · 배달 22,900원/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/기본 · 배달 22,900원/)).toBeNull()
     expect(screen.getByText(/이름 중복 2개/)).toBeTruthy()
   })
 })

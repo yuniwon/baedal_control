@@ -74,6 +74,8 @@ const summarizeItem = (item: SyncRunItemRecord) => {
 export const HistoryPage = ({ initialRuns = [] as HistoryRun[] }) => {
   const [runs, setRuns] = useState<HistoryRun[]>(initialRuns)
   const [importRuns, setImportRuns] = useState<PlatformImportRunRecord[]>([])
+  const [expandedImportRuns, setExpandedImportRuns] = useState<Record<string, boolean>>({})
+  const [expandedSyncRuns, setExpandedSyncRuns] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (initialRuns.length > 0) {
@@ -124,13 +126,29 @@ export const HistoryPage = ({ initialRuns = [] as HistoryRun[] }) => {
                     <strong>{formatDateTimeLabel(run.finishedAt ?? run.startedAt) || run.startedAt}</strong>
                     <span>{`${getPlatformLabel(run.platformCode)} · ${getPlatformImportStatusLabel(run)}`}</span>
                   </div>
-                  <span className={`status-pill ${run.status === 'partial_failed' ? 'failed' : run.status === 'running' ? 'pending' : 'connected'}`}>
-                    {getPlatformImportStatusLabel(run)}
-                  </span>
+                  <div className="history-summary-actions">
+                    <span className={`status-pill ${run.status === 'partial_failed' ? 'failed' : run.status === 'running' ? 'pending' : 'connected'}`}>
+                      {getPlatformImportStatusLabel(run)}
+                    </span>
+                    <button
+                      className="secondary-button table-button"
+                      onClick={() =>
+                        setExpandedImportRuns((current) => ({
+                          ...current,
+                          [run.importRunId]: !current[run.importRunId]
+                        }))
+                      }
+                      type="button"
+                    >
+                      {expandedImportRuns[run.importRunId] ? '상세 접기' : '상세 보기'}
+                    </button>
+                  </div>
                 </div>
-                <p className={run.status === 'partial_failed' ? 'history-item-error' : 'history-item-detail'}>
-                  {buildPlatformImportRunDescription(run)}
-                </p>
+                {expandedImportRuns[run.importRunId] ? (
+                  <p className={run.status === 'partial_failed' ? 'history-item-error' : 'history-item-detail'}>
+                    {buildPlatformImportRunDescription(run)}
+                  </p>
+                ) : null}
               </article>
             ))
           )}
@@ -151,11 +169,27 @@ export const HistoryPage = ({ initialRuns = [] as HistoryRun[] }) => {
                   <strong>{formatDateTimeLabel(run.startedAt) || run.startedAt}</strong>
                   <span>{formatSyncSummary(run.resultSummary)}</span>
                 </div>
-                <span className={`status-pill ${run.items?.some((item) => item.status === 'failed') ? 'failed' : 'connected'}`}>
-                  {run.items?.length ? `메뉴 ${run.items.length}건` : '상세 없음'}
-                </span>
+                <div className="history-summary-actions">
+                  <span className={`status-pill ${run.items?.some((item) => item.status === 'failed') ? 'failed' : 'connected'}`}>
+                    {run.items?.length ? `메뉴 ${run.items.length}건` : '상세 없음'}
+                  </span>
+                  {run.items?.length ? (
+                    <button
+                      className="secondary-button table-button"
+                      onClick={() =>
+                        setExpandedSyncRuns((current) => ({
+                          ...current,
+                          [run.syncRunId]: !current[run.syncRunId]
+                        }))
+                      }
+                      type="button"
+                    >
+                      {expandedSyncRuns[run.syncRunId] ? '상세 접기' : '상세 보기'}
+                    </button>
+                  ) : null}
+                </div>
               </div>
-              {run.items?.length ? (
+              {run.items?.length && expandedSyncRuns[run.syncRunId] ? (
                 <div className="history-item-list">
                   {run.items.map((item) => {
                     const summary = summarizeItem(item)

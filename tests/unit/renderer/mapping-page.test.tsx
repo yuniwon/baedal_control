@@ -294,4 +294,19 @@ describe('MappingPage', () => {
 
     expect(screen.getByText('조건에 맞는 기준 메뉴가 없습니다.')).toBeTruthy()
   })
+
+  it('keeps mapping details collapsed until the operator opens them', async () => {
+    listMappings.mockResolvedValue(initialMappings)
+
+    render(<MappingPage />)
+
+    expect(await screen.findByRole('heading', { name: '매핑' })).toBeTruthy()
+    expect(screen.queryByText('[음식배달] 꾸버스피자 봉담점')).toBeNull()
+    expect(screen.queryByText('기본 · 배달 22,900원')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '상세 보기' }))
+
+    expect(screen.getAllByText('[음식배달] 꾸버스피자 봉담점').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('기본 · 배달 22,900원').length).toBeGreaterThan(0)
+  })
 })

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 const { listSyncRuns, listPlatformImportRuns } = vi.hoisted(() => ({
@@ -79,13 +79,24 @@ describe('HistoryPage', () => {
 
     expect(screen.getByText('2026. 04. 12. 19:00')).toBeTruthy()
     expect(screen.getByText('메뉴 1건')).toBeTruthy()
+    expect(screen.queryByText("배민 · 포테이토골드 -> 포테이토골드피자 · 21,000원")).toBeNull()
+    expect(screen.queryByText("금칙어 '!'은 입력할 수 없습니다.")).toBeNull()
+    expect(screen.getByText('가져오기 기록')).toBeTruthy()
+    expect(screen.getByText('배민 · 일부 실패')).toBeTruthy()
+    expect(
+      screen.queryByText('메뉴 목록을 끝까지 읽지 못했습니다. 페이지를 다시 가져오거나 수집 검사를 확인해 주세요.')
+    ).toBeNull()
+
+    const detailButtons = screen.getAllByRole('button', { name: '상세 보기' })
+    fireEvent.click(detailButtons[1])
+
     expect(screen.getByText("배민 · 포테이토골드 -> 포테이토골드피자 · 21,000원")).toBeTruthy()
     expect(screen.getByText("금칙어 '!'은 입력할 수 없습니다.")).toBeTruthy()
     expect(
       screen.getByText('다음 조치 기존 메뉴 설명, 구성, 메뉴명에 금칙어가 없는지 확인한 뒤 다시 실행해 주세요.')
     ).toBeTruthy()
-    expect(screen.getByText('가져오기 기록')).toBeTruthy()
-    expect(screen.getByText('배민 · 일부 실패')).toBeTruthy()
+
+    fireEvent.click(screen.getAllByRole('button', { name: '상세 보기' })[0])
     expect(screen.getByText('메뉴 목록을 끝까지 읽지 못했습니다. 페이지를 다시 가져오거나 수집 검사를 확인해 주세요.')).toBeTruthy()
   })
 
@@ -128,6 +139,8 @@ describe('HistoryPage', () => {
         ]}
       />
     )
+
+    fireEvent.click(await screen.findByRole('button', { name: '상세 보기' }))
 
     await waitFor(() => {
       expect(
@@ -184,6 +197,8 @@ describe('HistoryPage', () => {
         ]}
       />
     )
+
+    fireEvent.click(await screen.findByRole('button', { name: '상세 보기' }))
 
     await waitFor(() => {
       expect(screen.getByText('검색 결과에서 메뉴를 다시 찾지 못했습니다.')).toBeTruthy()

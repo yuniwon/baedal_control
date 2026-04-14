@@ -179,6 +179,7 @@ export const MappingPage = () => {
     ddangyo: []
   })
   const [search, setSearch] = useState('')
+  const [showDetails, setShowDetails] = useState(false)
 
   const reload = () =>
     Promise.all([appApi.menus.list(), appApi.mappings.list(), appApi.platformMenus.list()]).then(
@@ -275,8 +276,8 @@ export const MappingPage = () => {
   return (
     <section className="page">
       <header className="page-header">
-        <h1>매핑 검토</h1>
-        <p>관리 대상 메뉴만 보면서 후보를 눌러 연결하고, 잘못 붙은 매핑은 바로 해제합니다.</p>
+        <h1>매핑</h1>
+        <p>기준 메뉴와 현재 연결 상태를 먼저 보고, 후보 상세는 필요할 때만 펼쳐 비교합니다.</p>
       </header>
 
       <section className="panel panel-flat">
@@ -302,20 +303,30 @@ export const MappingPage = () => {
               <strong>기준 메뉴별 연결 검토</strong>
               <span>한 메뉴 안에서 플랫폼별 후보와 현재 연결을 같이 비교합니다.</span>
             </div>
-            <label className="toolbar-search">
-              <input
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="기준 메뉴 또는 현재 연결 검색"
-                type="search"
-                value={search}
-              />
-            </label>
+            <div className="workspace-toolbar-actions">
+              <label className="toolbar-search">
+                <input
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="기준 메뉴 또는 현재 연결 검색"
+                  type="search"
+                  value={search}
+                />
+              </label>
+              <button
+                className="secondary-button"
+                onClick={() => setShowDetails((current) => !current)}
+                type="button"
+              >
+                {showDetails ? '상세 접기' : '상세 보기'}
+              </button>
+            </div>
           </div>
         )}
         {filteredRows.length ? (
           <MappingReviewTable
             rows={filteredRows}
             catalog={catalog}
+            showDetails={showDetails}
             onSelectCandidate={handleSelectCandidate}
             onClear={handleClear}
           />

@@ -914,6 +914,14 @@
   gap: 16px;
 }
 
+.history-summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
 .history-summary-copy {
   display: grid;
   gap: 4px;

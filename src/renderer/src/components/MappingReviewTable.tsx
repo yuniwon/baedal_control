@@ -146,11 +146,13 @@ const buildGroups = (rows: MappingReviewRow[]) =>
 export const MappingReviewTable = ({
   rows,
   catalog,
+  showDetails = false,
   onSelectCandidate,
   onClear
 }: {
   rows: MappingReviewRow[]
   catalog: Record<PlatformCode, MappingCandidate[]>
+  showDetails?: boolean
   onSelectCandidate: (
     menuId: string,
     platformCode: PlatformCode,
@@ -253,12 +255,12 @@ export const MappingReviewTable = ({
                                     ))}
                                   </span>
                                 ) : null}
-                                {candidate.platformMenuBindingSummary ? (
+                                {showDetails && candidate.platformMenuBindingSummary ? (
                                   <span className="candidate-note">
                                     {candidate.platformMenuBindingSummary}
                                   </span>
                                 ) : null}
-                                {candidate.platformMenuPriceVariants?.length ? (
+                                {showDetails && candidate.platformMenuPriceVariants?.length ? (
                                   <span className="candidate-price-variant-list">
                                     {flattenPlatformMenuPriceVariants(
                                       candidate.platformMenuPriceVariants
@@ -307,10 +309,10 @@ export const MappingReviewTable = ({
                             </span>
                           ))}
                         </div>
-                        {row.platformMenuBindingSummary ? (
+                        {showDetails && row.platformMenuBindingSummary ? (
                           <p className="source-note">{row.platformMenuBindingSummary}</p>
                         ) : null}
-                        {row.platformMenuPriceVariants?.length ? (
+                        {showDetails && row.platformMenuPriceVariants?.length ? (
                           <div className="source-price-variant-list">
                             {flattenPlatformMenuPriceVariants(row.platformMenuPriceVariants)
                               .slice(0, 4)
