@@ -227,6 +227,7 @@ app.whenReady().then(async () => {
     platformImportChangeRepository,
     browserInspectionSnapshotRepository,
     browserInspectorBridge,
+    agentOperationsReportService,
     managedChromeLauncher,
     managedChromeLoginAutomator,
     managedChromeSessionProbe,

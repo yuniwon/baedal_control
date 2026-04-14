@@ -1,4 +1,6 @@
 import type {
+  AgentActionPlanReport,
+  AgentReportEnvelope,
   BrowserInspectionSnapshot,
   BrowserInspectorStatus,
   LogicalOptionGroupRecord,
@@ -67,6 +69,9 @@ declare global {
       }
       platformImportChanges: {
         listLatest: (limit?: number) => Promise<PlatformImportChangeRecord[]>
+      }
+      agentReports: {
+        getNextActionPlan: (filters?: unknown) => Promise<AgentReportEnvelope<AgentActionPlanReport>>
       }
       browserInspectionSnapshots: {
         listLatest: (limit?: number) => Promise<BrowserInspectionSnapshot[]>
@@ -138,6 +143,19 @@ export const appApi: AppApi = window.appApi ?? {
   },
   platformImportChanges: {
     listLatest: () => noopPromise([] as PlatformImportChangeRecord[])
+  },
+  agentReports: {
+    getNextActionPlan: () =>
+      noopPromise({
+        task: 'agent-plan-next-actions',
+        generatedAt: '',
+        summary: '',
+        data: {
+          total: 0,
+          byPriority: { high: 0, medium: 0, low: 0 },
+          items: []
+        }
+      } as AgentReportEnvelope<AgentActionPlanReport>)
   },
   browserInspectionSnapshots: {
     listLatest: () => noopPromise([] as BrowserInspectionSnapshot[])

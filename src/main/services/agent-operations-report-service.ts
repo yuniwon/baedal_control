@@ -167,6 +167,57 @@ const ACTION_KIND_ORDER: Record<AgentActionPlanItem['kind'], number> = {
   idle: 4
 }
 
+const summarizeFailureMessages = (messages: string[]) => {
+  const counts = new Map<string, number>()
+
+  for (const message of messages) {
+    counts.set(message, (counts.get(message) ?? 0) + 1)
+  }
+
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], 'ko-KR'))
+    .slice(0, 3)
+    .map(([message, count]) => `${message} ${count}건`)
+}
+
+const formatOptionShapeSummary = (group: LogicalOptionGroupRecord) => {
+  const sampleOptions = group.logicalOptions.slice(0, 3).map((option) => {
+    const priceLabel = option.optionPrice > 0 ? ` ${formatPrice(option.optionPrice)}` : ''
+    return `${option.optionName}${priceLabel}`
+  })
+  const hiddenOptionCount = Math.max(0, group.logicalOptions.length - sampleOptions.length)
+
+  if (hiddenOptionCount === 0) {
+    return sampleOptions.join(', ')
+  }
+
+  return `${sampleOptions.join(', ')} 외 ${hiddenOptionCount}개`
+}
+
+const buildOptionReviewEvidence = (groups: LogicalOptionGroupRecord[]) => {
+  const firstGroup = groups[0]
+  const linkedMenuNames = new Set<string>()
+  let sourceGroupCount = 0
+
+  for (const group of groups) {
+    sourceGroupCount += group.sourceGroupCount
+
+    for (const sourceGroup of group.sourceGroups) {
+      for (const linkedMenuName of sourceGroup.linkedMenuNames) {
+        linkedMenuNames.add(linkedMenuName)
+      }
+    }
+  }
+
+  return [
+    `플랫폼: ${PLATFORM_LABELS[firstGroup.platformCode]}`,
+    `구조 ${groups.length}개`,
+    `원본 그룹 ${sourceGroupCount}개`,
+    `연결 메뉴 ${linkedMenuNames.size}개`,
+    ...groups.slice(0, 3).map((group, index) => `구조 ${index + 1}: ${formatOptionShapeSummary(group)}`)
+  ]
+}
+
 const filterPreviewItem = (
   item: Pick<SyncPreviewItem, 'platformCode' | 'menuId' | 'platformMenuId'>,
   filters: AgentReportFilterInput
@@ -338,23 +389,29 @@ export class AgentOperationsReportService {
       })
     }
 
+    const groupedShapeConflicts = new Map<string, LogicalOptionGroupRecord[]>()
+
     for (const group of logicalOptionGroups.filter(
       (item) => item.status === 'merge_candidate' || item.status === 'shape_conflict'
     )) {
+      if (group.status === 'shape_conflict') {
+        const conflictKey = `${group.platformCode}:${group.displayName}`
+        groupedShapeConflicts.set(conflictKey, [...(groupedShapeConflicts.get(conflictKey) ?? []), group])
+        continue
+      }
+
       actions.push({
         id: `option:${group.platformCode}:${group.logicalGroupKey}`,
         kind: 'review_options',
-        priority: group.status === 'shape_conflict' ? 'medium' : 'low',
+        priority: 'low',
         platformCode: group.platformCode,
         title: `${group.displayName} 옵션 구조 검토`,
-        detail:
-          group.status === 'shape_conflict'
-            ? '같은 옵션명인데 구성이나 가격이 달라 통합 전 확인이 필요합니다.'
-            : '옵션 구조가 같아서 하나의 통합 옵션으로 정리할 후보입니다.',
+        detail: '옵션 구조가 같아서 하나의 통합 옵션으로 정리할 후보입니다.',
         evidence: [
           `플랫폼: ${PLATFORM_LABELS[group.platformCode]}`,
           `원본 그룹 ${group.sourceGroupCount}개`,
-          `연결 메뉴 ${group.connectedMenuCount}개`
+          `연결 메뉴 ${group.connectedMenuCount}개`,
+          `예시 구성: ${formatOptionShapeSummary(group)}`
         ],
         commands: [
           {
@@ -369,25 +426,73 @@ export class AgentOperationsReportService {
       })
     }
 
-    for (const failure of recentFailures) {
+    for (const conflictGroups of groupedShapeConflicts.values()) {
+      const primaryGroup = conflictGroups[0]
+
       actions.push({
-        id: `failure:${failure.syncRunItemId}`,
+        id: `option:${primaryGroup.platformCode}:${primaryGroup.displayName}`,
+        kind: 'review_options',
+        priority: 'medium',
+        platformCode: primaryGroup.platformCode,
+        title: `${primaryGroup.displayName} 옵션 구조 검토`,
+        detail: `같은 옵션명 아래에 구조 ${conflictGroups.length}개가 있어 통합 전 확인이 필요합니다.`,
+        evidence: buildOptionReviewEvidence(conflictGroups),
+        commands: [
+          {
+            task: 'agent-report-options',
+            args: buildTaskArgs('agent-report-options', {
+              platformCode: primaryGroup.platformCode,
+              limit: 10
+            }),
+            label: '옵션 리포트 열기'
+          }
+        ]
+      })
+    }
+
+    const failuresByPlatform = new Map<
+      PlatformCode,
+      {
+        failures: AgentOverviewFailureRecord[]
+      }
+    >()
+
+    for (const failure of recentFailures) {
+      const group = failuresByPlatform.get(failure.platformCode) ?? { failures: [] }
+      group.failures.push(failure)
+      failuresByPlatform.set(failure.platformCode, group)
+    }
+
+    for (const [platformCode, group] of failuresByPlatform.entries()) {
+      const latestFailure = group.failures[0]
+      const sampleMenuNames = [
+        ...new Set(
+          group.failures
+            .map((failure) => menuIndex.get(failure.menuId)?.baseName)
+            .filter((value): value is string => Boolean(value))
+        )
+      ]
+
+      actions.push({
+        id: `failure:${platformCode}`,
         kind: 'inspect_failures',
-        priority: failure.retryable ? 'medium' : 'low',
-        platformCode: failure.platformCode,
-        menuId: failure.menuId,
-        title: `${PLATFORM_LABELS[failure.platformCode]} 실패 원인 확인`,
-        detail: failure.message,
+        priority: 'medium',
+        platformCode,
+        menuId: latestFailure?.menuId ?? null,
+        title: `${PLATFORM_LABELS[platformCode]} 최근 실패 점검`,
+        detail: `최근 실패 ${group.failures.length}건이 누적되어 원인 정리가 필요합니다.`,
         evidence: [
-          `동기화 실행 ID: ${failure.syncRunId}`,
-          failure.errorCode ? `오류 코드: ${failure.errorCode}` : '오류 코드 없음',
-          failure.action ? `권장 조치: ${failure.action}` : '권장 조치 없음'
+          ...summarizeFailureMessages(group.failures.map((failure) => failure.message)),
+          sampleMenuNames.length > 0
+            ? `관련 메뉴: ${sampleMenuNames.slice(0, 3).join(', ')}`
+            : '관련 메뉴 이름을 찾지 못했습니다.',
+          latestFailure?.action ? `권장 조치: ${latestFailure.action}` : '권장 조치 없음'
         ],
         commands: [
           {
             task: 'agent-report-platform',
             args: buildTaskArgs('agent-report-platform', {
-              platformCode: failure.platformCode,
+              platformCode,
               limit: 5
             }),
             label: '플랫폼 리포트 열기'

@@ -26,6 +26,10 @@ export const appApi = {
   platformImportChanges: {
     listLatest: (limit?: number) => ipcRenderer.invoke('platformImportChanges:listLatest', limit)
   },
+  agentReports: {
+    getNextActionPlan: (filters?: unknown) =>
+      ipcRenderer.invoke('agentReports:getNextActionPlan', filters)
+  },
   browserInspectionSnapshots: {
     listLatest: (limit?: number) => ipcRenderer.invoke('browserInspectionSnapshots:listLatest', limit)
   },

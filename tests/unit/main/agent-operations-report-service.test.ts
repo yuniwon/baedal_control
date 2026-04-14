@@ -477,6 +477,142 @@ describe('AgentOperationsReportService', () => {
     })
   })
 
+  it('groups repeated failures into one platform-level inspection action', async () => {
+    const service = createService({
+      syncRuns: [
+        {
+          syncRunId: 'sync-failure-1',
+          startedAt: '2026-04-14T11:00:00.000Z',
+          finishedAt: '2026-04-14T11:01:00.000Z',
+          triggerType: 'manual',
+          resultSummary: '성공 0건, 실패 2건'
+        },
+        {
+          syncRunId: 'sync-failure-2',
+          startedAt: '2026-04-14T10:00:00.000Z',
+          finishedAt: '2026-04-14T10:01:00.000Z',
+          triggerType: 'manual',
+          resultSummary: '성공 0건, 실패 1건'
+        }
+      ],
+      syncRunItems: [
+        {
+          syncRunItemId: 'sync-item-f1',
+          syncRunId: 'sync-failure-1',
+          platformCode: 'baemin',
+          menuId: 'menu-1',
+          fieldType: 'menu',
+          beforeValue: '왕새우갈비',
+          afterValue: '{"name":"왕새우갈비","price":23900}',
+          status: 'failed',
+          errorCode: 'apply_failed',
+          errorMessage: '검색 결과에서 메뉴를 다시 찾지 못했습니다.',
+          failureContext: null
+        },
+        {
+          syncRunItemId: 'sync-item-f2',
+          syncRunId: 'sync-failure-1',
+          platformCode: 'baemin',
+          menuId: 'menu-2',
+          fieldType: 'menu',
+          beforeValue: '쉬림프골드',
+          afterValue: '{"name":"쉬림프골드","price":21000}',
+          status: 'failed',
+          errorCode: 'apply_failed',
+          errorMessage: '검색 결과에서 메뉴를 다시 찾지 못했습니다.',
+          failureContext: null
+        },
+        {
+          syncRunItemId: 'sync-item-f3',
+          syncRunId: 'sync-failure-2',
+          platformCode: 'baemin',
+          menuId: 'menu-1',
+          fieldType: 'menu',
+          beforeValue: '왕새우갈비',
+          afterValue: '{"name":"왕새우갈비","price":23900}',
+          status: 'failed',
+          errorCode: 'apply_failed',
+          errorMessage: '입력창을 찾지 못했습니다.',
+          failureContext: null
+        }
+      ]
+    })
+
+    const report = await service.getNextActionPlan({ platformCode: 'baemin', limit: 10 })
+
+    const failureActions = report.data.items.filter((item) => item.kind === 'inspect_failures')
+
+    expect(failureActions).toHaveLength(1)
+    expect(failureActions[0]).toMatchObject({
+      priority: 'medium',
+      platformCode: 'baemin',
+      title: '배민 최근 실패 점검'
+    })
+    expect(failureActions[0].detail).toContain('최근 실패 3건')
+    expect(failureActions[0].evidence).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('검색 결과에서 메뉴를 다시 찾지 못했습니다. 2건'),
+        expect.stringContaining('입력창을 찾지 못했습니다. 1건')
+      ])
+    )
+  })
+
+  it('groups repeated option structure reviews by platform and display name', async () => {
+    const service = createService({
+      preview: { items: [], needsReview: [] },
+      syncRuns: [],
+      syncRunItems: [],
+      optionGroups: [
+        {
+          platformCode: 'baemin',
+          optionGroupId: 'shape-1',
+          optionGroupName: '도우 추가선택',
+          minOrderQuantity: 0,
+          maxOrderQuantity: 1,
+          options: [
+            { optionId: 'shape-1-opt-1', optionName: '씬도우', optionPrice: 1000 },
+            { optionId: 'shape-1-opt-2', optionName: '치즈크러스트', optionPrice: 3000 }
+          ],
+          menus: [{ platformMenuId: 'shape-menu-1', platformMenuName: '왕새우갈비' }],
+          presenceStatus: 'present',
+          lastSeenAt: '2026-04-14T08:07:00.000Z'
+        },
+        {
+          platformCode: 'baemin',
+          optionGroupId: 'shape-2',
+          optionGroupName: '도우 추가선택',
+          minOrderQuantity: 0,
+          maxOrderQuantity: 1,
+          options: [
+            { optionId: 'shape-2-opt-1', optionName: '씬도우', optionPrice: 1000 },
+            { optionId: 'shape-2-opt-2', optionName: '리치골드', optionPrice: 5000 }
+          ],
+          menus: [{ platformMenuId: 'shape-menu-2', platformMenuName: '쉬림프골드' }],
+          presenceStatus: 'present',
+          lastSeenAt: '2026-04-14T08:08:00.000Z'
+        }
+      ]
+    })
+
+    const report = await service.getNextActionPlan({ platformCode: 'baemin', limit: 10 })
+
+    const optionActions = report.data.items.filter((item) => item.kind === 'review_options')
+
+    expect(optionActions).toHaveLength(1)
+    expect(optionActions[0]).toMatchObject({
+      priority: 'medium',
+      platformCode: 'baemin',
+      title: '도우 추가선택 옵션 구조 검토'
+    })
+    expect(optionActions[0].detail).toContain('구조 2개')
+    expect(optionActions[0].evidence).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('원본 그룹 2개'),
+        expect.stringContaining('연결 메뉴 2개')
+      ])
+    )
+  })
+
   it('filters review queue items by platform, reason, menuId, and limit', async () => {
     const service = createService()
 

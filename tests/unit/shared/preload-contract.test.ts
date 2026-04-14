@@ -27,6 +27,7 @@ describe('preload contract', () => {
       'platformMenus',
       'platformImportRuns',
       'platformImportChanges',
+      'agentReports',
       'browserInspectionSnapshots',
       'browserInspector',
       'settings',

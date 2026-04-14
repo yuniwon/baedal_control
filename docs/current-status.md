@@ -668,6 +668,8 @@
 
 앱 내부 DB와 기존 preview 엔진을 그대로 사용하면서, 에이전트가 DB를 직접 뒤지지 않고 현재 상태를 읽을 수 있는 읽기 전용 CLI 리포트가 추가됐다.
 
+같은 제안 DTO를 IPC와 preload를 통해 렌더러에도 연결해서, 대시보드 안에서도 `지금 할 일` 패널로 바로 볼 수 있다.
+
 - `electron out/main/index.js --task=agent-report-overview`
 - `electron out/main/index.js --task=agent-report-review-queue --limit=5`
 - `electron out/main/index.js --task=agent-report-menu --menuId=<menuId> --limit=5`
@@ -689,7 +691,9 @@
 - 지금 바로 실행 가능한 동기화 후보
 - 사람이 먼저 확인해야 하는 검토 큐 후보
 - 옵션 구조 통합 후보와 shape conflict 후보
+- 같은 옵션명으로 여러 구조가 잡힌 경우 displayName 기준으로 묶은 옵션 구조 검토 후보
 - 최근 실패 기준으로 다시 살펴볼 플랫폼 단위 점검 후보
+- 대시보드 `지금 할 일` 패널에서 CLI와 같은 우선순위 제안 목록
 
 ### 에이전트 운영 리포트 검증 메모
 
@@ -710,8 +714,9 @@
 - `agent-plan-next-actions --limit=5`: 통과
   - 실제 운영 DB 기준 `즉시 실행 1건 + 검토/실패 점검 4건` 우선순위 정렬 확인
   - 첫 후보는 배민 `칠성사이다(59707776)` 실행 항목으로 출력
+  - 실패 점검은 플랫폼별 1건으로 묶이고, 옵션 구조 검토도 같은 옵션명 기준으로 묶여 중복 제목이 줄어든 것 확인
 - `agent-plan-next-actions --platformCode=baemin --limit=5`: 통과
-  - 배민 범위로 좁히면 즉시 실행 1건 뒤에 최근 실패 점검 후보가 이어지는 것 확인
+  - 배민 범위로 좁히면 `즉시 실행 1건 + 검토 3건`으로 정리되고, `도우 추가선택`, `피자 선택` 같은 옵션 검토가 옵션명 단위로 묶여 출력되는 것 확인
 
 ## 8. 문서 유지 원칙
 

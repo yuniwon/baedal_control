@@ -1,6 +1,9 @@
 import { ipcMain } from 'electron'
 import type { CredentialVault } from '../services/credential-vault'
 import type {
+  AgentActionPlanReport,
+  AgentReportFilterInput,
+  AgentReportEnvelope,
   BrowserInspectionSnapshot,
   BrowserInspectorStatus,
   PlatformImportResult,
@@ -43,6 +46,11 @@ interface HandlerDependencies {
     save?: (snapshot: BrowserInspectionSnapshot) => void
   }
   browserInspectorBridge?: { getStatus: () => BrowserInspectorStatus }
+  agentOperationsReportService?: {
+    getNextActionPlan: (
+      filters: AgentReportFilterInput
+    ) => Promise<AgentReportEnvelope<AgentActionPlanReport>>
+  }
   managedChromeLauncher?: {
     getStatus: () => BrowserInspectorStatus
     launch: (url?: string) => Promise<BrowserInspectorStatus> | BrowserInspectorStatus
@@ -100,6 +108,7 @@ export const registerHandlers = ({
   platformImportChangeRepository,
   browserInspectionSnapshotRepository,
   browserInspectorBridge,
+  agentOperationsReportService,
   managedChromeLauncher,
   managedChromeLoginAutomator,
   managedChromeSessionProbe,
@@ -198,6 +207,28 @@ export const registerHandlers = ({
   )
   register('platformImportChanges:listLatest', async (_event, limit?: number) =>
     platformImportChangeRepository?.listLatest(normalizeListLimit(limit)) ?? []
+  )
+  register('agentReports:getNextActionPlan', async (_event, filters?: Record<string, unknown>) =>
+    agentOperationsReportService?.getNextActionPlan(filters ?? {}) ?? {
+      task: 'agent-plan-next-actions',
+      generatedAt: new Date().toISOString(),
+      summary: '제안 서비스를 사용할 수 없습니다.',
+      data: {
+        total: 1,
+        byPriority: { high: 0, medium: 0, low: 1 },
+        items: [
+          {
+            id: 'idle:service-unavailable',
+            kind: 'idle',
+            priority: 'low',
+            title: '제안 서비스를 사용할 수 없습니다.',
+            detail: '메인 프로세스에서 실행 제안 서비스를 아직 연결하지 않았습니다.',
+            evidence: [],
+            commands: []
+          }
+        ]
+      }
+    }
   )
   register('browserInspectionSnapshots:listLatest', async (_event, limit?: number) =>
     browserInspectionSnapshotRepository?.listLatest(normalizeListLimit(limit)) ?? []

@@ -7,6 +7,7 @@ const {
   listSyncRuns,
   listImportRuns,
   listImportChanges,
+  getNextActionPlan,
   previewSync,
   runSync,
   runSelectedSync
@@ -78,6 +79,76 @@ const {
       errorMessage: null
     }
   ]),
+  getNextActionPlan: vi.fn().mockResolvedValue({
+    task: 'agent-plan-next-actions',
+    generatedAt: '2026-04-14T09:40:00.000Z',
+    summary: '다음 작업 3건',
+    data: {
+      total: 3,
+      byPriority: {
+        high: 1,
+        medium: 2,
+        low: 0
+      },
+      items: [
+        {
+          id: 'run:baemin:menu-1:59707517',
+          kind: 'run_executable',
+          priority: 'high',
+          platformCode: 'baemin',
+          menuId: 'menu-1',
+          platformMenuId: '59707517',
+          title: '배민 메뉴 동기화 실행',
+          detail: '콰트로피자 15인치 변경사항을 지금 바로 반영할 수 있습니다.',
+          evidence: ['기준 메뉴: 콰트로피자 15인치'],
+          commands: [
+            {
+              task: 'sync-run-item',
+              args: ['--task=sync-run-item', '--platformCode=baemin', '--menuId=menu-1'],
+              label: '이 메뉴만 즉시 반영'
+            }
+          ]
+        },
+        {
+          id: 'review:coupang:menu-2',
+          kind: 'resolve_review',
+          priority: 'medium',
+          platformCode: 'coupangeats',
+          menuId: 'menu-2',
+          platformMenuId: 'ce-1',
+          title: '연결 상태 재확인 필요',
+          detail: '가게 연결 없음',
+          evidence: ['플랫폼 메뉴: 메뉴 검토용 피자'],
+          commands: [
+            {
+              task: 'agent-report-menu',
+              args: ['--task=agent-report-menu', '--platformCode=coupangeats', '--menuId=menu-2'],
+              label: '메뉴 상세 리포트 열기'
+            }
+          ]
+        },
+        {
+          id: 'failure:baemin',
+          kind: 'inspect_failures',
+          priority: 'medium',
+          platformCode: 'baemin',
+          title: '배민 최근 실패 점검',
+          detail: '최근 실패 3건이 누적되어 원인 정리가 필요합니다.',
+          evidence: [
+            '검색 결과에서 메뉴를 다시 찾지 못했습니다. 2건',
+            '입력창을 찾지 못했습니다. 1건'
+          ],
+          commands: [
+            {
+              task: 'agent-report-platform',
+              args: ['--task=agent-report-platform', '--platformCode=baemin'],
+              label: '플랫폼 리포트 열기'
+            }
+          ]
+        }
+      ]
+    }
+  }),
   previewSync: vi.fn().mockResolvedValue({
     items: [
       {
@@ -199,6 +270,9 @@ vi.mock('../../../src/renderer/src/lib/api', () => ({
     platformImportChanges: {
       listLatest: listImportChanges
     },
+    agentReports: {
+      getNextActionPlan
+    },
     sync: {
       preview: previewSync,
       run: runSync,
@@ -236,6 +310,13 @@ describe('DashboardPage', () => {
     expect(screen.getByText('배민 · 메뉴 46개 확인 · 기존 연결 46개 유지')).toBeTruthy()
     expect(screen.getByText('쿠팡이츠 · 계정 정보를 다시 확인해 주세요.')).toBeTruthy()
     expect(screen.getByText('땡겨요 · 가져오기를 진행하고 있습니다.')).toBeTruthy()
+    expect(screen.getByText('다음 작업')).toBeTruthy()
+    expect(screen.getByText('지금 할 일')).toBeTruthy()
+    expect(screen.getByText('배민 메뉴 동기화 실행')).toBeTruthy()
+    expect(screen.getByText('연결 상태 재확인 필요')).toBeTruthy()
+    expect(screen.getByText('배민 최근 실패 점검')).toBeTruthy()
+    expect(screen.getByText('검색 결과에서 메뉴를 다시 찾지 못했습니다. 2건')).toBeTruthy()
+    expect(screen.getByText('이 메뉴만 즉시 반영')).toBeTruthy()
   })
 
   it('opens a preview first and only runs sync after confirmation', async () => {

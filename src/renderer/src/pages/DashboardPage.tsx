@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import type {
+  AgentActionPlanItem,
+  AgentActionPlanReport,
+  AgentReportEnvelope,
   MenuRecord,
   PlatformImportChangeRecord,
   PlatformImportRunRecord,
@@ -32,6 +35,18 @@ type SyncRunSummary = {
 type ImportChangeSummary = {
   label: string
   count: number
+}
+
+const getActionPriorityLabel = (priority: AgentActionPlanItem['priority']) => {
+  if (priority === 'high') {
+    return '즉시'
+  }
+
+  if (priority === 'medium') {
+    return '검토'
+  }
+
+  return '참고'
 }
 
 const defaultPlatformStatuses: PlatformStatus[] = [
@@ -93,6 +108,9 @@ const summarizeImportChanges = (changes: PlatformImportChangeRecord[]) => {
 
 export const DashboardPage = () => {
   const [previewSummary, setPreviewSummary] = useState<SyncPreviewResult | null>(null)
+  const [nextActionPlan, setNextActionPlan] = useState<AgentReportEnvelope<AgentActionPlanReport> | null>(
+    null
+  )
   const [previewDialog, setPreviewDialog] = useState<SyncPreviewResult | null>(null)
   const [summary, setSummary] = useState('아직 반영한 기록이 없습니다.')
   const [platformStatuses, setPlatformStatuses] = useState<PlatformStatus[]>(defaultPlatformStatuses)
@@ -157,6 +175,10 @@ export const DashboardPage = () => {
       setPreviewSummary(value as SyncPreviewResult)
     })
 
+    void appApi.agentReports.getNextActionPlan({ limit: 5 }).then((value) => {
+      setNextActionPlan(value as AgentReportEnvelope<AgentActionPlanReport>)
+    })
+
     void Promise.all([appApi.platformImportRuns.list(), appApi.platformImportChanges.listLatest(200)]).then(
       ([runValue, changeValue]) => {
         const runs = Array.isArray(runValue) ? (runValue as PlatformImportRunRecord[]) : []
@@ -212,6 +234,10 @@ export const DashboardPage = () => {
           <strong>{`${connectedPlatformCount} / ${platformStatuses.length}`}</strong>
           <span>연결된 플랫폼</span>
         </article>
+        <article className="summary-card">
+          <strong>{nextActionPlan?.data.byPriority.high ?? 0}</strong>
+          <span>다음 작업</span>
+        </article>
       </div>
 
       <section className="panel">
@@ -231,6 +257,42 @@ export const DashboardPage = () => {
           <span>변경 예정 내용은 실행 전에 다시 확인합니다.</span>
         </div>
       </section>
+
+      {nextActionPlan ? (
+        <section className="panel">
+          <div className="page-header">
+            <h2>지금 할 일</h2>
+            <p>{nextActionPlan.summary}</p>
+          </div>
+          <div className="action-plan-list">
+            {nextActionPlan.data.items.map((item) => (
+              <article key={item.id} className="action-plan-row">
+                <div className="action-plan-head">
+                  <div className="action-plan-copy">
+                    <strong>{item.title}</strong>
+                    <p>{item.detail}</p>
+                  </div>
+                  <span className={`action-priority-pill ${item.priority}`}>
+                    {getActionPriorityLabel(item.priority)}
+                  </span>
+                </div>
+                {item.evidence.length ? (
+                  <ul className="action-plan-evidence-list">
+                    {item.evidence.map((evidence) => (
+                      <li key={`${item.id}:${evidence}`}>{evidence}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                {item.commands[0] ? (
+                  <div className="action-plan-command">
+                    <strong>{item.commands[0].label}</strong>
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {previewDialog ? (
         <SyncPreviewDialog

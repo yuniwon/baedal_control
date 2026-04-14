@@ -6,6 +6,7 @@ export const appApiKeys = [
   'platformMenus',
   'platformImportRuns',
   'platformImportChanges',
+  'agentReports',
   'browserInspectionSnapshots',
   'browserInspector',
   'settings',

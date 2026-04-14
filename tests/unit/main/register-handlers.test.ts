@@ -929,4 +929,65 @@ describe('registerHandlers', () => {
       password: 'saved-password'
     })
   })
+
+  it('exposes the next action planning report through IPC', async () => {
+    const getNextActionPlan = vi.fn().mockResolvedValue({
+      task: 'agent-plan-next-actions',
+      generatedAt: '2026-04-14T09:40:00.000Z',
+      summary: '다음 작업 2건',
+      data: {
+        total: 2,
+        byPriority: { high: 1, medium: 1, low: 0 },
+        items: []
+      }
+    })
+
+    registerHandlers({
+      menuRepository: {
+        list: vi.fn().mockReturnValue([]),
+        upsert: vi.fn()
+      },
+      mappingRepository: {
+        listAll: vi.fn().mockReturnValue([]),
+        upsert: vi.fn()
+      },
+      platformMenuRepository: {
+        listAll: vi.fn().mockReturnValue([])
+      },
+      syncRunRepository: {
+        list: vi.fn().mockReturnValue([])
+      },
+      syncRunItemRepository: {
+        listForRunIds: vi.fn().mockReturnValue([])
+      },
+      credentialVault: {
+        get: vi.fn(),
+        set: vi.fn()
+      } as never,
+      agentOperationsReportService: {
+        getNextActionPlan
+      } as never
+    })
+
+    const handler = electronMock.registeredHandlers.get('agentReports:getNextActionPlan')
+
+    await expect(
+      handler?.({}, { platformCode: 'baemin', reason: 'source_missing_review', limit: 5 })
+    ).resolves.toEqual({
+      task: 'agent-plan-next-actions',
+      generatedAt: '2026-04-14T09:40:00.000Z',
+      summary: '다음 작업 2건',
+      data: {
+        total: 2,
+        byPriority: { high: 1, medium: 1, low: 0 },
+        items: []
+      }
+    })
+
+    expect(getNextActionPlan).toHaveBeenCalledWith({
+      platformCode: 'baemin',
+      reason: 'source_missing_review',
+      limit: 5
+    })
+  })
 })

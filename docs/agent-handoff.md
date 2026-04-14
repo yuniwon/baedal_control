@@ -25,11 +25,17 @@
 ## 2. 이번 커밋 직전 검증 결과
 
 - `npm test`
-  - 62개 파일, 269개 테스트 통과
+  - 62개 파일, 272개 테스트 통과
 - `npm run lint:types`
   - 통과
 - `npm run build`
   - 통과
+- `npx electron out/main/index.js --task=agent-plan-next-actions --limit=5`
+  - 통과
+  - 실패 점검은 플랫폼별 1건으로 묶이고, 옵션 구조 검토는 같은 옵션명 기준으로 묶여 반복 제목이 줄어든 것 확인
+- `npx electron out/main/index.js --task=agent-plan-next-actions --platformCode=baemin --limit=5`
+  - 통과
+  - 배민 범위에서는 `즉시 실행 1건 + 검토 3건`으로 정리되고 `도우 추가선택`, `피자 선택` 옵션 검토가 각각 1건씩 출력됨
 - `npx electron out/main/index.js --task=inspect-create-menu-flow --platformCode=baemin`
   - 통과
   - 저장된 배민 계정으로 로그인 후 `메뉴 추가` 읽기 전용 점검이 `1/4 -> 2/4 -> 3/4 -> 4/4`까지 완료됨
@@ -70,9 +76,12 @@
   - 읽기 전용 실행 제안 레이어 추가
     - `agent-plan-next-actions`
     - 리포트 레이어 위에서 `즉시 실행 가능한 동기화`, `사람 검토 필요`, `옵션 구조 검토`, `최근 실패 점검`을 우선순위와 추천 명령까지 함께 출력
+    - 같은 제안 DTO를 앱 IPC/preload에도 연결해서 대시보드 `지금 할 일` 패널에서 동일한 우선순위 목록을 그대로 재사용
+    - 최근 실패는 플랫폼별 1건으로 묶고, 옵션 구조 검토는 같은 옵션명 기준으로 묶어 반복 제목을 줄임
     - 실제 운영 DB 기준 스모크 검증 완료
       - 전체 범위: `즉시 실행 1건 + 검토/실패 점검 4건`
-      - 배민 범위: `칠성사이다(59707776)` 즉시 실행 1건 뒤에 배민 실패 점검 후보가 이어짐
+      - 배민 범위: `즉시 실행 1건 + 검토 3건`
+      - 배민 옵션 검토는 `도우 추가선택`, `피자 선택`처럼 옵션명 단위로 묶여 출력
   - `platform_menus`에 한 번도 저장되지 않은 legacy active 매핑도 import 결측 추적 대상에 포함되도록 보강
   - 첫 import에서 `missing_suspected`, 두 번째 import에서 `absent_confirmed + source_absent`로 승격되도록 테스트 추가
   - 배민 쓰기 실패 시 어댑터가 현재 페이지 스냅샷(`platform_page_snapshot`)을 에러에 부착하고, sync 엔진이 이를 실행 기록의 `failure_context_json`으로 저장하도록 보강
@@ -158,7 +167,9 @@ npx electron out/main/index.js --task=agent-plan-next-actions --limit=5
   - `agent-report-options --platformCode=baemin`: 배민 옵션 묶음 15개
   - `agent-report-platform --platformCode=baemin`: 배민 메뉴 47개, 최신 변경점과 최근 실패 정상 출력
   - `agent-plan-next-actions --limit=5`: 전체 범위 우선순위 제안 5건 정상 출력
-  - `agent-plan-next-actions --platformCode=baemin --limit=5`: 배민 범위 우선순위 제안 5건 정상 출력
+    - 실패 점검은 플랫폼별 1건으로 묶이고 옵션 검토도 옵션명 기준으로 정리됨
+  - `agent-plan-next-actions --platformCode=baemin --limit=5`: 배민 범위 우선순위 제안 4건 정상 출력
+    - `도우 추가선택`, `피자 선택` 옵션 검토가 각각 1건씩만 노출됨
 
 ## 4. 플랫폼별 현재 구현 범위
 
