@@ -968,7 +968,7 @@
 
 .preview-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) minmax(180px, 240px);
   gap: 14px;
   align-items: start;
   border: 1px solid #eaecf0;
@@ -985,8 +985,15 @@
 .preview-copy,
 .preview-price {
   display: grid;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
+}
+
+.preview-main,
+.preview-price {
+  display: grid;
+  gap: 4px;
+  cursor: pointer;
 }
 
 .preview-copy strong,
@@ -996,10 +1003,22 @@
   overflow-wrap: anywhere;
 }
 
+.preview-copy strong,
+.preview-price strong {
+  color: #101828;
+  font-size: 14px;
+}
+
 .preview-copy span,
 .preview-price span {
   color: #475467;
   font-size: 13px;
+}
+
+.preview-detail-toggle {
+  width: fit-content;
+  padding: 7px 10px;
+  font-size: 12px;
 }
 
 .preview-price {

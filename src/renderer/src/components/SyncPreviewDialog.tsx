@@ -4,6 +4,9 @@ import { serializePlatformMenuPriceVariants } from '../../../shared/platform-men
 import { summarizeSyncPreviewItemChange } from '../../../shared/sync-preview-item-change'
 import { getPlatformLabel } from '../lib/menu-source-labels'
 
+const DETAIL_LINE_COLLAPSE_LIMIT = 72
+const TARGET_SUMMARY_COLLAPSE_LIMIT = 36
+
 const getPreviewItemKey = (item: SyncPreviewItem) =>
   JSON.stringify({
     platformCode: item.platformCode,
@@ -18,6 +21,12 @@ const getPreviewItemKey = (item: SyncPreviewItem) =>
     executionMode: item.executionMode ?? null
   })
 
+const buildPreviewInputId = (item: SyncPreviewItem, index: number) =>
+  `sync-preview-${index}-${item.platformCode}-${String(item.platformMenuId).replace(/[^a-zA-Z0-9_-]+/g, '-')}`
+
+const truncateText = (value: string, maxLength: number) =>
+  value.length <= maxLength ? value : `${value.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`
+
 export const SyncPreviewDialog = ({
   items,
   onConfirm
@@ -25,20 +34,54 @@ export const SyncPreviewDialog = ({
   items: SyncPreviewItem[]
   onConfirm: (items: SyncPreviewItem[]) => void
 }) => {
-  const [selectedKeys, setSelectedKeys] = useState(() => new Set(items.map(getPreviewItemKey)))
+  const previewEntries = useMemo(
+    () =>
+      items.map((item, index) => ({
+        item,
+        key: getPreviewItemKey(item),
+        inputId: buildPreviewInputId(item, index)
+      })),
+    [items]
+  )
+  const [selectedKeys, setSelectedKeys] = useState(() => new Set(previewEntries.map(({ key }) => key)))
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set())
 
   useEffect(() => {
-    setSelectedKeys(new Set(items.map(getPreviewItemKey)))
-  }, [items])
+    setSelectedKeys(new Set(previewEntries.map(({ key }) => key)))
+    setExpandedKeys((current) => {
+      const next = new Set<string>()
+      const validKeys = new Set(previewEntries.map(({ key }) => key))
+      for (const key of current) {
+        if (validKeys.has(key)) {
+          next.add(key)
+        }
+      }
+      return next
+    })
+  }, [previewEntries])
 
   const selectedItems = useMemo(
-    () => items.filter((item) => selectedKeys.has(getPreviewItemKey(item))),
-    [items, selectedKeys]
+    () =>
+      previewEntries
+        .filter(({ key }) => selectedKeys.has(key))
+        .map(({ item }) => item),
+    [previewEntries, selectedKeys]
   )
 
-  const toggleItem = (item: SyncPreviewItem) => {
-    const key = getPreviewItemKey(item)
+  const toggleItem = (key: string) => {
     setSelectedKeys((current) => {
+      const next = new Set(current)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      return next
+    })
+  }
+
+  const toggleExpanded = (key: string) => {
+    setExpandedKeys((current) => {
       const next = new Set(current)
       if (next.has(key)) {
         next.delete(key)
@@ -60,7 +103,7 @@ export const SyncPreviewDialog = ({
         <div className="inline-actions">
           <button
             className="secondary-button"
-            onClick={() => setSelectedKeys(new Set(items.map(getPreviewItemKey)))}
+            onClick={() => setSelectedKeys(new Set(previewEntries.map(({ key }) => key)))}
             type="button"
           >
             전체 선택
@@ -75,31 +118,57 @@ export const SyncPreviewDialog = ({
         </div>
       </div>
       <div className="preview-list">
-        {items.map((item) => {
-          const checked = selectedKeys.has(getPreviewItemKey(item))
+        {previewEntries.map(({ item, key, inputId }) => {
+          const checked = selectedKeys.has(key)
+          const expanded = expandedKeys.has(key)
           const changeSummary = summarizeSyncPreviewItemChange(item)
+          const isCollapsible =
+            changeSummary.detailLines.length > 1 ||
+            changeSummary.detailLines.some((line) => line.length > DETAIL_LINE_COLLAPSE_LIMIT) ||
+            (changeSummary.targetSummary?.length ?? 0) > TARGET_SUMMARY_COLLAPSE_LIMIT
+          const visibleDetailLines = expanded
+            ? changeSummary.detailLines
+            : changeSummary.detailLines
+                .slice(0, 1)
+                .map((line) => truncateText(line, DETAIL_LINE_COLLAPSE_LIMIT))
+          const targetSummary = expanded
+            ? changeSummary.targetSummary ?? '-'
+            : truncateText(changeSummary.targetSummary ?? '-', TARGET_SUMMARY_COLLAPSE_LIMIT)
 
           return (
-            <label key={`${item.platformCode}:${item.platformMenuId}`} className="preview-row">
+            <article key={`${item.platformCode}:${item.platformMenuId}`} className="preview-row">
               <input
+                id={inputId}
                 aria-label={`${item.nextName} 선택`}
                 checked={checked}
-                onChange={() => toggleItem(item)}
+                onChange={() => toggleItem(key)}
                 type="checkbox"
               />
               <div className="preview-copy">
-                <strong>{item.nextName}</strong>
-                <span>{`${getPlatformLabel(item.platformCode)} · ${changeSummary.headline}`}</span>
-                {changeSummary.detailLines.map((line) => (
-                  <span key={`${item.platformCode}:${item.platformMenuId}:${line}`}>{line}</span>
-                ))}
-                {item.executionMode === 'managed_browser' ? <span>현재 탭 반영</span> : null}
+                <label className="preview-main" htmlFor={inputId}>
+                  <strong>{item.nextName}</strong>
+                  <span>{`${getPlatformLabel(item.platformCode)} · ${changeSummary.headline}`}</span>
+                  {visibleDetailLines.map((line) => (
+                    <span key={`${item.platformCode}:${item.platformMenuId}:${line}`}>{line}</span>
+                  ))}
+                  {item.executionMode === 'managed_browser' ? <span>현재 탭 반영</span> : null}
+                </label>
+                {isCollapsible ? (
+                  <button
+                    aria-expanded={expanded}
+                    className="secondary-button preview-detail-toggle"
+                    onClick={() => toggleExpanded(key)}
+                    type="button"
+                  >
+                    {expanded ? '접기' : '상세 보기'}
+                  </button>
+                ) : null}
               </div>
-              <div className="preview-price">
-                <strong>{changeSummary.targetSummary ?? '-'}</strong>
+              <label className="preview-price" htmlFor={inputId}>
+                <strong>{targetSummary}</strong>
                 <span>{changeSummary.headline}</span>
-              </div>
-            </label>
+              </label>
+            </article>
           )
         })}
       </div>
