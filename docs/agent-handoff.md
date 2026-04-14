@@ -25,7 +25,7 @@
 ## 2. 이번 커밋 직전 검증 결과
 
 - `npm test`
-  - 62개 파일, 266개 테스트 통과
+  - 62개 파일, 269개 테스트 통과
 - `npm run lint:types`
   - 통과
 - `npm run build`
@@ -67,6 +67,12 @@
     - menu: `칠성사이다` 상세 리포트
     - options: 배민 옵션 묶음 15개
     - platform: 배민 메뉴 47개
+  - 읽기 전용 실행 제안 레이어 추가
+    - `agent-plan-next-actions`
+    - 리포트 레이어 위에서 `즉시 실행 가능한 동기화`, `사람 검토 필요`, `옵션 구조 검토`, `최근 실패 점검`을 우선순위와 추천 명령까지 함께 출력
+    - 실제 운영 DB 기준 스모크 검증 완료
+      - 전체 범위: `즉시 실행 1건 + 검토/실패 점검 4건`
+      - 배민 범위: `칠성사이다(59707776)` 즉시 실행 1건 뒤에 배민 실패 점검 후보가 이어짐
   - `platform_menus`에 한 번도 저장되지 않은 legacy active 매핑도 import 결측 추적 대상에 포함되도록 보강
   - 첫 import에서 `missing_suspected`, 두 번째 import에서 `absent_confirmed + source_absent`로 승격되도록 테스트 추가
   - 배민 쓰기 실패 시 어댑터가 현재 페이지 스냅샷(`platform_page_snapshot`)을 에러에 부착하고, sync 엔진이 이를 실행 기록의 `failure_context_json`으로 저장하도록 보강
@@ -138,16 +144,21 @@ npx electron out/main/index.js --task=agent-report-review-queue --limit=5
 npx electron out/main/index.js --task=agent-report-menu --menuId=<menuId> --limit=5
 npx electron out/main/index.js --task=agent-report-options --platformCode=baemin --limit=5
 npx electron out/main/index.js --task=agent-report-platform --platformCode=baemin --limit=5
+npx electron out/main/index.js --task=agent-plan-next-actions --limit=5
 ```
 
 - 이 리포트들은 읽기 전용이다.
 - 목적은 에이전트가 DB 직접 조회 없이 현재 상태를 공식 인터페이스로 읽는 것이다.
+- `agent-plan-next-actions`는 읽기 전용 제안 레이어다.
+  - `sync-run-item` 같은 실제 실행 명령을 바로 추천하지만, 제안 자체는 저장/수정을 하지 않는다.
 - 최근 실검증 기준
   - `agent-report-overview`: 관리 대상 49개 / 실행 가능 1건 / 검토 필요 1건
   - `agent-report-review-queue`: 현재 검토 큐 1건
   - `agent-report-menu`: `칠성사이다` 상세 리포트 정상 출력
   - `agent-report-options --platformCode=baemin`: 배민 옵션 묶음 15개
   - `agent-report-platform --platformCode=baemin`: 배민 메뉴 47개, 최신 변경점과 최근 실패 정상 출력
+  - `agent-plan-next-actions --limit=5`: 전체 범위 우선순위 제안 5건 정상 출력
+  - `agent-plan-next-actions --platformCode=baemin --limit=5`: 배민 범위 우선순위 제안 5건 정상 출력
 
 ## 4. 플랫폼별 현재 구현 범위
 
@@ -219,6 +230,10 @@ npx electron out/main/index.js --task=agent-report-platform --platformCode=baemi
    - 메뉴 연결 범위
 4. 쿠팡이츠 현재 세션 경로 진단 강화
    - 실패 단계, 현재 탭 상태, 저장 결과 검증을 더 선명하게 남기기
+5. 에이전트 제안 레이어 후속
+   - 같은 플랫폼 실패를 묶어서 더 짧은 실행 계획으로 요약
+   - 실패/검토/옵션 제안의 우선순위 규칙을 실데이터 기준으로 더 다듬기
+   - 향후 UI 패널에서 같은 DTO를 그대로 재사용
 
 ## 6.1 실제 운영 DB 메모
 

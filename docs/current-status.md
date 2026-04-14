@@ -673,6 +673,7 @@
 - `electron out/main/index.js --task=agent-report-menu --menuId=<menuId> --limit=5`
 - `electron out/main/index.js --task=agent-report-options --platformCode=baemin --limit=5`
 - `electron out/main/index.js --task=agent-report-platform --platformCode=baemin --limit=5`
+- `electron out/main/index.js --task=agent-plan-next-actions --limit=5`
 
 현재 리포트에서 바로 읽을 수 있는 것:
 
@@ -682,6 +683,13 @@
 - 특정 메뉴의 플랫폼 매핑, 가격 variant, 최근 실행 기록
 - 옵션 묶음 현황과 shape conflict 상태
 - 플랫폼별 최신 import 변경점과 현재 managed Chrome 탭 상태
+
+실행 제안 레이어에서 바로 읽을 수 있는 것:
+
+- 지금 바로 실행 가능한 동기화 후보
+- 사람이 먼저 확인해야 하는 검토 큐 후보
+- 옵션 구조 통합 후보와 shape conflict 후보
+- 최근 실패 기준으로 다시 살펴볼 플랫폼 단위 점검 후보
 
 ### 에이전트 운영 리포트 검증 메모
 
@@ -699,6 +707,11 @@
   - 실제 운영 DB 기준 배민 옵션 묶음 15개, `shape_conflict 6개` 확인
 - `agent-report-platform --platformCode=baemin --limit=5`: 통과
   - 실제 운영 DB 기준 `배민 메뉴 47개`, 최신 import 변경점, 최근 실패, 현재 배민 탭 상태 확인
+- `agent-plan-next-actions --limit=5`: 통과
+  - 실제 운영 DB 기준 `즉시 실행 1건 + 검토/실패 점검 4건` 우선순위 정렬 확인
+  - 첫 후보는 배민 `칠성사이다(59707776)` 실행 항목으로 출력
+- `agent-plan-next-actions --platformCode=baemin --limit=5`: 통과
+  - 배민 범위로 좁히면 즉시 실행 1건 뒤에 최근 실패 점검 후보가 이어지는 것 확인
 
 ## 8. 문서 유지 원칙
 

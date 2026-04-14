@@ -236,4 +236,58 @@ describe('CliTaskRunner', () => {
       payload: { task: 'agent-report-menu', error: 'menu_id_required' }
     })
   })
+
+  it('forwards filters to agent-plan-next-actions', async () => {
+    const getNextActionPlan = vi.fn().mockResolvedValue({
+      task: 'agent-plan-next-actions',
+      generatedAt: '2026-04-14T00:00:00.000Z',
+      summary: '다음 작업 2건',
+      data: {
+        total: 2,
+        byPriority: { high: 1, medium: 1, low: 0 },
+        items: []
+      }
+    })
+
+    const runner = new CliTaskRunner({
+      getSyncPreview: vi.fn().mockResolvedValue({ items: [], needsReview: [] }),
+      agentOperationsReportService: {
+        getOverviewReport: vi.fn(),
+        getReviewQueueReport: vi.fn(),
+        getMenuReport: vi.fn(),
+        getOptionsReport: vi.fn(),
+        getPlatformReport: vi.fn(),
+        getNextActionPlan
+      } as never
+    })
+
+    await expect(
+      runner.run([
+        '--task=agent-plan-next-actions',
+        '--platformCode=baemin',
+        '--reason=source_missing_review',
+        '--limit=2'
+      ])
+    ).resolves.toEqual({
+      exitCode: 0,
+      payload: {
+        task: 'agent-plan-next-actions',
+        generatedAt: '2026-04-14T00:00:00.000Z',
+        summary: '다음 작업 2건',
+        data: {
+          total: 2,
+          byPriority: { high: 1, medium: 1, low: 0 },
+          items: []
+        }
+      }
+    })
+
+    expect(getNextActionPlan).toHaveBeenCalledWith({
+      platformCode: 'baemin',
+      menuId: null,
+      platformMenuId: null,
+      reason: 'source_missing_review',
+      limit: 2
+    })
+  })
 })

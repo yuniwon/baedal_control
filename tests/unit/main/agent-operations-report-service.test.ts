@@ -337,7 +337,12 @@ const managedChrome: ManagedChromeSessionStatus = {
   ]
 }
 
-const createService = () =>
+const createService = (overrides?: {
+  preview?: SyncPreviewResult
+  optionGroups?: PlatformOptionGroupRecord[]
+  syncRuns?: SyncRunRecord[]
+  syncRunItems?: SyncRunItemRecord[]
+}) =>
   new AgentOperationsReportService({
     menuRepository: {
       list: () => menus,
@@ -351,7 +356,7 @@ const createService = () =>
       listAll: () => platformMenus
     },
     platformOptionGroupRepository: {
-      listAll: () => platformOptionGroups
+      listAll: () => overrides?.optionGroups ?? platformOptionGroups
     },
     platformImportRunRepository: {
       listLatest: (limit = 20) => importRuns.slice(0, limit)
@@ -360,13 +365,15 @@ const createService = () =>
       listLatest: (limit = 50) => importChanges.slice(0, limit)
     },
     syncRunRepository: {
-      list: () => syncRuns
+      list: () => overrides?.syncRuns ?? syncRuns
     },
     syncRunItemRepository: {
       listForRunIds: (syncRunIds) =>
-        syncRunItems.filter((item) => syncRunIds.includes(item.syncRunId))
+        (overrides?.syncRunItems ?? syncRunItems).filter((item) =>
+          syncRunIds.includes(item.syncRunId)
+        )
     },
-    getSyncPreview: async () => preview,
+    getSyncPreview: async () => overrides?.preview ?? preview,
     getManagedChromeSession: async () => managedChrome
   })
 
@@ -409,6 +416,65 @@ describe('AgentOperationsReportService', () => {
       retryable: true
     })
     expect(report.data.managedChrome?.connected).toBe(true)
+  })
+
+  it('builds prioritized next actions from executable items, review queue items, option groups, and failures', async () => {
+    const service = createService()
+
+    const report = await service.getNextActionPlan({ limit: 10 })
+
+    expect(report.task).toBe('agent-plan-next-actions')
+    expect(report.summary).toContain('다음 작업')
+    expect(report.data.items[0]).toMatchObject({
+      kind: 'run_executable',
+      priority: 'high',
+      platformCode: 'baemin',
+      menuId: 'menu-1',
+      platformMenuId: 'platform-1'
+    })
+    expect(report.data.items[0].commands).toEqual([
+      expect.objectContaining({
+        task: 'sync-run-item'
+      })
+    ])
+    expect(report.data.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'resolve_review',
+          commands: [expect.objectContaining({ task: 'agent-report-menu' })]
+        }),
+        expect.objectContaining({
+          kind: 'review_options',
+          commands: [expect.objectContaining({ task: 'agent-report-options' })]
+        }),
+        expect.objectContaining({
+          kind: 'inspect_failures',
+          commands: [expect.objectContaining({ task: 'agent-report-platform' })]
+        })
+      ])
+    )
+  })
+
+  it('returns a single idle action when there is no pending work', async () => {
+    const service = createService({
+      preview: { items: [], needsReview: [] },
+      optionGroups: [],
+      syncRuns: [],
+      syncRunItems: []
+    })
+
+    const report = await service.getNextActionPlan({ limit: 5 })
+
+    expect(report.data).toEqual({
+      total: 1,
+      byPriority: { high: 0, medium: 0, low: 1 },
+      items: [
+        expect.objectContaining({
+          kind: 'idle',
+          priority: 'low'
+        })
+      ]
+    })
   })
 
   it('filters review queue items by platform, reason, menuId, and limit', async () => {

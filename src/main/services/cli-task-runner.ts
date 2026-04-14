@@ -1,4 +1,5 @@
 import type {
+  AgentActionPlanReport,
   AgentMenuReport,
   AgentOptionsReport,
   AgentOverviewReport,
@@ -17,6 +18,9 @@ import type {
 interface CliTaskRunnerDependencies {
   getSyncPreview: () => Promise<SyncPreviewResult> | SyncPreviewResult
   agentOperationsReportService?: {
+    getNextActionPlan?: (
+      filters: AgentReportFilterInput
+    ) => Promise<AgentReportEnvelope<AgentActionPlanReport>>
     getOverviewReport: (
       filters: AgentReportFilterInput
     ) => Promise<AgentReportEnvelope<AgentOverviewReport>>
@@ -175,6 +179,25 @@ export class CliTaskRunner {
 
     if (!parsed.task) {
       return null
+    }
+
+    if (parsed.task === 'agent-plan-next-actions') {
+      if (
+        !this.dependencies.agentOperationsReportService ||
+        !this.dependencies.agentOperationsReportService.getNextActionPlan
+      ) {
+        return {
+          exitCode: 1,
+          payload: { task: parsed.task, error: 'agent_report_service_unavailable' }
+        }
+      }
+
+      return {
+        exitCode: 0,
+        payload: await this.dependencies.agentOperationsReportService.getNextActionPlan(
+          reportFilters
+        )
+      }
     }
 
     if (parsed.task === 'agent-report-overview') {

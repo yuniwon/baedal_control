@@ -207,6 +207,7 @@ export interface AgentReportFilterInput {
 
 export interface AgentReportEnvelope<TData> {
   task:
+    | 'agent-plan-next-actions'
     | 'agent-report-overview'
     | 'agent-report-review-queue'
     | 'agent-report-menu'
@@ -369,6 +370,40 @@ export interface AgentPlatformReport {
   reviewQueue: AgentReviewQueueItem[]
   recentFailures: AgentOverviewFailureRecord[]
   managedChrome: ManagedChromeSessionStatus | null
+}
+
+export type AgentActionPlanKind =
+  | 'run_executable'
+  | 'resolve_review'
+  | 'review_options'
+  | 'inspect_failures'
+  | 'idle'
+
+export type AgentActionPlanPriority = 'high' | 'medium' | 'low'
+
+export interface AgentActionPlanCommand {
+  task: string
+  args: string[]
+  label: string
+}
+
+export interface AgentActionPlanItem {
+  id: string
+  kind: AgentActionPlanKind
+  priority: AgentActionPlanPriority
+  platformCode?: PlatformCode | null
+  menuId?: string | null
+  platformMenuId?: string | null
+  title: string
+  detail: string
+  evidence: string[]
+  commands: AgentActionPlanCommand[]
+}
+
+export interface AgentActionPlanReport {
+  total: number
+  byPriority: Record<AgentActionPlanPriority, number>
+  items: AgentActionPlanItem[]
 }
 
 export interface PlatformImportSummary {

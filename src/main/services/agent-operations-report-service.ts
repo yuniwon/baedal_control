@@ -1,4 +1,6 @@
 import type {
+  AgentActionPlanItem,
+  AgentActionPlanReport,
   AgentMenuReport,
   AgentMenuRunRecord,
   AgentOptionsReport,
@@ -54,6 +56,22 @@ const PLATFORM_LABELS: Record<PlatformCode, string> = {
   ddangyo: '땡겨요'
 }
 
+const REVIEW_REASON_LABELS: Record<SyncPreviewNeedsReview['reason'], string> = {
+  missing_mapping: '플랫폼 메뉴 연결 필요',
+  binding_review: '연결 상태 재확인 필요',
+  price_variant_review: '가격 구조 확인 필요',
+  source_missing_review: '플랫폼 원본 누락 확인 필요',
+  managed_session_write_review: '관리 브라우저 쓰기 환경 확인 필요'
+}
+
+const REVIEW_REASON_PRIORITIES: Record<SyncPreviewNeedsReview['reason'], 'high' | 'medium'> = {
+  missing_mapping: 'high',
+  binding_review: 'medium',
+  price_variant_review: 'medium',
+  source_missing_review: 'medium',
+  managed_session_write_review: 'high'
+}
+
 const clampLimit = (value?: number | null) => {
   if (typeof value !== 'number' || Number.isNaN(value)) {
     return DEFAULT_LIMIT
@@ -89,6 +107,65 @@ const createEmptyOptionStatusCounts = () =>
     absent_confirmed: 0,
     resurfaced: 0
   }) satisfies AgentOptionsReport['byStatus']
+
+const createEmptyActionPlanPriorityCounts = () =>
+  ({
+    high: 0,
+    medium: 0,
+    low: 0
+  }) satisfies AgentActionPlanReport['byPriority']
+
+const formatPrice = (value?: number | null) =>
+  typeof value === 'number' ? `${new Intl.NumberFormat('ko-KR').format(value)}원` : '가격 미확인'
+
+const buildTaskArgs = (
+  task: string,
+  filters: {
+    platformCode?: PlatformCode | null
+    menuId?: string | null
+    platformMenuId?: string | null
+    reason?: SyncPreviewNeedsReview['reason'] | null
+    limit?: number | null
+  }
+) => {
+  const args = [`--task=${task}`]
+
+  if (filters.platformCode) {
+    args.push(`--platformCode=${filters.platformCode}`)
+  }
+
+  if (filters.menuId) {
+    args.push(`--menuId=${filters.menuId}`)
+  }
+
+  if (filters.platformMenuId) {
+    args.push(`--platformMenuId=${filters.platformMenuId}`)
+  }
+
+  if (filters.reason) {
+    args.push(`--reason=${filters.reason}`)
+  }
+
+  if (typeof filters.limit === 'number') {
+    args.push(`--limit=${filters.limit}`)
+  }
+
+  return args
+}
+
+const PRIORITY_ORDER: Record<AgentActionPlanItem['priority'], number> = {
+  high: 0,
+  medium: 1,
+  low: 2
+}
+
+const ACTION_KIND_ORDER: Record<AgentActionPlanItem['kind'], number> = {
+  run_executable: 0,
+  resolve_review: 1,
+  inspect_failures: 2,
+  review_options: 3,
+  idle: 4
+}
 
 const filterPreviewItem = (
   item: Pick<SyncPreviewItem, 'platformCode' | 'menuId' | 'platformMenuId'>,
@@ -182,6 +259,187 @@ const isActiveCatalogPresence = (
 
 export class AgentOperationsReportService {
   constructor(private readonly dependencies: AgentOperationsReportDependencies) {}
+
+  async getNextActionPlan(
+    filters: AgentReportFilterInput
+  ): Promise<AgentReportEnvelope<AgentActionPlanReport>> {
+    const limit = clampLimit(filters.limit)
+    const menus = this.dependencies.menuRepository.list()
+    const menuIndex = new Map(menus.map((menu) => [menu.menuId, menu]))
+    const reviewQueue = (await this.getReviewQueueReport(filters)).data.items
+    const preview = await this.dependencies.getSyncPreview()
+    const logicalOptionGroups = this.buildLogicalGroups(
+      this.dependencies.platformOptionGroupRepository
+        .listAll()
+        .filter((group) => !filters.platformCode || group.platformCode === filters.platformCode)
+    )
+    const recentFailures = this.buildRecentFailures(filters)
+    const actions: AgentActionPlanItem[] = []
+
+    for (const item of preview.items.filter((previewItem) => filterPreviewItem(previewItem, filters))) {
+      const menu = menuIndex.get(item.menuId)
+      actions.push({
+        id: `run:${item.platformCode}:${item.menuId}:${item.platformMenuId}`,
+        kind: 'run_executable',
+        priority: 'high',
+        platformCode: item.platformCode,
+        menuId: item.menuId,
+        platformMenuId: item.platformMenuId,
+        title: `${PLATFORM_LABELS[item.platformCode]} 메뉴 동기화 실행`,
+        detail: `${menu?.baseName ?? item.nextName} 변경사항을 지금 바로 반영할 수 있습니다.`,
+        evidence: [
+          `기준 메뉴: ${menu?.baseName ?? item.nextName}`,
+          `플랫폼 메뉴 ID: ${item.platformMenuId}`,
+          `변경 가격: ${formatPrice(item.previousPrice)} -> ${formatPrice(item.nextPrice)}`
+        ],
+        commands: [
+          {
+            task: 'sync-run-item',
+            args: buildTaskArgs('sync-run-item', {
+              platformCode: item.platformCode,
+              menuId: item.menuId,
+              platformMenuId: item.platformMenuId
+            }),
+            label: '이 메뉴만 즉시 반영'
+          }
+        ]
+      })
+    }
+
+    for (const item of reviewQueue) {
+      actions.push({
+        id: `review:${item.reason}:${item.platformCode ?? 'unknown'}:${item.menuId}:${item.platformMenuId ?? 'none'}`,
+        kind: 'resolve_review',
+        priority: REVIEW_REASON_PRIORITIES[item.reason],
+        platformCode: item.platformCode ?? null,
+        menuId: item.menuId,
+        platformMenuId: item.platformMenuId ?? null,
+        title: REVIEW_REASON_LABELS[item.reason],
+        detail: item.detail ?? `${item.menuName} 항목의 플랫폼 연결 상태를 확인해야 합니다.`,
+        evidence: [
+          `기준 메뉴: ${item.menuName}`,
+          item.platformMenuName ? `플랫폼 메뉴: ${item.platformMenuName}` : '플랫폼 메뉴: 연결 정보 없음',
+          item.platformMenuPriceSummary
+            ? `플랫폼 가격: ${item.platformMenuPriceSummary}`
+            : `기준 가격: ${formatPrice(item.menuBasePrice)}`
+        ],
+        commands: [
+          {
+            task: 'agent-report-menu',
+            args: buildTaskArgs('agent-report-menu', {
+              platformCode: item.platformCode ?? null,
+              menuId: item.menuId,
+              platformMenuId: item.platformMenuId ?? null,
+              limit: 5
+            }),
+            label: '메뉴 상세 리포트 열기'
+          }
+        ]
+      })
+    }
+
+    for (const group of logicalOptionGroups.filter(
+      (item) => item.status === 'merge_candidate' || item.status === 'shape_conflict'
+    )) {
+      actions.push({
+        id: `option:${group.platformCode}:${group.logicalGroupKey}`,
+        kind: 'review_options',
+        priority: group.status === 'shape_conflict' ? 'medium' : 'low',
+        platformCode: group.platformCode,
+        title: `${group.displayName} 옵션 구조 검토`,
+        detail:
+          group.status === 'shape_conflict'
+            ? '같은 옵션명인데 구성이나 가격이 달라 통합 전 확인이 필요합니다.'
+            : '옵션 구조가 같아서 하나의 통합 옵션으로 정리할 후보입니다.',
+        evidence: [
+          `플랫폼: ${PLATFORM_LABELS[group.platformCode]}`,
+          `원본 그룹 ${group.sourceGroupCount}개`,
+          `연결 메뉴 ${group.connectedMenuCount}개`
+        ],
+        commands: [
+          {
+            task: 'agent-report-options',
+            args: buildTaskArgs('agent-report-options', {
+              platformCode: group.platformCode,
+              limit: 10
+            }),
+            label: '옵션 리포트 열기'
+          }
+        ]
+      })
+    }
+
+    for (const failure of recentFailures) {
+      actions.push({
+        id: `failure:${failure.syncRunItemId}`,
+        kind: 'inspect_failures',
+        priority: failure.retryable ? 'medium' : 'low',
+        platformCode: failure.platformCode,
+        menuId: failure.menuId,
+        title: `${PLATFORM_LABELS[failure.platformCode]} 실패 원인 확인`,
+        detail: failure.message,
+        evidence: [
+          `동기화 실행 ID: ${failure.syncRunId}`,
+          failure.errorCode ? `오류 코드: ${failure.errorCode}` : '오류 코드 없음',
+          failure.action ? `권장 조치: ${failure.action}` : '권장 조치 없음'
+        ],
+        commands: [
+          {
+            task: 'agent-report-platform',
+            args: buildTaskArgs('agent-report-platform', {
+              platformCode: failure.platformCode,
+              limit: 5
+            }),
+            label: '플랫폼 리포트 열기'
+          }
+        ]
+      })
+    }
+
+    actions.sort(
+      (left, right) =>
+        PRIORITY_ORDER[left.priority] - PRIORITY_ORDER[right.priority] ||
+        ACTION_KIND_ORDER[left.kind] - ACTION_KIND_ORDER[right.kind] ||
+        (left.platformCode ?? '').localeCompare(right.platformCode ?? '') ||
+        left.id.localeCompare(right.id)
+    )
+
+    const items = actions.slice(0, limit)
+
+    if (items.length === 0) {
+      items.push({
+        id: 'idle:overview',
+        kind: 'idle',
+        priority: 'low',
+        title: '즉시 처리할 작업이 없습니다.',
+        detail: '현재 기준으로 실행 가능한 동기화나 확인이 필요한 항목이 없습니다.',
+        evidence: [],
+        commands: [
+          {
+            task: 'agent-report-overview',
+            args: buildTaskArgs('agent-report-overview', { limit: 10 }),
+            label: '전체 현황 다시 보기'
+          }
+        ]
+      })
+    }
+
+    const byPriority = createEmptyActionPlanPriorityCounts()
+
+    for (const item of items) {
+      byPriority[item.priority] += 1
+    }
+
+    return buildEnvelope(
+      'agent-plan-next-actions',
+      `다음 작업 ${items.length}건, 즉시 실행 ${byPriority.high}건, 검토 ${byPriority.medium + byPriority.low}건`,
+      {
+        total: items.length,
+        byPriority,
+        items
+      }
+    )
+  }
 
   async getOverviewReport(
     filters: AgentReportFilterInput
