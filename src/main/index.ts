@@ -29,6 +29,7 @@ import { ManagedChromeSessionProbe } from './services/managed-chrome-session-pro
 import { ManagedChromeSnapshotCapturer } from './services/managed-chrome-snapshot-capturer'
 import { ManagedChromeScriptRunner } from './services/managed-chrome-script-runner'
 import {
+  EmbeddedFailureContextHandler,
   ManagedBrowserFailureContextHandler,
   SyncFailureContextCollector
 } from './services/sync-failure-context'
@@ -95,6 +96,7 @@ app.whenReady().then(async () => {
     managedChromeScriptRunner
   })
   const syncFailureContextCollector = new SyncFailureContextCollector([
+    new EmbeddedFailureContextHandler(),
     new ManagedBrowserFailureContextHandler({
       platformCode: 'coupangeats',
       managedChromeSessionProbe,

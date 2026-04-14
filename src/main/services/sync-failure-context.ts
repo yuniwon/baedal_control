@@ -32,6 +32,28 @@ const defaultTabMatcher = (platformCode: PlatformCode) => (tab: ManagedChromeTab
 const toErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : typeof error === 'string' ? error : 'unknown_error'
 
+const readEmbeddedFailureContext = (error: unknown): SyncRunFailureContext | null => {
+  if (!error || typeof error !== 'object') {
+    return null
+  }
+
+  const maybeContext = (error as { syncFailureContext?: unknown }).syncFailureContext
+  if (!maybeContext || typeof maybeContext !== 'object') {
+    return null
+  }
+
+  const context = maybeContext as Partial<SyncRunFailureContext>
+  if (
+    (context.kind !== 'managed_browser_snapshot' && context.kind !== 'platform_page_snapshot')
+    || (context.status !== 'captured' && context.status !== 'tab_not_found' && context.status !== 'capture_failed')
+    || typeof context.capturedAt !== 'string'
+  ) {
+    return null
+  }
+
+  return context as SyncRunFailureContext
+}
+
 export class SyncFailureContextCollector {
   constructor(private readonly handlers: SyncFailureContextHandler[] = []) {}
 
@@ -44,6 +66,12 @@ export class SyncFailureContextCollector {
     }
 
     return null
+  }
+}
+
+export class EmbeddedFailureContextHandler implements SyncFailureContextHandler {
+  async capture(_item: SyncPreviewItem, error: unknown): Promise<SyncRunFailureContext | null> {
+    return readEmbeddedFailureContext(error)
   }
 }
 

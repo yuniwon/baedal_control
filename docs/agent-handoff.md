@@ -20,7 +20,7 @@
 ## 2. 이번 커밋 직전 검증 결과
 
 - `npm test`
-  - 58개 파일, 228개 테스트 통과
+  - 58개 파일, 231개 테스트 통과
 - `npm run lint:types`
   - 통과
 - `npm run build`
@@ -28,8 +28,14 @@
 - 이번 정리에서 수정한 핵심
   - `platform_menus`에 한 번도 저장되지 않은 legacy active 매핑도 import 결측 추적 대상에 포함되도록 보강
   - 첫 import에서 `missing_suspected`, 두 번째 import에서 `absent_confirmed + source_absent`로 승격되도록 테스트 추가
+  - 배민 쓰기 실패 시 어댑터가 현재 페이지 스냅샷(`platform_page_snapshot`)을 에러에 부착하고, sync 엔진이 이를 실행 기록의 `failure_context_json`으로 저장하도록 보강
+  - 실행 기록 UI가 배민 실패 당시 본문 텍스트 일부까지 보여주도록 보강
   - 실제 운영 DB 기준으로 배민 import 2회 연속 실행 검증 완료
     - 결과: 오래된 숨김 배민 매핑들이 `source_absent`로 정리되고 해당 로컬 메뉴도 `is_managed = 0` 처리됨
+  - 실제 운영 DB 기준으로 배민 `통마늘바베큐피자(59707584)` 실패 재현 검증 완료
+    - 로컬 기준 메뉴명만 일시 변경해 실행 후보를 만든 뒤 저장 전 차단 실패를 유도
+    - 결과: `failure_context_json`에 `platform_page_snapshot`, `menu_detail`, 실패 직전 본문 텍스트가 저장됨
+    - 검증 직후 로컬 DB 원복 및 `sync-preview` 0건 재확인
 
 ## 3. 실행 방법
 
@@ -69,6 +75,7 @@ C:\Users\WON2\AppData\Roaming\delivery-menu-sync\credentials.json
 - 메뉴명/가격 변경 로직과 상세 검증 가드가 있음
 - 금칙어가 설명/구성에 남아 있으면 저장 전에 차단
 - legacy active 매핑이 `platform_menus`에 없더라도 import 2회로 `source_absent`까지 자동 정리됨
+- 쓰기 실패 시 현재 배민 화면 제목 / 화면 종류 / 본문 텍스트 일부를 `failure_context_json`으로 남긴다.
 - 새 메뉴 생성 마법사 구조는 읽어뒀지만, 안전한 숨김 테스트 메뉴 전략은 아직 확정되지 않음
 
 ### 쿠팡이츠
@@ -105,12 +112,15 @@ C:\Users\WON2\AppData\Roaming\delivery-menu-sync\credentials.json
 1. 배민 안전한 실저장 테스트 전략 확정
    - legacy 숨김 매핑 정리는 끝났고, 이제 실제로 저장을 왕복 검증할 안전 대상만 남음
    - 숨김 테스트 메뉴 확보 또는 생성 후 비노출 정리 루틴 설계
-2. 옵션 편집/반영 모델 설계
+2. 배민 저장 성공 후 후속 단계 진단 보강
+   - 실패 직전 화면 기록은 붙었음
+   - 다음은 저장 성공 직후 토스트/잔존 모달/재진입 지연 같은 후속 단계 로그를 더 선명하게 남기는 것
+3. 옵션 편집/반영 모델 설계
    - 옵션 그룹
    - 옵션 항목
    - 옵션 가격
    - 메뉴 연결 범위
-3. 쿠팡이츠 현재 세션 경로 진단 강화
+4. 쿠팡이츠 현재 세션 경로 진단 강화
    - 실패 단계, 현재 탭 상태, 저장 결과 검증을 더 선명하게 남기기
 
 ## 6.1 실제 운영 DB 메모

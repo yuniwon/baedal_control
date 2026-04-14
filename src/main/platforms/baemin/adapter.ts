@@ -3,6 +3,7 @@ import type {
   PlatformInspectionField,
   PlatformInspectionReport,
   PlatformInspectionStep,
+  SyncRunFailureContext,
   SyncPreviewItem
 } from '../../../shared/contracts'
 import type { PlatformAdapter, PlatformMenuFetchResult } from '../base/types'
@@ -115,6 +116,8 @@ export class BaeminAdapter implements PlatformAdapter {
         nextName: nameChanged ? item.nextName : undefined,
         nextPrice: priceChanged ? item.nextPrice : undefined
       })
+    } catch (error) {
+      throw await this.attachFailureContext(page, error)
     } finally {
       await browser.close()
     }
@@ -560,6 +563,78 @@ export class BaeminAdapter implements PlatformAdapter {
     }
 
     throw new Error(`baemin_menu_detail_verification_timeout:${JSON.stringify(expectedTokens)}`)
+  }
+
+  private async attachFailureContext(page: Page, error: unknown) {
+    const context = await this.captureFailureContext(page)
+    if (!context) {
+      return error instanceof Error ? error : new Error(String(error))
+    }
+
+    const nextError = error instanceof Error ? error : new Error(String(error))
+    ;(nextError as Error & { syncFailureContext?: SyncRunFailureContext | null }).syncFailureContext =
+      context
+    return nextError
+  }
+
+  private async captureFailureContext(page: Page): Promise<SyncRunFailureContext | null> {
+    try {
+      const [pageTitle, visibleTextSnippet] = await Promise.all([
+        page.title().catch(() => ''),
+        page.locator('body').innerText().catch(() => '')
+      ])
+      const normalizedText = visibleTextSnippet.replace(/\s+/g, ' ').trim().slice(0, 400)
+
+      return {
+        kind: 'platform_page_snapshot',
+        status: 'captured',
+        capturedAt: new Date().toISOString(),
+        pageTitle: pageTitle || null,
+        pageUrl: page.url(),
+        pageKind: await this.inferFailurePageKind(page, normalizedText),
+        visibleTextSnippet: normalizedText || null,
+        detail: null
+      }
+    } catch (captureError) {
+      return {
+        kind: 'platform_page_snapshot',
+        status: 'capture_failed',
+        capturedAt: new Date().toISOString(),
+        pageTitle: null,
+        pageUrl: page.url(),
+        pageKind: 'unknown',
+        visibleTextSnippet: null,
+        detail:
+          captureError instanceof Error ? captureError.message : 'baemin_failure_context_capture_failed'
+      }
+    }
+  }
+
+  private async inferFailurePageKind(
+    page: Page,
+    normalizedText: string
+  ): Promise<SyncRunFailureContext['pageKind']> {
+    if (
+      normalizedText.includes('가격 변경') ||
+      normalizedText.includes('이 메뉴를 판매하는 가게 변경')
+    ) {
+      return 'menu_detail'
+    }
+
+    const detailModalVisible = await page
+      .locator('#menuDetailModal')
+      .first()
+      .isVisible()
+      .catch(() => false)
+    if (detailModalVisible) {
+      return 'menu_detail'
+    }
+
+    if (page.url().includes('/menu')) {
+      return 'menu_list'
+    }
+
+    return 'unknown'
   }
 
   private formatPrice(value: number) {

@@ -1,8 +1,48 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  EmbeddedFailureContextHandler,
   ManagedBrowserFailureContextHandler,
   SyncFailureContextCollector
 } from '../../../src/main/services/sync-failure-context'
+
+describe('EmbeddedFailureContextHandler', () => {
+  it('returns failure context already attached to the thrown error', async () => {
+    const handler = new EmbeddedFailureContextHandler()
+    const error = new Error('baemin_menu_match_not_found') as Error & {
+      syncFailureContext?: unknown
+    }
+    error.syncFailureContext = {
+      kind: 'platform_page_snapshot',
+      status: 'captured',
+      capturedAt: '2026-04-14T05:10:00.000Z',
+      pageTitle: '배민 메뉴 관리',
+      pageUrl: 'https://self.baemin.com/menu',
+      pageKind: 'menu_detail',
+      visibleTextSnippet: '검색 결과가 여러 개라 정확히 선택하지 못했습니다.'
+    }
+
+    const context = await handler.capture(
+      {
+        platformCode: 'baemin',
+        menuId: 'm1',
+        platformMenuId: 'bm-1',
+        previousName: '포테이토골드',
+        nextName: '포테이토골드 테스트',
+        nextPrice: 21000
+      },
+      error
+    )
+
+    expect(context).toEqual(
+      expect.objectContaining({
+        kind: 'platform_page_snapshot',
+        status: 'captured',
+        pageTitle: '배민 메뉴 관리',
+        pageKind: 'menu_detail'
+      })
+    )
+  })
+})
 
 describe('ManagedBrowserFailureContextHandler', () => {
   it('captures and saves a managed-browser snapshot for matching sync failures', async () => {

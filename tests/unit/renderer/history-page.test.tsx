@@ -139,4 +139,55 @@ describe('HistoryPage', () => {
     ).toBeTruthy()
     expect(screen.getByText('캡처 시각 2026. 04. 14. 10:25')).toBeTruthy()
   })
+
+  it('renders baemin page snapshots captured during a failed write attempt', async () => {
+    render(
+      <HistoryPage
+        initialRuns={[
+          {
+            syncRunId: 'r3',
+            startedAt: '2026-04-14T02:00:00Z',
+            triggerType: 'manual',
+            resultSummary: '성공 0건, 실패 1건',
+            items: [
+              {
+                syncRunItemId: 'i3',
+                syncRunId: 'r3',
+                platformCode: 'baemin',
+                menuId: 'm3',
+                fieldType: 'menu',
+                beforeValue: '포테이토골드',
+                afterValue: '{"name":"포테이토골드 테스트","price":21000}',
+                status: 'failed',
+                errorCode: 'apply_failed',
+                errorMessage: 'baemin_menu_match_not_found',
+                failureContext: {
+                  kind: 'platform_page_snapshot',
+                  status: 'captured',
+                  capturedAt: '2026-04-14T02:05:00.000Z',
+                  pageTitle: '배민 메뉴 관리',
+                  pageUrl: 'https://self.baemin.com/menu',
+                  pageKind: 'menu_detail',
+                  visibleTextSnippet:
+                    '메뉴 관리 검색 결과 가격 변경 검색 결과가 여러 개라 정확히 선택하지 못했습니다.'
+                }
+              }
+            ]
+          }
+        ]}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('검색 결과에서 메뉴를 다시 찾지 못했습니다.')).toBeTruthy()
+    })
+
+    expect(screen.getByText('실패 당시 화면: 배민 메뉴 관리 · 상세 패널')).toBeTruthy()
+    expect(
+      screen.getByText(
+        '메뉴 관리 검색 결과 가격 변경 검색 결과가 여러 개라 정확히 선택하지 못했습니다.'
+      )
+    ).toBeTruthy()
+    expect(screen.getByText('캡처 시각 2026. 04. 14. 11:05')).toBeTruthy()
+  })
 })

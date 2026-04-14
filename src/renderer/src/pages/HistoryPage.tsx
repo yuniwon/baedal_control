@@ -182,6 +182,9 @@ export const HistoryPage = ({ initialRuns = [] as HistoryRun[] }) => {
                         {failureContext ? (
                           <div className="history-item-context">
                             <p className="history-item-context-summary">{failureContext.summary}</p>
+                            {failureContext.detail ? (
+                              <p className="history-item-context-meta">{failureContext.detail}</p>
+                            ) : null}
                             {failureContext.meta ? (
                               <p className="history-item-context-meta">{failureContext.meta}</p>
                             ) : null}

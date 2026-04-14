@@ -143,6 +143,53 @@ describe('BaeminAdapter', () => {
     expect(launchPlaywrightChromium).not.toHaveBeenCalled()
   })
 
+  it('attaches a page snapshot to baemin write failures before closing the browser', async () => {
+    const adapter = new BaeminAdapter({
+      username: 'owner-id',
+      password: 'secret'
+    }) as any
+
+    const close = vi.fn().mockResolvedValue(undefined)
+    const fakePage = {
+      locator: vi.fn().mockReturnValue({
+        first: vi.fn().mockReturnThis(),
+        innerText: vi
+          .fn()
+          .mockResolvedValue('메뉴 관리 검색 결과 가격 변경 검색 결과가 여러 개라 정확히 선택하지 못했습니다.')
+      }),
+      title: vi.fn().mockResolvedValue('배민 메뉴 관리'),
+      url: vi.fn().mockReturnValue('https://self.baemin.com/menu')
+    }
+
+    adapter.createAuthenticatedSession = vi.fn().mockResolvedValue({
+      browser: { close },
+      page: fakePage
+    })
+    adapter.openMenuDetail = vi.fn().mockRejectedValue(new Error('baemin_menu_match_not_found'))
+
+    await expect(
+      adapter.applyMenuUpdate({
+        platformCode: 'baemin',
+        menuId: 'menu-1',
+        platformMenuId: 'platform-1',
+        previousName: '포테이토골드',
+        previousPrice: 21000,
+        nextName: '포테이토골드 테스트',
+        nextPrice: 21000
+      })
+    ).rejects.toMatchObject({
+      message: 'baemin_menu_match_not_found',
+      syncFailureContext: expect.objectContaining({
+        kind: 'platform_page_snapshot',
+        status: 'captured',
+        pageTitle: '배민 메뉴 관리',
+        pageKind: 'menu_detail'
+      })
+    })
+
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
   it('collects baemin menu pages from the live screen responses while scrolling', async () => {
     const responseListeners = new Set<(response: ReturnType<typeof createMenuResponse>) => void>()
     const queuedPages = [

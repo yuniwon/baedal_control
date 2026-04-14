@@ -207,7 +207,7 @@ export interface SyncRunRecord {
 }
 
 export interface SyncRunFailureContext {
-  kind: 'managed_browser_snapshot'
+  kind: 'managed_browser_snapshot' | 'platform_page_snapshot'
   status: 'captured' | 'tab_not_found' | 'capture_failed'
   capturedAt: string
   snapshotId?: string | null
@@ -216,6 +216,7 @@ export interface SyncRunFailureContext {
   pageKind?: BrowserInspectionPageKind | null
   menuCount?: number | null
   optionGroupCount?: number | null
+  visibleTextSnippet?: string | null
   detail?: string | null
 }
 

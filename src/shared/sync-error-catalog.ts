@@ -106,9 +106,35 @@ export const formatSyncErrorMessage = (
 
 export const formatSyncFailureContext = (
   context?: SyncRunFailureContext | null
-): { summary: string; meta?: string | null } | null => {
+): { summary: string; meta?: string | null; detail?: string | null } | null => {
   if (!context) {
     return null
+  }
+
+  if (context.kind === 'platform_page_snapshot') {
+    const pageKindLabel =
+      context.pageKind === 'menu_detail'
+        ? '상세 패널'
+        : context.pageKind === 'menu_list'
+          ? '메뉴 목록'
+          : context.pageKind === 'option_list'
+            ? '옵션 목록'
+            : '현재 화면'
+
+    if (context.status === 'captured') {
+      return {
+        summary: `실패 당시 화면: ${(context.pageTitle || '플랫폼 화면')} · ${pageKindLabel}`,
+        detail: context.visibleTextSnippet ?? null,
+        meta: `캡처 시각 ${formatContextDateTime(context.capturedAt)}`
+      }
+    }
+
+    return {
+      summary: context.detail
+        ? `실패 당시 화면을 기록하지 못했습니다. (${context.detail})`
+        : '실패 당시 화면을 기록하지 못했습니다.',
+      meta: null
+    }
   }
 
   if (context.kind === 'managed_browser_snapshot') {
