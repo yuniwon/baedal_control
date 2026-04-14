@@ -18,7 +18,31 @@ describe('MenuRepository', () => {
       baseName: '페퍼로니',
       basePrice: 23900,
       isDirty: 1,
-      isManaged: 0
+      isManaged: 0,
+      basePriceVariants: [
+        {
+          variantLabel: '500ml',
+          channels: [
+            {
+              channelCode: 'delivery',
+              channelLabel: '배달',
+              amount: 1800,
+              amountText: '1,800원'
+            }
+          ]
+        },
+        {
+          variantLabel: '1.25L',
+          channels: [
+            {
+              channelCode: 'delivery',
+              channelLabel: '배달',
+              amount: 2800,
+              amountText: '2,800원'
+            }
+          ]
+        }
+      ]
     })
     repository.upsert({
       menuId: 'm1',
@@ -39,7 +63,31 @@ describe('MenuRepository', () => {
         menuId: 'm2',
         baseName: '페퍼로니',
         basePrice: 23900,
-        isManaged: 0
+        isManaged: 0,
+        basePriceVariants: [
+          {
+            variantLabel: '500ml',
+            channels: [
+              {
+                channelCode: 'delivery',
+                channelLabel: '배달',
+                amount: 1800,
+                amountText: '1,800원'
+              }
+            ]
+          },
+          {
+            variantLabel: '1.25L',
+            channels: [
+              {
+                channelCode: 'delivery',
+                channelLabel: '배달',
+                amount: 2800,
+                amountText: '2,800원'
+              }
+            ]
+          }
+        ]
       })
     ])
   })

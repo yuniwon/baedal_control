@@ -113,4 +113,86 @@ describe('MenuTable', () => {
     expect(screen.getByText('플랫폼에 없음')).toBeTruthy()
     expect(container.querySelector('.source-item-danger')).toBeTruthy()
   })
+
+  it('edits multi-price variants inline and keeps the derived base price in sync', () => {
+    const onChange = vi.fn()
+    const onDelete = vi.fn()
+
+    render(
+      <MenuTable
+        menus={[
+          {
+            menuId: 'm9',
+            baseName: '사이다',
+            basePrice: 1800,
+            isDirty: 0,
+            basePriceVariants: [
+              {
+                variantLabel: '500ml',
+                channels: [
+                  {
+                    channelCode: 'delivery',
+                    channelLabel: '배달',
+                    amount: 1800,
+                    amountText: '1,800원'
+                  }
+                ]
+              },
+              {
+                variantLabel: '1.25L',
+                channels: [
+                  {
+                    channelCode: 'delivery',
+                    channelLabel: '배달',
+                    amount: 2800,
+                    amountText: '2,800원'
+                  }
+                ]
+              }
+            ]
+          }
+        ]}
+        onChange={onChange}
+        onDelete={onDelete}
+      />
+    )
+
+    expect(screen.getByText('500ml')).toBeTruthy()
+    expect(screen.getByText('1.25L')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('m9-price-0-delivery'), {
+      target: { value: '1900' }
+    })
+
+    expect(onChange).toHaveBeenLastCalledWith(
+      'm9',
+      expect.objectContaining({
+        basePrice: 1900,
+        basePriceVariants: [
+          {
+            variantLabel: '500ml',
+            channels: [
+              {
+                channelCode: 'delivery',
+                channelLabel: '배달',
+                amount: 1900,
+                amountText: '1,900원'
+              }
+            ]
+          },
+          {
+            variantLabel: '1.25L',
+            channels: [
+              {
+                channelCode: 'delivery',
+                channelLabel: '배달',
+                amount: 2800,
+                amountText: '2,800원'
+              }
+            ]
+          }
+        ]
+      })
+    )
+  })
 })

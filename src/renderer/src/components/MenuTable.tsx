@@ -43,17 +43,42 @@ export type MenuRow = {
   menuId: string
   baseName: string
   basePrice: number
+  basePriceVariants?: PlatformMenuPriceVariantRecord[] | null
   isDirty: number
   isManaged?: number
   categoryName?: string
   sources?: MenuSourceInfo[]
 }
 
-type MenuDraft = Pick<MenuRow, 'baseName' | 'basePrice'>
+type MenuDraft = Pick<MenuRow, 'baseName' | 'basePrice' | 'basePriceVariants'>
+
+const clonePriceVariants = (variants?: PlatformMenuPriceVariantRecord[] | null) =>
+  variants?.map((variant) => ({
+    ...variant,
+    channels: variant.channels.map((channel) => ({ ...channel }))
+  })) ?? null
+
+const buildAmountText = (amount?: number | null) =>
+  typeof amount === 'number' ? `${amount.toLocaleString('ko-KR')}원` : '-'
+
+const deriveBasePriceFromVariants = (
+  variants?: PlatformMenuPriceVariantRecord[] | null,
+  fallback = 0
+) =>
+  variants
+    ?.flatMap((variant) => variant.channels)
+    .find((channel) => typeof channel.amount === 'number')?.amount ?? fallback
 
 const buildDrafts = (menus: MenuRow[]) =>
   Object.fromEntries(
-    menus.map((menu) => [menu.menuId, { baseName: menu.baseName, basePrice: menu.basePrice }])
+    menus.map((menu) => [
+      menu.menuId,
+      {
+        baseName: menu.baseName,
+        basePrice: menu.basePrice,
+        basePriceVariants: clonePriceVariants(menu.basePriceVariants)
+      }
+    ])
   ) as Record<string, MenuDraft>
 
 const buildSourceMetaItems = (source: MenuSourceInfo) =>
@@ -120,12 +145,16 @@ export const MenuTable = ({
     const sourceMenu = menus.find((menu) => menu.menuId === menuId)
     const baseDraft = drafts[menuId] ?? {
       baseName: sourceMenu?.baseName ?? '',
-      basePrice: sourceMenu?.basePrice ?? 0
+      basePrice: sourceMenu?.basePrice ?? 0,
+      basePriceVariants: clonePriceVariants(sourceMenu?.basePriceVariants)
     }
     const nextDraft = { ...baseDraft, ...patch }
+    const payload = nextDraft.basePriceVariants?.length
+      ? nextDraft
+      : { baseName: nextDraft.baseName, basePrice: nextDraft.basePrice }
 
     setDrafts((current) => ({ ...current, [menuId]: nextDraft }))
-    onChange(menuId, nextDraft)
+    onChange(menuId, payload)
   }
 
   return (
@@ -147,6 +176,7 @@ export const MenuTable = ({
       <tbody>
         {menus.map((menu) => {
           const draft = drafts[menu.menuId] ?? { baseName: menu.baseName, basePrice: menu.basePrice }
+          const hasVariantEditor = (draft.basePriceVariants?.length ?? 0) > 1
 
           return (
             <tr
@@ -187,20 +217,72 @@ export const MenuTable = ({
                 />
               </td>
               <td>
-                <input
-                  autoComplete="off"
-                  aria-label={`${menu.menuId}-price`}
-                  className="menu-price-input"
-                  inputMode="numeric"
-                  name={`${menu.menuId}-price`}
-                  type="number"
-                  value={String(draft.basePrice)}
-                  onChange={(event) =>
-                    updateDraft(menu.menuId, {
-                      basePrice: event.target.value.trim() ? Number(event.target.value) : 0
-                    })
-                  }
-                />
+                {hasVariantEditor ? (
+                  <div className="menu-variant-editor">
+                    {draft.basePriceVariants?.map((variant, variantIndex) => (
+                      <div
+                        className="menu-variant-block"
+                        key={`${menu.menuId}:${variant.variantLabel ?? 'base'}:${variantIndex}`}
+                      >
+                        <p className="menu-variant-label">{variant.variantLabel?.trim() || '기본'}</p>
+                        <div className="menu-variant-channel-list">
+                          {variant.channels.map((channel, channelIndex) => (
+                            <label
+                              className="menu-variant-channel"
+                              key={`${menu.menuId}:${variantIndex}:${channel.channelCode}:${channelIndex}`}
+                            >
+                              <span>{channel.channelLabel}</span>
+                              <input
+                                autoComplete="off"
+                                aria-label={`${menu.menuId}-price-${variantIndex}-${channel.channelCode}`}
+                                className="menu-price-input menu-price-input-variant"
+                                inputMode="numeric"
+                                name={`${menu.menuId}-price-${variantIndex}-${channel.channelCode}`}
+                                type="number"
+                                value={String(channel.amount ?? 0)}
+                                onChange={(event) => {
+                                  const nextAmount = event.target.value.trim()
+                                    ? Number(event.target.value)
+                                    : 0
+                                  const nextVariants = clonePriceVariants(draft.basePriceVariants) ?? []
+                                  const targetVariant = nextVariants[variantIndex]
+                                  const targetChannel = targetVariant?.channels[channelIndex]
+
+                                  if (!targetChannel) {
+                                    return
+                                  }
+
+                                  targetChannel.amount = nextAmount
+                                  targetChannel.amountText = buildAmountText(nextAmount)
+
+                                  updateDraft(menu.menuId, {
+                                    basePrice: deriveBasePriceFromVariants(nextVariants, draft.basePrice),
+                                    basePriceVariants: nextVariants
+                                  })
+                                }}
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <input
+                    autoComplete="off"
+                    aria-label={`${menu.menuId}-price`}
+                    className="menu-price-input"
+                    inputMode="numeric"
+                    name={`${menu.menuId}-price`}
+                    type="number"
+                    value={String(draft.basePrice)}
+                    onChange={(event) =>
+                      updateDraft(menu.menuId, {
+                        basePrice: event.target.value.trim() ? Number(event.target.value) : 0
+                      })
+                    }
+                  />
+                )}
               </td>
               <td>
                 {menu.sources?.length ? (

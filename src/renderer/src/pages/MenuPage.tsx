@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type {
   PlatformMenuCatalogRecord,
   PlatformMenuMappingRecord,
+  PlatformMenuPriceVariantRecord,
   PlatformOptionGroupRecord
 } from '../../../shared/contracts'
 import { appApi } from '../lib/api'
@@ -36,6 +37,29 @@ const buildDuplicateCounts = (mappings: PlatformMenuMappingRecord[]) =>
     counts[key] = (counts[key] ?? 0) + 1
     return counts
   }, {})
+
+const deriveBasePriceVariants = (
+  existingVariants?: PlatformMenuPriceVariantRecord[] | null,
+  sources?: Array<{ platformCode: string; platformMenuPriceVariants?: PlatformMenuPriceVariantRecord[] }>
+) => {
+  if (existingVariants?.length) {
+    return existingVariants
+  }
+
+  const orderedSources = [...(sources ?? [])].sort(
+    (left, right) =>
+      preferredPlatformOrder.indexOf(left.platformCode as (typeof preferredPlatformOrder)[number]) -
+      preferredPlatformOrder.indexOf(right.platformCode as (typeof preferredPlatformOrder)[number])
+  )
+
+  return (
+    orderedSources.find((source) => (source.platformMenuPriceVariants?.length ?? 0) > 1)
+      ?.platformMenuPriceVariants
+    ?? orderedSources.find((source) => (source.platformMenuPriceVariants?.length ?? 0) > 0)
+      ?.platformMenuPriceVariants
+    ?? null
+  )
+}
 
 const buildMenuRows = (
   menus: MenuRow[],
@@ -75,10 +99,8 @@ const buildMenuRows = (
     new Map<string, MenuSourceOptionGroupInfo[]>()
   )
 
-  return menus.map((menu) => ({
-    ...menu,
-    isManaged: menu.isManaged ?? 1,
-    sources: mappings
+  return menus.map((menu) => {
+    const sources = mappings
       .filter((mapping) => mapping.menuId === menu.menuId)
       .map((mapping) => {
         const platformMenu = platformMenusByKey.get(`${mapping.platformCode}:${mapping.platformMenuId}`)
@@ -109,7 +131,14 @@ const buildMenuRows = (
               ) ?? []
         }
       })
-  }))
+
+    return {
+      ...menu,
+      basePriceVariants: deriveBasePriceVariants(menu.basePriceVariants, sources),
+      isManaged: menu.isManaged ?? 1,
+      sources
+    }
+  })
 }
 
 const deriveCategoryName = (menu: MenuRow) => {
@@ -217,6 +246,7 @@ export const MenuPage = () => {
 
         const shouldMarkDirty = Object.prototype.hasOwnProperty.call(patch, 'baseName')
           || Object.prototype.hasOwnProperty.call(patch, 'basePrice')
+          || Object.prototype.hasOwnProperty.call(patch, 'basePriceVariants')
         const nextRecord = {
           ...menu,
           ...patch,

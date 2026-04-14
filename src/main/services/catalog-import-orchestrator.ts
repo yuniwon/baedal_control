@@ -492,6 +492,7 @@ export class CatalogImportOrchestrator {
           menuId,
           baseName: platformMenu.platformMenuName,
           basePrice: platformMenu.currentPrice ?? 0,
+          basePriceVariants: platformMenu.platformMenuPriceVariants ?? null,
           isDirty: 0,
           isManaged: 1
         }

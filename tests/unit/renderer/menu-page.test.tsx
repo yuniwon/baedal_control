@@ -13,7 +13,37 @@ const {
     { menuId: 'm1', baseName: '콤비네이션', basePrice: 22900, isDirty: 0, isManaged: 1 },
     { menuId: 'm2', baseName: '핫소스', basePrice: 200, isDirty: 0, isManaged: 1 },
     { menuId: 'm3', baseName: '새 메뉴', basePrice: 0, isDirty: 1, isManaged: 1 },
-    { menuId: 'm4', baseName: '테스트 메뉴', basePrice: 10000, isDirty: 0, isManaged: 1 }
+    {
+      menuId: 'm4',
+      baseName: '테스트 메뉴',
+      basePrice: 10000,
+      isDirty: 0,
+      isManaged: 1,
+      basePriceVariants: [
+        {
+          variantLabel: '기본',
+          channels: [
+            {
+              channelCode: 'delivery',
+              channelLabel: '배달',
+              amount: 10000,
+              amountText: '10,000원'
+            }
+          ]
+        },
+        {
+          variantLabel: '프리미엄',
+          channels: [
+            {
+              channelCode: 'delivery',
+              channelLabel: '배달',
+              amount: 12000,
+              amountText: '12,000원'
+            }
+          ]
+        }
+      ]
+    }
   ]),
   listMappings: vi.fn().mockResolvedValue([
     {
@@ -260,6 +290,48 @@ describe('MenuPage', () => {
           menuId: 'm1',
           baseName: '직화불고기',
           basePrice: 22900
+        })
+      )
+    })
+  })
+
+  it('saves edited multi-price variants to the local store', async () => {
+    render(<MenuPage />)
+
+    fireEvent.change(await screen.findByLabelText('m4-price-1-delivery'), {
+      target: { value: '12500' }
+    })
+
+    await waitFor(() => {
+      expect(saveMenu).toHaveBeenCalledWith(
+        expect.objectContaining({
+          menuId: 'm4',
+          isDirty: 1,
+          basePrice: 10000,
+          basePriceVariants: [
+            {
+              variantLabel: '기본',
+              channels: [
+                {
+                  channelCode: 'delivery',
+                  channelLabel: '배달',
+                  amount: 10000,
+                  amountText: '10,000원'
+                }
+              ]
+            },
+            {
+              variantLabel: '프리미엄',
+              channels: [
+                {
+                  channelCode: 'delivery',
+                  channelLabel: '배달',
+                  amount: 12500,
+                  amountText: '12,500원'
+                }
+              ]
+            }
+          ]
         })
       )
     })

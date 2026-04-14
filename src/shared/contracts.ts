@@ -59,6 +59,7 @@ export interface MenuRecord {
   menuId: string
   baseName: string
   basePrice: number
+  basePriceVariants?: PlatformMenuPriceVariantRecord[] | null
   isDirty: number
   isManaged?: number
   createdAt?: string

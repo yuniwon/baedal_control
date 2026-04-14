@@ -6,6 +6,7 @@ export const migrate = (db: DatabaseConnection) => {
       menu_id text primary key,
       base_name text not null,
       base_price integer not null,
+      base_price_variants_json text,
       is_dirty integer not null default 0,
       is_managed integer not null default 1,
       created_at text not null default current_timestamp,
@@ -149,6 +150,10 @@ export const migrate = (db: DatabaseConnection) => {
 
   if (!menuColumns.has('is_managed')) {
     db.exec('alter table menus add column is_managed integer not null default 1')
+  }
+
+  if (!menuColumns.has('base_price_variants_json')) {
+    db.exec('alter table menus add column base_price_variants_json text')
   }
 
   const platformMenuColumns = new Set(

@@ -14,6 +14,7 @@
   - 땡겨요: 메뉴 44개 import 완료
 - 옵션 관리 화면은 실제 옵션 항목명/가격/연결 메뉴를 기준으로 동작한다.
 - 메뉴/매핑에는 `platformMenuPriceVariants`가 구조적으로 저장된다.
+- 기준 메뉴도 `basePriceVariants`를 저장할 수 있고, 메뉴 관리에서 다중 가격 초안을 직접 편집할 수 있다.
 - 원본 누락 상태는 `missing_suspected -> absent_confirmed -> resurfaced` 흐름으로 관리된다.
 
 ## 2. 이번 커밋 직전 검증 결과
@@ -90,8 +91,8 @@ C:\Users\WON2\AppData\Roaming\delivery-menu-sync\credentials.json
 ## 6. 다음 우선순위
 
 1. 땡겨요 다중 가격 메뉴 편집 모델 설계
-   - variant 행 단위 편집 구조
-   - 가격 채널별 부분 수정 payload 설계
+   - 로컬 `basePriceVariants`를 실제 반영 payload로 연결
+   - variant 행 / 채널별 부분 수정 payload 설계
 2. 배민 안전한 실저장 테스트 전략 확정
    - 숨김 테스트 메뉴 확보 또는 생성 후 비노출 정리 루틴 설계
 3. 옵션 편집/반영 모델 설계
