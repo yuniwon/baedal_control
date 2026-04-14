@@ -26,12 +26,7 @@ import type {
   SyncRunItemRecord,
   SyncRunRecord
 } from '../../shared/contracts'
-import {
-  buildPlatformMenuPriceSummary
-} from '../../shared/platform-menu-price-summary'
-import {
-  comparePlatformMenuPriceVariants
-} from '../../shared/platform-menu-price-variants'
+import { summarizeSyncPreviewItemChange } from '../../shared/sync-preview-item-change'
 import { describeSyncFailure } from '../../shared/sync-error-catalog'
 import { buildLogicalOptionGroups } from './logical-option-group-service'
 
@@ -228,35 +223,10 @@ const buildExecutableActionCopy = (
   item: SyncPreviewItem,
   menuName: string
 ) => {
-  const nameChanged = item.previousName !== item.nextName
-  const variantComparison = comparePlatformMenuPriceVariants(
-    item.previousPriceVariants,
-    item.nextPriceVariants
-  )
-  const previousPriceSummary = buildPlatformMenuPriceSummary(
-    item.previousPriceVariants,
-    item.previousPrice
-  )
-  const nextPriceSummary = buildPlatformMenuPriceSummary(
-    item.nextPriceVariants,
-    item.nextPrice
-  )
-  const priceChanged = previousPriceSummary !== nextPriceSummary
-  const changeLabels: string[] = []
+  const summary = summarizeSyncPreviewItemChange(item)
   const evidence = [`기준 메뉴: ${menuName}`]
 
-  if (nameChanged) {
-    changeLabels.push('이름')
-    evidence.push(`이름: ${item.previousName} -> ${item.nextName}`)
-  }
-
-  if (priceChanged) {
-    const priceLabel = variantComparison.hasVariantData ? '가격 구조' : '가격'
-    changeLabels.push(priceLabel)
-    evidence.push(
-      `${priceLabel}: ${previousPriceSummary ?? '가격 미확인'} -> ${nextPriceSummary ?? '가격 미확인'}`
-    )
-  }
+  evidence.push(...summary.detailLines)
 
   if (item.executionMode === 'managed_browser') {
     evidence.push('반영 방식: 현재 전용 크롬 탭')
@@ -267,8 +237,8 @@ const buildExecutableActionCopy = (
   }
 
   const detail =
-    changeLabels.length > 0
-      ? `${menuName} ${changeLabels.join(', ')} 변경을 지금 바로 반영할 수 있습니다.`
+    summary.changeLabels.length > 0
+      ? `${menuName} ${summary.changeLabels.join(', ')} 변경을 지금 바로 반영할 수 있습니다.`
       : `${menuName} 변경사항을 지금 바로 반영할 수 있습니다.`
 
   return {

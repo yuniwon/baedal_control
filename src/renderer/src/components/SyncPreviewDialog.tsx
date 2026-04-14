@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SyncPreviewItem } from '../../../shared/contracts'
 import { serializePlatformMenuPriceVariants } from '../../../shared/platform-menu-price-variants'
+import { summarizeSyncPreviewItemChange } from '../../../shared/sync-preview-item-change'
 import { getPlatformLabel } from '../lib/menu-source-labels'
 
 const getPreviewItemKey = (item: SyncPreviewItem) =>
@@ -16,9 +17,6 @@ const getPreviewItemKey = (item: SyncPreviewItem) =>
     nextPriceVariants: serializePlatformMenuPriceVariants(item.nextPriceVariants),
     executionMode: item.executionMode ?? null
   })
-
-const formatPrice = (value?: number | null) =>
-  typeof value === 'number' ? `${value.toLocaleString('ko-KR')}원` : '-'
 
 export const SyncPreviewDialog = ({
   items,
@@ -79,6 +77,7 @@ export const SyncPreviewDialog = ({
       <div className="preview-list">
         {items.map((item) => {
           const checked = selectedKeys.has(getPreviewItemKey(item))
+          const changeSummary = summarizeSyncPreviewItemChange(item)
 
           return (
             <label key={`${item.platformCode}:${item.platformMenuId}`} className="preview-row">
@@ -90,16 +89,15 @@ export const SyncPreviewDialog = ({
               />
               <div className="preview-copy">
                 <strong>{item.nextName}</strong>
-                <span>{`${getPlatformLabel(item.platformCode)} · ${item.previousName !== item.nextName ? `${item.previousName} -> ${item.nextName}` : '이름 유지'}`}</span>
+                <span>{`${getPlatformLabel(item.platformCode)} · ${changeSummary.headline}`}</span>
+                {changeSummary.detailLines.map((line) => (
+                  <span key={`${item.platformCode}:${item.platformMenuId}:${line}`}>{line}</span>
+                ))}
                 {item.executionMode === 'managed_browser' ? <span>현재 탭 반영</span> : null}
               </div>
               <div className="preview-price">
-                <strong>{formatPrice(item.nextPrice)}</strong>
-                <span>
-                  {item.previousPrice != null && item.previousPrice !== item.nextPrice
-                    ? `${formatPrice(item.previousPrice)} -> ${formatPrice(item.nextPrice)}`
-                    : '가격 유지'}
-                </span>
+                <strong>{changeSummary.targetSummary ?? '-'}</strong>
+                <span>{changeSummary.headline}</span>
               </div>
             </label>
           )
