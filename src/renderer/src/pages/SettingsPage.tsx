@@ -9,6 +9,7 @@ import type {
 } from '../../../shared/contracts'
 import { appApi } from '../lib/api'
 import {
+  buildCompactPlatformImportRunDescription,
   buildPlatformImportRunDescription,
   buildPlatformImportRunTitle,
   formatPlatformImportError,
@@ -328,7 +329,7 @@ export const SettingsPage = () => {
     <section className="page">
       <header className="page-header">
         <h1>가져오기</h1>
-        <p>계정을 저장하고, 저장된 계정으로 각 플랫폼 메뉴와 옵션을 다시 읽어옵니다.</p>
+        <p>계정을 저장한 뒤 메뉴와 옵션을 다시 읽어옵니다. 자세한 화면 기록은 필요할 때만 펼쳐 확인합니다.</p>
       </header>
 
       <div className="credential-list">
@@ -358,7 +359,11 @@ export const SettingsPage = () => {
                       )
                     }
                   >
-                    {isSubmitting[platform] ? '저장 중' : '저장'}
+                    {isSubmitting[platform]
+                      ? '저장 중'
+                      : status[platform]
+                        ? '저장'
+                        : '저장하고 읽기'}
                   </button>
                   {status[platform] ? (
                     <button
@@ -373,7 +378,7 @@ export const SettingsPage = () => {
                         )
                       }
                     >
-                      {isSubmitting[platform] ? '가져오는 중' : '다시 가져오기'}
+                      {isSubmitting[platform] ? '읽는 중' : '다시 읽기'}
                     </button>
                   ) : null}
                 </div>
@@ -404,7 +409,10 @@ export const SettingsPage = () => {
               {latestImports[platform] ? (
                 <div className="credential-import-summary">
                   <div className="credential-import-summary-head">
-                    <strong>{buildPlatformImportRunTitle(latestImports[platform])}</strong>
+                    <div className="credential-import-summary-copy">
+                      <strong>{buildPlatformImportRunTitle(latestImports[platform])}</strong>
+                      <span>{buildCompactPlatformImportRunDescription(latestImports[platform])}</span>
+                    </div>
                     <div className="credential-import-summary-actions">
                       <span className={`status-pill ${getPlatformImportTone(latestImports[platform])}`}>
                         {getPlatformImportStatusLabel(latestImports[platform])}
@@ -419,7 +427,7 @@ export const SettingsPage = () => {
                         }
                         type="button"
                       >
-                        {expandedImportSummaries[platform] ? '최근 가져오기 접기' : '최근 가져오기 보기'}
+                        {expandedImportSummaries[platform] ? '최근 결과 접기' : '최근 결과 보기'}
                       </button>
                     </div>
                   </div>
@@ -440,15 +448,15 @@ export const SettingsPage = () => {
                   }
                   type="button"
                 >
-                  {expandedInspections[platform] ? '수집 검사 접기' : '수집 검사 보기'}
+                  {expandedInspections[platform] ? '읽은 화면 접기' : '읽은 화면 보기'}
                 </button>
               ) : null}
             </div>
             {inspections[platform]?.steps.length && expandedInspections[platform] ? (
               <section className="inspection-panel">
-                <h2>수집 검사</h2>
+                <h2>읽은 화면</h2>
                 <p className="credential-message">
-                  최근 수집에서 어떤 화면을 거쳤는지와 실제로 읽은 필드만 확인할 수 있습니다.
+                  최근 가져오기에서 어떤 화면을 읽었는지와 실제로 쓴 값만 확인할 수 있습니다.
                 </p>
                 <div className="inspection-list">
                   {inspections[platform]?.steps.map((step, index) => (

@@ -95,8 +95,8 @@ export const SyncPreviewDialog = ({
   return (
     <section className="panel">
       <div className="page-header">
-        <h2>변경 예정</h2>
-        <p>선택한 메뉴만 반영합니다. 현재 판매 중인 메뉴를 다시 확인한 뒤 실행하세요.</p>
+        <h2>반영 확인</h2>
+        <p>선택한 메뉴만 반영합니다. 무엇이 바뀌는지와 반영값만 먼저 확인하세요.</p>
       </div>
       <div className="inline-actions preview-actions">
         <span>{`전체 ${items.length}건 · 선택 ${selectedItems.length}건`}</span>
@@ -148,26 +148,29 @@ export const SyncPreviewDialog = ({
                 <label className="preview-main" htmlFor={inputId}>
                   <strong>{item.nextName}</strong>
                   <span>{`${getPlatformLabel(item.platformCode)} · ${changeSummary.headline}`}</span>
+                  {changeSummary.targetSummary ? (
+                    <span className="preview-target">{`반영값 ${targetSummary}`}</span>
+                  ) : null}
                   {visibleDetailLines.map((line) => (
                     <span key={`${item.platformCode}:${item.platformMenuId}:${line}`}>{line}</span>
                   ))}
-                  {item.executionMode === 'managed_browser' ? <span>현재 탭 반영</span> : null}
                 </label>
-                {isCollapsible ? (
-                  <button
-                    aria-expanded={expanded}
-                    className="secondary-button preview-detail-toggle"
-                    onClick={() => toggleExpanded(key)}
-                    type="button"
-                  >
-                    {expanded ? '접기' : '상세 보기'}
-                  </button>
-                ) : null}
+                <div className="preview-row-actions">
+                  {item.executionMode === 'managed_browser' ? (
+                    <span className="status-pill pending preview-mode-pill">현재 탭</span>
+                  ) : null}
+                  {isCollapsible ? (
+                    <button
+                      aria-expanded={expanded}
+                      className="secondary-button preview-detail-toggle"
+                      onClick={() => toggleExpanded(key)}
+                      type="button"
+                    >
+                      {expanded ? '접기' : '상세 보기'}
+                    </button>
+                  ) : null}
+                </div>
               </div>
-              <label className="preview-price" htmlFor={inputId}>
-                <strong>{targetSummary}</strong>
-                <span>{changeSummary.headline}</span>
-              </label>
             </article>
           )
         })}
@@ -179,7 +182,7 @@ export const SyncPreviewDialog = ({
           onClick={() => onConfirm(selectedItems)}
           type="button"
         >
-          {`선택 ${selectedItems.length}건 실행`}
+          {`선택 ${selectedItems.length}건 반영`}
         </button>
       </div>
     </section>

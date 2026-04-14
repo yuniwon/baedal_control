@@ -996,7 +996,7 @@
 
 .preview-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(180px, 240px);
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 14px;
   align-items: start;
   border: 1px solid #eaecf0;
@@ -1010,48 +1010,49 @@
   margin: 0;
 }
 
-.preview-copy,
-.preview-price {
+.preview-copy {
   display: grid;
   gap: 6px;
   min-width: 0;
 }
 
-.preview-main,
-.preview-price {
+.preview-main {
   display: grid;
   gap: 4px;
   cursor: pointer;
 }
 
 .preview-copy strong,
-.preview-copy span,
-.preview-price strong,
-.preview-price span {
+.preview-copy span {
   overflow-wrap: anywhere;
 }
 
-.preview-copy strong,
-.preview-price strong {
+.preview-copy strong {
   color: #101828;
   font-size: 14px;
 }
 
-.preview-copy span,
-.preview-price span {
+.preview-copy span {
   color: #475467;
   font-size: 13px;
+}
+
+.preview-target {
+  color: #344054;
+  font-weight: 600;
+}
+
+.preview-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
 .preview-detail-toggle {
   width: fit-content;
   padding: 7px 10px;
   font-size: 12px;
-}
-
-.preview-price {
-  justify-items: end;
-  text-align: right;
 }
 
 .credential-row {
@@ -1158,6 +1159,12 @@
   gap: 12px;
 }
 
+.credential-import-summary-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
 .credential-import-summary-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1169,6 +1176,12 @@
 .credential-import-summary strong {
   font-size: 14px;
   color: #101828;
+}
+
+.credential-import-summary-copy span {
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .credential-import-summary p {
@@ -1615,8 +1628,4 @@
     border-left: 0;
   }
 
-  .preview-price {
-    justify-items: start;
-    text-align: left;
-  }
 }

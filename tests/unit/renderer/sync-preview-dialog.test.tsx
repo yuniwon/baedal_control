@@ -81,9 +81,11 @@ describe('SyncPreviewDialog', () => {
       />
     )
 
+    expect(screen.getByRole('heading', { name: '반영 확인' })).toBeTruthy()
     expect(screen.getByText('배민 · 이름 변경')).toBeTruthy()
+    expect(screen.getByText('반영값 23,900원')).toBeTruthy()
     expect(screen.getByText('이름: 콤비네이션 -> 직화불고기')).toBeTruthy()
-    expect(screen.getAllByText('가격 구조 변경').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/가격 구조 변경/).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: '상세 보기' })).toBeTruthy()
     expect(
       screen.queryByText(
@@ -97,10 +99,10 @@ describe('SyncPreviewDialog', () => {
       )
     ).toBeTruthy()
     expect(screen.getByRole('button', { name: '접기' })).toBeTruthy()
-    expect(screen.getByText('현재 탭 반영')).toBeTruthy()
+    expect(screen.getByText('현재 탭')).toBeTruthy()
     expect(screen.queryByText('가격 유지')).toBeNull()
     fireEvent.click(screen.getByLabelText('사이다 선택'))
-    fireEvent.click(screen.getByRole('button', { name: '선택 1건 실행' }))
+    fireEvent.click(screen.getByRole('button', { name: '선택 1건 반영' }))
 
     expect(onConfirm).toHaveBeenCalledTimes(1)
     expect(onConfirm).toHaveBeenCalledWith([

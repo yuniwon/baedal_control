@@ -264,9 +264,10 @@ describe('SettingsPage', () => {
     render(<SettingsPage />)
 
     expect(await screen.findByText('마지막 가져오기 2026. 04. 13. 09:31')).toBeTruthy()
+    expect(screen.getByText('메뉴 4개 확인 · 기존 연결 4개 유지')).toBeTruthy()
     expect(screen.queryByText('메뉴 4개 확인 · 새 메뉴 0개 · 새 연결 0개 · 기존 연결 4개')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: '최근 가져오기 보기' }))
+    fireEvent.click(screen.getByRole('button', { name: '최근 결과 보기' }))
 
     expect(screen.getByText('메뉴 4개 확인 · 새 메뉴 0개 · 새 연결 0개 · 기존 연결 4개')).toBeTruthy()
   })
@@ -302,7 +303,13 @@ describe('SettingsPage', () => {
       )
     ).toBeNull()
 
-    fireEvent.click(await screen.findByRole('button', { name: '최근 가져오기 보기' }))
+    expect(
+      await screen.findByText(
+        '메뉴 35개 확인 · 옵션 그룹 26개 확인 · 새 메뉴 35개 · 새 연결 35개 · 중복 7건 정리 · 현재 세션 읽기'
+      )
+    ).toBeTruthy()
+
+    fireEvent.click(await screen.findByRole('button', { name: '최근 결과 보기' }))
 
     expect(
       screen.getByText(
@@ -329,14 +336,23 @@ describe('SettingsPage', () => {
     render(<SettingsPage />)
 
     expect(await screen.findByText('일부 실패')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '최근 가져오기 보기' }))
-    expect(screen.getByText('메뉴 목록을 끝까지 읽지 못했습니다. 페이지를 다시 가져오거나 수집 검사를 확인해 주세요.')).toBeTruthy()
+    expect(
+      screen.getAllByText(
+        '메뉴 목록을 끝까지 읽지 못했습니다. 페이지를 다시 가져오거나 수집 검사를 확인해 주세요.'
+      )
+    ).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: '최근 결과 보기' }))
+    expect(
+      screen.getAllByText(
+        '메뉴 목록을 끝까지 읽지 못했습니다. 페이지를 다시 가져오거나 수집 검사를 확인해 주세요.'
+      ).length
+    ).toBeGreaterThan(1)
   })
 
   it('allows re-importing menus without overwriting saved credentials', async () => {
     render(<SettingsPage />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '다시 가져오기' }))
+    fireEvent.click(await screen.findByRole('button', { name: '다시 읽기' }))
 
     await waitFor(() => {
       expect(importPlatformMenus).toHaveBeenCalledWith({ platformCode: 'baemin' })
@@ -351,7 +367,7 @@ describe('SettingsPage', () => {
     const saveButtons = await screen.findAllByRole('button', { name: '저장' })
     fireEvent.click(saveButtons[0])
 
-    expect(await screen.findByText('수집 검사')).toBeTruthy()
+    expect(await screen.findByText('읽은 화면')).toBeTruthy()
     expect((await screen.findAllByText('메뉴 페이지')).length).toBeGreaterThan(0)
     expect(screen.getByText('https://self.baemin.com/menu')).toBeTruthy()
     expect(screen.getByText('첫 번째 메뉴 11,000원')).toBeTruthy()
@@ -365,11 +381,11 @@ describe('SettingsPage', () => {
     const saveButtons = await screen.findAllByRole('button', { name: '저장' })
     fireEvent.click(saveButtons[0])
 
-    expect(await screen.findByRole('button', { name: '수집 검사 접기' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '수집 검사 접기' }))
+    expect(await screen.findByRole('button', { name: '읽은 화면 접기' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '읽은 화면 접기' }))
 
-    expect(screen.getByRole('button', { name: '수집 검사 보기' })).toBeTruthy()
-    expect(screen.queryByText('수집 검사')).toBeNull()
+    expect(screen.getByRole('button', { name: '읽은 화면 보기' })).toBeTruthy()
+    expect(screen.queryByText('읽은 화면')).toBeNull()
   })
 
   it('shows browser inspection instructions and the latest captured merchant snapshot', async () => {
