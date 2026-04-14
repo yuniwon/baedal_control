@@ -14,7 +14,7 @@ vi.mock('../../../src/renderer/src/pages/OptionPage', () => ({
 }))
 
 vi.mock('../../../src/renderer/src/pages/MappingPage', () => ({
-  MappingPage: () => <h1>매핑 검토</h1>
+  MappingPage: () => <h1>연결</h1>
 }))
 
 vi.mock('../../../src/renderer/src/pages/SettingsPage', () => ({
@@ -22,7 +22,7 @@ vi.mock('../../../src/renderer/src/pages/SettingsPage', () => ({
 }))
 
 vi.mock('../../../src/renderer/src/pages/HistoryPage', () => ({
-  HistoryPage: () => <h1>실행 기록</h1>
+  HistoryPage: () => <h1>기록</h1>
 }))
 
 import App from '../../../src/renderer/src/App'
@@ -35,11 +35,11 @@ describe('App navigation', () => {
     expect(screen.getByRole('button', { name: '메뉴' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '옵션' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '가져오기' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '매핑 검토' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '연결' })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: '고급 기능 보기' }))
-    fireEvent.click(await screen.findByRole('button', { name: '매핑 검토' }))
+    fireEvent.click(await screen.findByRole('button', { name: '연결' }))
 
-    expect(await screen.findByRole('heading', { name: '매핑 검토' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: '연결' })).toBeTruthy()
   })
 })

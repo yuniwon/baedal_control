@@ -71,39 +71,46 @@ const summarizeItem = (item: SyncRunItemRecord) => {
   }
 }
 
-export const HistoryPage = ({ initialRuns = [] as HistoryRun[] }) => {
+export const HistoryPage = ({
+  initialRuns = [] as HistoryRun[],
+  initialImportRuns = [] as PlatformImportRunRecord[]
+}: {
+  initialRuns?: HistoryRun[]
+  initialImportRuns?: PlatformImportRunRecord[]
+}) => {
   const [runs, setRuns] = useState<HistoryRun[]>(initialRuns)
-  const [importRuns, setImportRuns] = useState<PlatformImportRunRecord[]>([])
+  const [importRuns, setImportRuns] = useState<PlatformImportRunRecord[]>(initialImportRuns)
   const [expandedImportRuns, setExpandedImportRuns] = useState<Record<string, boolean>>({})
   const [expandedSyncRuns, setExpandedSyncRuns] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
-    if (initialRuns.length > 0) {
+    let cancelled = false
+
+    if (initialRuns.length === 0) {
+      void appApi.syncRuns.list().then((value) => {
+        if (!cancelled && Array.isArray(value)) {
+          setRuns(value as HistoryRun[])
+        }
+      })
+    }
+
+    if (initialImportRuns.length === 0) {
       void appApi.platformImportRuns.list().then((value) => {
-        if (Array.isArray(value)) {
+        if (!cancelled && Array.isArray(value)) {
           setImportRuns(value as PlatformImportRunRecord[])
         }
       })
-      return
     }
 
-    void appApi.syncRuns.list().then((value) => {
-      if (Array.isArray(value)) {
-        setRuns(value as HistoryRun[])
-      }
-    })
-
-    void appApi.platformImportRuns.list().then((value) => {
-      if (Array.isArray(value)) {
-        setImportRuns(value as PlatformImportRunRecord[])
-      }
-    })
-  }, [initialRuns])
+    return () => {
+      cancelled = true
+    }
+  }, [initialImportRuns, initialRuns])
 
   return (
     <section className="page">
       <header className="page-header">
-        <h1>실행 기록</h1>
+        <h1>기록</h1>
         <p>반영 시간과 플랫폼별 결과를 나중에 다시 확인할 수 있습니다.</p>
       </header>
 

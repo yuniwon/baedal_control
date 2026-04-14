@@ -300,7 +300,7 @@ describe('MappingPage', () => {
 
     render(<MappingPage />)
 
-    expect(await screen.findByRole('heading', { name: '매핑' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: '연결' })).toBeTruthy()
     expect(screen.queryByText('[음식배달] 꾸버스피자 봉담점')).toBeNull()
     expect(screen.queryByText('기본 · 배달 22,900원')).toBeNull()
 

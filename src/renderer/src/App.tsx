@@ -23,9 +23,9 @@ const getTabLabel = (tab: AppTab) => {
     case 'imports':
       return '가져오기'
     case 'mapping':
-      return '매핑 검토'
+      return '연결'
     case 'history':
-      return '실행 기록'
+      return '기록'
   }
 }
 

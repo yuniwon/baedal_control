@@ -276,8 +276,8 @@ export const MappingPage = () => {
   return (
     <section className="page">
       <header className="page-header">
-        <h1>매핑</h1>
-        <p>기준 메뉴와 현재 연결 상태를 먼저 보고, 후보 상세는 필요할 때만 펼쳐 비교합니다.</p>
+        <h1>연결</h1>
+        <p>기준 메뉴를 각 플랫폼 메뉴에 연결합니다. 원본 상세는 필요할 때만 펼쳐 비교합니다.</p>
       </header>
 
       <section className="panel panel-flat">

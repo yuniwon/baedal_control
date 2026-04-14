@@ -71,18 +71,54 @@ import { HistoryPage } from '../../../src/renderer/src/pages/HistoryPage'
 
 describe('HistoryPage', () => {
   it('shows the latest run summary from the local history store in Korean copy', async () => {
-    render(<HistoryPage />)
+    render(
+      <HistoryPage
+        initialRuns={[
+          {
+            syncRunId: 'r1',
+            startedAt: '2026-04-12T10:00:00Z',
+            triggerType: 'manual',
+            resultSummary: '3 succeeded, 0 failed',
+            items: [
+              {
+                syncRunItemId: 'i1',
+                syncRunId: 'r1',
+                platformCode: 'baemin',
+                menuId: 'm1',
+                fieldType: 'menu',
+                beforeValue: '포테이토골드',
+                afterValue: '{"name":"포테이토골드피자","price":21000}',
+                status: 'failed',
+                errorCode: 'apply_failed',
+                errorMessage:
+                  "baemin_menu_name_apply_failed:EXTERNAL_API_ERROR_40045:금칙어 '!'은 입력할 수 없습니다."
+              }
+            ]
+          }
+        ]}
+        initialImportRuns={[
+          {
+            importRunId: 'import-1',
+            platformCode: 'baemin',
+            startedAt: '2026-04-13T00:35:00Z',
+            finishedAt: '2026-04-13T00:36:00Z',
+            status: 'partial_failed',
+            menuFetchCompleted: 1,
+            optionFetchCompleted: 0,
+            summaryJson: null,
+            errorMessage: 'baemin_menu_page_collection_incomplete:2/3'
+          }
+        ]}
+      />
+    )
 
-    await waitFor(() => {
-      expect(screen.getByText('성공 3건, 실패 0건')).toBeTruthy()
-    })
-
+    expect(screen.getByText('성공 3건, 실패 0건')).toBeTruthy()
+    expect(screen.getByText('배민 · 일부 실패')).toBeTruthy()
     expect(screen.getByText('2026. 04. 12. 19:00')).toBeTruthy()
     expect(screen.getByText('메뉴 1건')).toBeTruthy()
     expect(screen.queryByText("배민 · 포테이토골드 -> 포테이토골드피자 · 21,000원")).toBeNull()
     expect(screen.queryByText("금칙어 '!'은 입력할 수 없습니다.")).toBeNull()
     expect(screen.getByText('가져오기 기록')).toBeTruthy()
-    expect(screen.getByText('배민 · 일부 실패')).toBeTruthy()
     expect(
       screen.queryByText('메뉴 목록을 끝까지 읽지 못했습니다. 페이지를 다시 가져오거나 수집 검사를 확인해 주세요.')
     ).toBeNull()
