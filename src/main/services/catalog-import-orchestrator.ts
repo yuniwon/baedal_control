@@ -35,6 +35,7 @@ interface MappingRepositoryLike {
 
 interface PlatformMenuRepositoryLike {
   listAll(): PlatformMenuCatalogRecord[]
+  upsert(record: PlatformMenuCatalogRecord): void
   upsertSeenBatch(platformCode: PlatformCode, importRunId: string, records: PlatformMenuCatalogRecord[]): void
   applyPresenceUpdates(updates: Array<{
     platformCode: PlatformCode
@@ -155,21 +156,27 @@ export class CatalogImportOrchestrator {
       const previousMenus = this.deps.platformMenuRepository
         .listAll()
         .filter((record) => record.platformCode === platformCode)
+      const menus = this.deps.menuRepository.list()
+      const mappings = this.deps.mappingRepository.listAll()
+      const legacySeedMenus = this.buildLegacyPlatformMenuSeeds(
+        platformCode,
+        previousMenus,
+        mappings
+      )
+      const previousMenusForDiff = [...previousMenus, ...legacySeedMenus]
       const previousOptionGroups = this.deps.platformOptionGroupRepository
         ?.listAll()
         .filter((record) => record.platformCode === platformCode) ?? []
       const currentOptionGroupRows = optionFetchCompleted === 1
         ? this.buildOptionGroupRows(normalizedOptionGroups)
         : []
-      const menus = this.deps.menuRepository.list()
-      const mappings = this.deps.mappingRepository.listAll()
       const menuPlan = this.planMenuImports(platformCode, menus, mappings, fetchedMenus)
       const menuDiff = diffCatalogRows({
         platformCode,
         importRunId,
         entityType: 'menu',
         comparableChangeType: 'price_changed',
-        previousRows: previousMenus.map((record) => ({
+        previousRows: previousMenusForDiff.map((record) => ({
           key: record.platformMenuId,
           name: record.platformMenuName,
           comparable: {
@@ -209,6 +216,9 @@ export class CatalogImportOrchestrator {
         : { changes: [], presenceUpdates: [] }
 
       withSavepoint(this.deps.db, () => {
+        for (const legacySeedMenu of legacySeedMenus) {
+          this.deps.platformMenuRepository.upsert(legacySeedMenu)
+        }
         this.persistCatalogState(platformCode, importRunId, fetchedMenus, normalizedOptionGroups)
         this.persistLocalMenuState(menuPlan)
         this.deps.platformMenuRepository.applyPresenceUpdates(
@@ -561,6 +571,45 @@ export class CatalogImportOrchestrator {
     if (optionGroups.length > 0) {
       this.deps.platformOptionGroupRepository?.upsertSeenBatch(platformCode, importRunId, optionGroups)
     }
+  }
+
+  private buildLegacyPlatformMenuSeeds(
+    platformCode: PlatformCode,
+    previousMenus: PlatformMenuCatalogRecord[],
+    mappings: PlatformMenuMappingRecord[]
+  ) {
+    const existingMenuIds = new Set(previousMenus.map((record) => record.platformMenuId))
+    const legacySeeds = new Map<string, PlatformMenuCatalogRecord>()
+
+    for (const mapping of mappings) {
+      if (mapping.platformCode !== platformCode || mapping.mappingStatus === 'source_absent') {
+        continue
+      }
+
+      if (existingMenuIds.has(mapping.platformMenuId) || legacySeeds.has(mapping.platformMenuId)) {
+        continue
+      }
+
+      legacySeeds.set(mapping.platformMenuId, {
+        platformCode,
+        platformMenuId: mapping.platformMenuId,
+        platformMenuName: mapping.platformMenuName,
+        platformMenuCurrentPrice: mapping.platformMenuCurrentPrice ?? null,
+        platformMenuPriceCount: mapping.platformMenuPriceCount ?? null,
+        platformMenuGroupName: mapping.platformMenuGroupName ?? null,
+        platformMenuStatus: mapping.platformMenuStatus ?? null,
+        platformMenuPriceSummary: mapping.platformMenuPriceSummary ?? null,
+        platformMenuPriceVariants: mapping.platformMenuPriceVariants ?? null,
+        platformMenuBindingSummary: mapping.platformMenuBindingSummary ?? null,
+        platformMenuBindingStatus: mapping.platformMenuBindingStatus ?? null,
+        lastSeenImportId: null,
+        missingStreak: 0,
+        presenceStatus: 'present',
+        presenceChangedAt: null
+      })
+    }
+
+    return [...legacySeeds.values()]
   }
 
   private persistLocalMenuState(menuPlan: {

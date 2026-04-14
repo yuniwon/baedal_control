@@ -187,6 +187,106 @@ describe('CatalogImportOrchestrator', () => {
     ])
   })
 
+  it('seeds legacy active mappings without catalog rows so the first miss becomes missing_suspected', async () => {
+    menuRepository.upsert({
+      menuId: 'menu-legacy',
+      baseName: '숨김 테스트 피자',
+      basePrice: 19900,
+      isDirty: 0,
+      isManaged: 1
+    })
+    mappingRepository.upsert({
+      mappingId: 'menu-legacy:baemin',
+      menuId: 'menu-legacy',
+      platformCode: 'baemin',
+      platformMenuId: 'legacy-platform-1',
+      platformMenuName: '숨김 테스트 피자',
+      platformMenuGroupName: '예전 숨김 그룹',
+      platformMenuStatus: '숨김',
+      platformMenuPriceSummary: '배달 19,900원 · 픽업 19,900원',
+      matchedBy: 'manual',
+      isConfirmed: 1
+    })
+
+    adapter.fetchMenus.mockResolvedValue([])
+
+    const orchestrator = createOrchestrator()
+    await orchestrator.importPlatform('baemin')
+
+    expect(platformMenuRepository.listAll()).toEqual([
+      expect.objectContaining({
+        platformCode: 'baemin',
+        platformMenuId: 'legacy-platform-1',
+        platformMenuName: '숨김 테스트 피자',
+        platformMenuGroupName: '예전 숨김 그룹',
+        platformMenuStatus: '숨김',
+        missingStreak: 1,
+        presenceStatus: 'missing_suspected'
+      })
+    ])
+    expect(mappingRepository.listForMenu('menu-legacy')).toEqual([
+      expect.objectContaining({
+        mappingStatus: 'active'
+      })
+    ])
+    expect(platformImportChangeRepository.listLatest()).toEqual([
+      expect.objectContaining({
+        entityType: 'menu',
+        entityKey: 'legacy-platform-1',
+        changeType: 'missing_suspected',
+        entityName: '숨김 테스트 피자'
+      })
+    ])
+  })
+
+  it('promotes seeded legacy mappings to source_absent on the second consecutive miss', async () => {
+    menuRepository.upsert({
+      menuId: 'menu-legacy',
+      baseName: '숨김 테스트 피자',
+      basePrice: 19900,
+      isDirty: 0,
+      isManaged: 1
+    })
+    mappingRepository.upsert({
+      mappingId: 'menu-legacy:baemin',
+      menuId: 'menu-legacy',
+      platformCode: 'baemin',
+      platformMenuId: 'legacy-platform-1',
+      platformMenuName: '숨김 테스트 피자',
+      platformMenuGroupName: '예전 숨김 그룹',
+      platformMenuStatus: '숨김',
+      platformMenuPriceSummary: '배달 19,900원 · 픽업 19,900원',
+      matchedBy: 'manual',
+      isConfirmed: 1
+    })
+
+    adapter.fetchMenus.mockResolvedValue([])
+
+    const orchestrator = createOrchestrator()
+    await orchestrator.importPlatform('baemin')
+    await orchestrator.importPlatform('baemin')
+
+    expect(platformMenuRepository.listAll()).toEqual([
+      expect.objectContaining({
+        platformCode: 'baemin',
+        platformMenuId: 'legacy-platform-1',
+        missingStreak: 2,
+        presenceStatus: 'absent_confirmed'
+      })
+    ])
+    expect(mappingRepository.listForMenu('menu-legacy')).toEqual([
+      expect.objectContaining({
+        mappingStatus: 'source_absent'
+      })
+    ])
+    expect(menuRepository.list()).toEqual([
+      expect.objectContaining({
+        menuId: 'menu-legacy',
+        isManaged: 0
+      })
+    ])
+  })
+
   it('does not apply presence updates when option fetch fails partially', async () => {
     const fetchedMenus = [
       {
