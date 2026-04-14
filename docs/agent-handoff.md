@@ -25,7 +25,7 @@
 ## 2. 이번 커밋 직전 검증 결과
 
 - `npm test`
-  - 60개 파일, 254개 테스트 통과
+  - 62개 파일, 266개 테스트 통과
 - `npm run lint:types`
   - 통과
 - `npm run build`
@@ -54,6 +54,19 @@
   - 최신 실행 결과 `메뉴 47개 / 옵션 그룹 15개 / verified 47`
   - `숨김피자`는 최신 import에서 `판매중`으로 재분류됨
 - 이번 정리에서 수정한 핵심
+  - 읽기 전용 에이전트 운영 리포트 레이어 추가
+    - `agent-report-overview`
+    - `agent-report-review-queue`
+    - `agent-report-menu`
+    - `agent-report-options`
+    - `agent-report-platform`
+  - 새 리포트는 기존 repository, `buildSyncPreview`, `buildLogicalOptionGroups`, managed Chrome 세션 상태를 조합해 JSON 리포트로 출력
+  - 실제 운영 DB 기준 스모크 검증 완료
+    - overview: 관리 대상 49개 / 실행 가능 1건 / 검토 필요 1건
+    - review queue: 1건
+    - menu: `칠성사이다` 상세 리포트
+    - options: 배민 옵션 묶음 15개
+    - platform: 배민 메뉴 47개
   - `platform_menus`에 한 번도 저장되지 않은 legacy active 매핑도 import 결측 추적 대상에 포함되도록 보강
   - 첫 import에서 `missing_suspected`, 두 번째 import에서 `absent_confirmed + source_absent`로 승격되도록 테스트 추가
   - 배민 쓰기 실패 시 어댑터가 현재 페이지 스냅샷(`platform_page_snapshot`)을 에러에 부착하고, sync 엔진이 이를 실행 기록의 `failure_context_json`으로 저장하도록 보강
@@ -116,6 +129,25 @@ C:\Users\WON2\AppData\Roaming\delivery-menu-sync\delivery-menu-sync.db
 ```text
 C:\Users\WON2\AppData\Roaming\delivery-menu-sync\credentials.json
 ```
+
+### 에이전트 운영 리포트 실행
+
+```powershell
+npx electron out/main/index.js --task=agent-report-overview
+npx electron out/main/index.js --task=agent-report-review-queue --limit=5
+npx electron out/main/index.js --task=agent-report-menu --menuId=<menuId> --limit=5
+npx electron out/main/index.js --task=agent-report-options --platformCode=baemin --limit=5
+npx electron out/main/index.js --task=agent-report-platform --platformCode=baemin --limit=5
+```
+
+- 이 리포트들은 읽기 전용이다.
+- 목적은 에이전트가 DB 직접 조회 없이 현재 상태를 공식 인터페이스로 읽는 것이다.
+- 최근 실검증 기준
+  - `agent-report-overview`: 관리 대상 49개 / 실행 가능 1건 / 검토 필요 1건
+  - `agent-report-review-queue`: 현재 검토 큐 1건
+  - `agent-report-menu`: `칠성사이다` 상세 리포트 정상 출력
+  - `agent-report-options --platformCode=baemin`: 배민 옵션 묶음 15개
+  - `agent-report-platform --platformCode=baemin`: 배민 메뉴 47개, 최신 변경점과 최근 실패 정상 출력
 
 ## 4. 플랫폼별 현재 구현 범위
 

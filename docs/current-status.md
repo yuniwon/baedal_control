@@ -661,8 +661,46 @@
 - 현재 상태: `docs/current-status.md`
 - 초기 설계: `docs/superpowers/specs/2026-04-12-delivery-menu-sync-design.md`
 - 초기 계획: `docs/superpowers/plans/2026-04-12-delivery-menu-sync-mvp.md`
+- 에이전트 리포트 설계: `docs/superpowers/specs/2026-04-14-agent-operations-reporting-layer-design.md`
+- 에이전트 리포트 구현 계획: `docs/superpowers/plans/2026-04-14-agent-operations-reporting-layer.md`
 
-## 7. 문서 유지 원칙
+## 7. 에이전트 운영 리포트
+
+앱 내부 DB와 기존 preview 엔진을 그대로 사용하면서, 에이전트가 DB를 직접 뒤지지 않고 현재 상태를 읽을 수 있는 읽기 전용 CLI 리포트가 추가됐다.
+
+- `electron out/main/index.js --task=agent-report-overview`
+- `electron out/main/index.js --task=agent-report-review-queue --limit=5`
+- `electron out/main/index.js --task=agent-report-menu --menuId=<menuId> --limit=5`
+- `electron out/main/index.js --task=agent-report-options --platformCode=baemin --limit=5`
+- `electron out/main/index.js --task=agent-report-platform --platformCode=baemin --limit=5`
+
+현재 리포트에서 바로 읽을 수 있는 것:
+
+- 전체 기준 메뉴 수 / 관리 대상 수 / dirty 수
+- 플랫폼별 실행 가능 건수 / 검토 필요 건수
+- 최신 import 이력과 최근 실패 패턴
+- 특정 메뉴의 플랫폼 매핑, 가격 variant, 최근 실행 기록
+- 옵션 묶음 현황과 shape conflict 상태
+- 플랫폼별 최신 import 변경점과 현재 managed Chrome 탭 상태
+
+### 에이전트 운영 리포트 검증 메모
+
+- 검증일: 2026-04-14
+- lint:types: 통과
+- test: 통과
+- build: 통과
+- `agent-report-overview`: 통과
+  - 실제 운영 DB 기준 `관리 대상 메뉴 49개, 실행 가능 1건, 검토 필요 1건`
+- `agent-report-review-queue --limit=5`: 통과
+  - 실제 운영 DB 기준 현재 검토 큐 1건 확인
+- `agent-report-menu --menuId=79abda54-4030-45c5-97e5-964658464b8b --limit=5`: 통과
+  - `칠성사이다` 기준으로 3플랫폼 매핑, 배민 실행 후보 1건, 쿠팡이츠 검토 1건, 최근 실행 기록 확인
+- `agent-report-options --platformCode=baemin --limit=5`: 통과
+  - 실제 운영 DB 기준 배민 옵션 묶음 15개, `shape_conflict 6개` 확인
+- `agent-report-platform --platformCode=baemin --limit=5`: 통과
+  - 실제 운영 DB 기준 `배민 메뉴 47개`, 최신 import 변경점, 최근 실패, 현재 배민 탭 상태 확인
+
+## 8. 문서 유지 원칙
 
 앞으로 기능을 더 붙일 때는 아래 순서로 문서를 같이 갱신한다.
 
