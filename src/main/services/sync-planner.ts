@@ -12,9 +12,11 @@ import type {
 } from '../../shared/contracts'
 import { comparePlatformMenuPriceVariants } from '../../shared/platform-menu-price-variants'
 import {
+  getPlatformMenuUpdatePolicy,
   getRequiredMenuWriteExecutionMode,
   requiresMultiPriceMenuReview
 } from '../platforms/base/menu-update-policy'
+import { projectPlatformPriceVariants } from '../platforms/base/price-variant-projection'
 
 interface BuildSyncPreviewInput {
   menus: MenuRecord[]
@@ -112,7 +114,10 @@ export const buildSyncPreview = ({
       const sourcePresenceStatus = sourcePlatformMenu?.presenceStatus
       const sourcePriceVariants =
         sourcePlatformMenu?.platformMenuPriceVariants ?? mapping.platformMenuPriceVariants ?? null
-      const nextPriceVariants = menu.basePriceVariants ?? null
+      const nextPriceVariants = projectPlatformPriceVariants(
+        mapping.platformCode,
+        menu.basePriceVariants ?? null
+      )
       const nameChanged = mapping.platformMenuName !== menu.baseName
       const scalarPriceChanged =
         typeof mapping.platformMenuCurrentPrice === 'number'
@@ -185,7 +190,7 @@ export const buildSyncPreview = ({
         })
       ) {
         const supportsStructuredVariantWrite =
-          mapping.platformCode === 'ddangyo'
+          Boolean(getPlatformMenuUpdatePolicy(mapping.platformCode).supportsStructuredVariantPriceWrite)
           && priceChanged
           && variantComparison.hasVariantData
           && variantComparison.structureMatches

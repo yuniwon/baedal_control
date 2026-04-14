@@ -2,15 +2,21 @@ import type { Locator, Page, Response } from 'playwright'
 import type {
   PlatformInspectionField,
   PlatformInspectionReport,
+  PlatformMenuPriceVariantRecord,
   PlatformInspectionStep,
   SyncRunFailureContext,
   SyncPreviewItem
 } from '../../../shared/contracts'
+import { comparePlatformMenuPriceVariants } from '../../../shared/platform-menu-price-variants'
 import type { PlatformAdapter, PlatformMenuFetchResult } from '../base/types'
 import {
   extractBaeminOptionGroupRequestContext,
   parseBaeminOptionGroupPageResponse
 } from './option-parser'
+import {
+  buildBaeminPriceInputUpdates,
+  type BaeminVisiblePriceInputSnapshot
+} from './price-change'
 import {
   pickBaeminCreateWizardAdvanceButtonLabel,
   pickBaeminCreateWizardGroupOptionValue,
@@ -27,6 +33,7 @@ import {
   getBaeminNameChangeBlockerMessageFromVisibleText
 } from './detail-guard'
 import { pickBaeminSearchResult } from './update-flow'
+import { pickBaeminRenderedSearchResult } from './update-flow'
 import { launchPlaywrightChromium } from '../../services/playwright-runtime'
 
 export class BaeminAdapter implements PlatformAdapter {
@@ -162,10 +169,19 @@ export class BaeminAdapter implements PlatformAdapter {
 
   async applyMenuUpdate(item: SyncPreviewItem) {
     const nameChanged = item.previousName !== item.nextName
-    const priceChanged =
+    const scalarPriceChanged =
       typeof item.previousPrice === 'number'
         ? item.previousPrice !== item.nextPrice
         : true
+    const variantComparison = this.hasComparablePriceVariants(item)
+      ? comparePlatformMenuPriceVariants(item.previousPriceVariants, item.nextPriceVariants)
+      : {
+          hasVariantData: false,
+          structureMatches: true,
+          amountChanged: false,
+          changed: false
+        }
+    const priceChanged = scalarPriceChanged || variantComparison.changed
     const stageTracker = {
       current: '수정 대상 확인'
     }
@@ -201,15 +217,24 @@ export class BaeminAdapter implements PlatformAdapter {
       }
 
       if (priceChanged) {
-        if ((item.platformMenuPriceCount ?? 0) > 1) {
+        const canApplyStructuredPriceChange =
+          (item.platformMenuPriceCount ?? 0) > 1
+          && variantComparison.hasVariantData
+          && variantComparison.structureMatches
+
+        if ((item.platformMenuPriceCount ?? 0) > 1 && !canApplyStructuredPriceChange) {
           throw new Error('baemin_multi_price_menu_requires_review')
         }
 
-        if (typeof item.previousPrice !== 'number') {
+        if (!canApplyStructuredPriceChange && typeof item.previousPrice !== 'number') {
           throw new Error('baemin_previous_price_missing')
         }
 
-        await this.applyPriceChange(page, item.previousPrice, item.nextPrice, stageTracker)
+        if (canApplyStructuredPriceChange) {
+          await this.applyStructuredPriceChange(page, item, stageTracker)
+        } else {
+          await this.applyPriceChange(page, item.previousPrice as number, item.nextPrice, stageTracker)
+        }
       }
 
       stageTracker.current = '상세 패널 반영 확인'
@@ -217,7 +242,8 @@ export class BaeminAdapter implements PlatformAdapter {
         page,
         {
           nextName: nameChanged ? item.nextName : undefined,
-          nextPrice: priceChanged ? item.nextPrice : undefined
+          nextPrice: priceChanged ? item.nextPrice : undefined,
+          nextPriceVariants: priceChanged ? item.nextPriceVariants : undefined
         },
         stageTracker
       )
@@ -292,7 +318,7 @@ export class BaeminAdapter implements PlatformAdapter {
       )
 
       if (typeof pickedSearchResultIndex === 'number') {
-        await this.clickMenuSearchResultByIndex(page, pickedSearchResultIndex)
+        await this.clickMenuSearchResultByIndex(page, pickedSearchResultIndex, item)
       } else {
         const candidates = await this.readMenuSearchCandidatesFromDom(page, item.previousName)
         const picked = pickBaeminSearchResult(candidates, {
@@ -384,11 +410,23 @@ export class BaeminAdapter implements PlatformAdapter {
     return pickedResultIndex
   }
 
-  private async clickMenuSearchResultByIndex(page: Page, resultIndex: number) {
+  private async clickMenuSearchResultByIndex(page: Page, resultIndex: number, item: SyncPreviewItem) {
     const selector = `[data-index="${resultIndex}"] button`
 
     for (let attempt = 0; attempt < 20; attempt += 1) {
-      const targetButton = page.locator(selector).first()
+      const renderedCandidates = await this.readRenderedMenuSearchCandidates(page)
+      const pickedRenderedCandidate = renderedCandidates.length > 0
+        ? pickBaeminRenderedSearchResult(renderedCandidates, {
+            platformMenuId: item.platformMenuId,
+            previousName: item.previousName,
+            platformMenuBindingSummary: item.platformMenuBindingSummary,
+            platformMenuPriceSummary: item.platformMenuPriceSummary
+          })
+        : null
+      const targetSelector = pickedRenderedCandidate
+        ? `[data-index="${pickedRenderedCandidate.dataIndex}"] button`
+        : selector
+      const targetButton = page.locator(targetSelector).first()
       if ((await targetButton.count()) > 0) {
         await targetButton.scrollIntoViewIfNeeded().catch(() => undefined)
         await targetButton.click()
@@ -433,6 +471,34 @@ export class BaeminAdapter implements PlatformAdapter {
     }
 
     throw new Error(`baemin_menu_result_not_rendered:${resultIndex}`)
+  }
+
+  private async readRenderedMenuSearchCandidates(page: Page) {
+    return await page.evaluate(() => {
+      const normalize = (value: string | null | undefined) => value?.replace(/\s+/g, ' ').trim() ?? ''
+      return Array.from(document.querySelectorAll('[data-index]'))
+        .map((row) => {
+          const currentRow = row as HTMLElement
+          const rawDataIndex = currentRow.getAttribute('data-index')
+          const dataIndex = rawDataIndex ? Number(rawDataIndex) : Number.NaN
+          const button = currentRow.querySelector('button') as HTMLButtonElement | null
+          if (!button || Number.isNaN(dataIndex)) {
+            return null
+          }
+
+          return {
+            dataIndex,
+            buttonText: normalize(button.innerText),
+            contextText: normalize(currentRow.innerText)
+          }
+        })
+        .filter(
+          (
+            candidate
+          ): candidate is { dataIndex: number; buttonText: string; contextText: string } =>
+            Boolean(candidate)
+        )
+    })
   }
 
   private async readMenuSearchCandidatesFromDom(page: Page, menuName: string) {
@@ -663,15 +729,100 @@ export class BaeminAdapter implements PlatformAdapter {
     await deliveryPriceInput.waitFor({ state: 'hidden', timeout: 15000 })
   }
 
+  private async applyStructuredPriceChange(
+    page: Page,
+    item: SyncPreviewItem,
+    stageTracker?: { current: string }
+  ) {
+    if (stageTracker) {
+      stageTracker.current = '가격 변경 입력'
+    }
+
+    await page.getByRole('button', { name: '가격 변경' }).click()
+    const visibleInputs = await this.readVisiblePriceChangeInputs(page)
+    const updates = buildBaeminPriceInputUpdates(visibleInputs, item.nextPriceVariants)
+
+    for (const update of updates) {
+      await page.locator('input').nth(update.domIndex).fill(update.value)
+    }
+
+    if (stageTracker) {
+      stageTracker.current = '가격 변경 저장'
+    }
+    const applyResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PUT' && response.url().includes('/price'),
+      { timeout: 15000 }
+    )
+    await page.getByRole('button', { name: '적용하기' }).click()
+    const applyResponse = await applyResponsePromise
+    if (!applyResponse.ok()) {
+      throw new Error(
+        await this.buildApplyFailureMessage('baemin_menu_price_apply_failed', applyResponse)
+      )
+    }
+    if (stageTracker) {
+      stageTracker.current = '가격 변경 저장 후 편집창 닫힘 대기'
+    }
+    await page.locator('input').nth(updates[0].domIndex).waitFor({ state: 'hidden', timeout: 15000 })
+  }
+
+  private async readVisiblePriceChangeInputs(page: Page): Promise<BaeminVisiblePriceInputSnapshot[]> {
+    return await page.evaluate(() => {
+      const normalize = (value: string | null | undefined) => value?.replace(/\s+/g, ' ').trim() ?? ''
+      const isVisible = (element: Element) => {
+        if (!(element instanceof HTMLElement)) {
+          return false
+        }
+
+        const style = window.getComputedStyle(element)
+        const rect = element.getBoundingClientRect()
+        return !element.hidden && style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+      }
+
+      return Array.from(document.querySelectorAll('input'))
+        .map((input, domIndex) => {
+          const current = input as HTMLInputElement
+          return {
+            domIndex,
+            placeholder: normalize(current.placeholder),
+            value: normalize(current.value),
+            type: normalize(current.type)
+          }
+        })
+        .filter((input) => {
+          const element = document.querySelectorAll('input')[input.domIndex]
+          return isVisible(element)
+        })
+    })
+  }
+
   private async waitForDetailModalToReflectUpdate(
     page: Page,
     options: {
       nextName?: string
       nextPrice?: number
+      nextPriceVariants?: PlatformMenuPriceVariantRecord[] | null
       timeoutMs?: number
     },
     stageTracker?: { current: string }
   ) {
+    const variantTokens =
+      options.nextPriceVariants?.flatMap((variant) => {
+        const tokens: string[] = []
+        const normalizedLabel = variant.variantLabel?.trim()
+        if (normalizedLabel) {
+          tokens.push(normalizedLabel)
+        }
+
+        for (const channel of variant.channels) {
+          if (typeof channel.amount === 'number' && Number.isFinite(channel.amount)) {
+            tokens.push(`${channel.amount.toLocaleString('ko-KR')}원`)
+          }
+        }
+
+        return tokens
+      }) ?? []
     const expectedTokens = [
       typeof options.nextName === 'string' && options.nextName.trim().length > 0
         ? options.nextName.trim()
@@ -679,7 +830,9 @@ export class BaeminAdapter implements PlatformAdapter {
       typeof options.nextPrice === 'number' && Number.isFinite(options.nextPrice)
         ? `${options.nextPrice.toLocaleString('ko-KR')}원`
         : null
-    ].filter((value): value is string => Boolean(value))
+    ]
+      .filter((value): value is string => Boolean(value))
+      .concat(variantTokens)
 
     if (expectedTokens.length === 0) {
       return
@@ -862,6 +1015,10 @@ export class BaeminAdapter implements PlatformAdapter {
     } catch {
       return `${prefix}:${response.status()}:${raw.slice(0, 240)}`
     }
+  }
+
+  private hasComparablePriceVariants(item: SyncPreviewItem) {
+    return (item.previousPriceVariants?.length ?? 0) > 0 && (item.nextPriceVariants?.length ?? 0) > 0
   }
 
   private async fetchMenusFromApi(page: Page, inspection?: PlatformInspectionReport) {

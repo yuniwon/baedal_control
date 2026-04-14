@@ -29,6 +29,10 @@
   - 통과
   - 저장된 배민 계정으로 로그인 후 메뉴 목록과 `메뉴 추가` 버튼 존재까지는 확인
   - 하지만 자동화 클릭 후에도 생성 1단계가 열리지 않아 `baemin_create_wizard_not_opened`로 종료
+- `npx electron out/main/index.js --task=sync-preview --platformCode=baemin`
+  - 통과
+  - 실제 운영 DB 기준으로 `칠성사이다(59707776)`가 더 이상 `price_variant_review`가 아니라 실행 항목으로 내려오는 것 확인
+  - `nextPriceVariants`는 배민 채널 기준(`delivery/pickup`)으로 투영되어 `1.25L 3,000원` 변경이 포함됨
 - 이번 정리에서 수정한 핵심
   - `platform_menus`에 한 번도 저장되지 않은 legacy active 매핑도 import 결측 추적 대상에 포함되도록 보강
   - 첫 import에서 `missing_suspected`, 두 번째 import에서 `absent_confirmed + source_absent`로 승격되도록 테스트 추가
@@ -39,6 +43,14 @@
     - `inspect-create-menu-flow`
     - 메뉴 목록 단계에서는 `메뉴 추가` 같은 핵심 컨트롤을 먼저 노출
     - 생성 1단계가 안 열리면 raw timeout 대신 `baemin_create_wizard_not_opened:{page summary}`로 명확히 실패 기록
+  - 배민 다중 가격 1차 쓰기 경로 추가
+    - 기준 메뉴의 공용 `basePriceVariants`를 플랫폼별 채널 구조로 투영한 뒤 비교
+    - 배민 어댑터가 이제 secondary variant 가격 차이도 실제 가격 변경으로 인식
+    - 배민 가격 변경 패널의 visible input을 읽어 `variant label -> 배달가 입력` 기준으로 multi-row 입력 계획을 세움
+    - 픽업 금액이 배달 금액과 다르면 아직 안전하지 않다고 보고 차단
+  - 배민 메뉴 상세 진입 보강
+    - 하단 구간에서 DOM `data-index`가 API 순서보다 `+1` 밀리는 실운영 읽기 전용 재현 확인
+    - raw index를 그대로 클릭하지 않고, 현재 렌더된 후보 행의 이름/가격/바인딩 문구를 다시 대조해 실제 DOM row를 고르도록 보강
   - 실제 운영 DB 기준으로 배민 import 2회 연속 실행 검증 완료
     - 결과: 오래된 숨김 배민 매핑들이 `source_absent`로 정리되고 해당 로컬 메뉴도 `is_managed = 0` 처리됨
   - 실제 운영 DB 기준으로 배민 `통마늘바베큐피자(59707584)` 실패 재현 검증 완료
@@ -82,6 +94,11 @@ C:\Users\WON2\AppData\Roaming\delivery-menu-sync\credentials.json
 - 메뉴 import 가능
 - 옵션 탭 import 가능
 - 메뉴명/가격 변경 로직과 상세 검증 가드가 있음
+- 다중 가격 메뉴도 `variant 구조가 배민 채널(delivery/pickup) 기준으로 맞으면` preview 단계에서 실행 항목으로 내려온다.
+- 어댑터도 `previousPriceVariants / nextPriceVariants` 차이를 가격 변경으로 인식하고, 배달 가격 입력칸을 variant 행별로 채울 준비가 되어 있다.
+- 다만 실운영 저장 검증은 아직 보류 상태다.
+  - 현재 배민 `present + multi-price` 메뉴는 모두 판매중이라 바로 실저장하기 위험
+  - 숨김/품절 다중 가격 안전 대상 또는 생성 후 숨김 가능한 테스트 메뉴가 확보되면 왕복 검증을 이어가면 된다.
 - 금칙어가 설명/구성에 남아 있으면 저장 전에 차단
 - legacy active 매핑이 `platform_menus`에 없더라도 import 2회로 `source_absent`까지 자동 정리됨
 - 쓰기 실패 시 현재 배민 화면 제목 / 화면 종류 / 실패 단계 / 본문 텍스트 일부를 `failure_context_json`으로 남긴다.

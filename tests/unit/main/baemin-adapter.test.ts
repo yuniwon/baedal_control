@@ -245,6 +245,159 @@ describe('BaeminAdapter', () => {
     expect(close).toHaveBeenCalledTimes(1)
   })
 
+  it('treats a baemin multi-price variant-only change as a real price change and routes it through the structured price path', async () => {
+    const adapter = new BaeminAdapter({
+      username: 'owner-id',
+      password: 'secret'
+    }) as any
+
+    const close = vi.fn().mockResolvedValue(undefined)
+    const fakePage = {
+      locator: vi.fn().mockReturnValue({
+        first: vi.fn().mockReturnThis(),
+        innerText: vi.fn().mockResolvedValue('칠성사이다 500ml 1,800원 1.25L 3,000원')
+      }),
+      title: vi.fn().mockResolvedValue('배민 메뉴 관리'),
+      url: vi.fn().mockReturnValue('https://self.baemin.com/menu')
+    }
+
+    adapter.createAuthenticatedSession = vi.fn().mockResolvedValue({
+      browser: { close },
+      page: fakePage
+    })
+    adapter.openMenuDetail = vi.fn().mockResolvedValue({
+      detailPayload: null,
+      visibleText: '',
+      nameChangeBlockerMessage: null
+    })
+    adapter.applyStructuredPriceChange = vi.fn().mockResolvedValue(undefined)
+    adapter.applyPriceChange = vi.fn().mockResolvedValue(undefined)
+    adapter.waitForDetailModalToReflectUpdate = vi.fn().mockResolvedValue(undefined)
+
+    await expect(
+      adapter.applyMenuUpdate({
+        platformCode: 'baemin',
+        menuId: 'menu-variant',
+        platformMenuId: '59707776',
+        previousName: '칠성사이다',
+        previousPrice: 1800,
+        previousPriceVariants: [
+          {
+            variantLabel: '500ml',
+            channels: [
+              { channelCode: 'delivery', channelLabel: '배달', amount: 1800, amountText: '1,800원' },
+              { channelCode: 'pickup', channelLabel: '픽업', amount: 1800, amountText: '1,800원' }
+            ]
+          },
+          {
+            variantLabel: '1.25L',
+            channels: [
+              { channelCode: 'delivery', channelLabel: '배달', amount: 2800, amountText: '2,800원' },
+              { channelCode: 'pickup', channelLabel: '픽업', amount: 2800, amountText: '2,800원' }
+            ]
+          }
+        ],
+        nextName: '칠성사이다',
+        nextPrice: 1800,
+        nextPriceVariants: [
+          {
+            variantLabel: '500ml',
+            channels: [
+              { channelCode: 'delivery', channelLabel: '배달', amount: 1800, amountText: '1,800원' },
+              { channelCode: 'pickup', channelLabel: '픽업', amount: 1800, amountText: '1,800원' }
+            ]
+          },
+          {
+            variantLabel: '1.25L',
+            channels: [
+              { channelCode: 'delivery', channelLabel: '배달', amount: 3000, amountText: '3,000원' },
+              { channelCode: 'pickup', channelLabel: '픽업', amount: 3000, amountText: '3,000원' }
+            ]
+          }
+        ],
+        platformMenuPriceCount: 2
+      })
+    ).resolves.toBeUndefined()
+
+    expect(adapter.applyStructuredPriceChange).toHaveBeenCalledWith(
+      fakePage,
+      expect.objectContaining({
+        platformMenuId: '59707776'
+      }),
+      expect.anything()
+    )
+    expect(adapter.applyPriceChange).not.toHaveBeenCalled()
+    expect(adapter.waitForDetailModalToReflectUpdate).toHaveBeenCalledWith(
+      fakePage,
+      expect.objectContaining({
+        nextPriceVariants: [
+          expect.objectContaining({ variantLabel: '500ml' }),
+          expect.objectContaining({ variantLabel: '1.25L' })
+        ]
+      }),
+      expect.anything()
+    )
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  it('clicks the rendered baemin menu row chosen from visible candidates when dom data-index drifts from the api order', async () => {
+    const adapter = new BaeminAdapter({
+      username: 'owner-id',
+      password: 'secret'
+    }) as any
+
+    const exactLocator = {
+      first: vi.fn().mockReturnThis(),
+      count: vi.fn().mockResolvedValue(0),
+      scrollIntoViewIfNeeded: vi.fn().mockResolvedValue(undefined),
+      click: vi.fn().mockResolvedValue(undefined)
+    }
+    const matchedClick = vi.fn().mockResolvedValue(undefined)
+    const matchedLocator = {
+      first: vi.fn().mockReturnThis(),
+      count: vi.fn().mockResolvedValue(1),
+      scrollIntoViewIfNeeded: vi.fn().mockResolvedValue(undefined),
+      click: matchedClick
+    }
+    const fakePage = {
+      locator: vi.fn().mockImplementation((selector: string) => {
+        if (selector === '[data-index=\"40\"] button') {
+          return matchedLocator
+        }
+
+        return exactLocator
+      }),
+      evaluate: vi.fn().mockResolvedValue([
+        {
+          dataIndex: 39,
+          buttonText: '코카콜라 제로\n1.25L\n배달2,800원\n픽업2,800원',
+          contextText:
+            '코카콜라 제로\n1.25L\n배달2,800원\n픽업2,800원\n[음식배달] 꾸버스피자 봉담점'
+        },
+        {
+          dataIndex: 40,
+          buttonText: '칠성사이다\n500ml\n배달1,800원\n픽업1,800원\n1.25L\n배달2,800원\n픽업2,800원',
+          contextText:
+            '칠성사이다\n500ml\n배달1,800원\n픽업1,800원\n1.25L\n배달2,800원\n픽업2,800원\n[음식배달] 꾸버스피자 봉담점'
+        }
+      ]),
+      waitForTimeout: vi.fn().mockResolvedValue(undefined)
+    }
+
+    await expect(
+      adapter.clickMenuSearchResultByIndex(fakePage, 39, {
+        platformMenuId: '59707776',
+        previousName: '칠성사이다',
+        platformMenuBindingSummary: '[음식배달] 꾸버스피자 봉담점',
+        platformMenuPriceSummary:
+          '500ml · 배달 1,800원 · 픽업 1,800원 / 1.25L · 배달 2,800원 · 픽업 2,800원'
+      })
+    ).resolves.toBeUndefined()
+
+    expect(fakePage.locator).toHaveBeenCalledWith('[data-index=\"40\"] button')
+    expect(matchedClick).toHaveBeenCalledTimes(1)
+  })
+
   it('returns a create-wizard specific failure when 메뉴 추가 does not open the first step', async () => {
     const adapter = new BaeminAdapter({
       username: 'owner-id',

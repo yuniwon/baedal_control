@@ -4,6 +4,10 @@ type BaeminSearchCandidate = {
   contextText: string
 }
 
+type BaeminRenderedSearchCandidate = BaeminSearchCandidate & {
+  dataIndex: number
+}
+
 type BaeminSearchTarget = {
   platformMenuId?: string | null
   previousName: string
@@ -98,3 +102,8 @@ export const pickBaeminSearchResult = <T extends BaeminSearchCandidate>(
 
   throw new Error('baemin_menu_match_ambiguous')
 }
+
+export const pickBaeminRenderedSearchResult = <T extends BaeminRenderedSearchCandidate>(
+  candidates: T[],
+  target: BaeminSearchTarget
+) => pickBaeminSearchResult(candidates, target)

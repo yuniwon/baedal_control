@@ -7,18 +7,21 @@ export type MultiPriceMenuUpdatePolicy =
 interface PlatformMenuUpdatePolicy {
   multiPriceMenuUpdatePolicy: MultiPriceMenuUpdatePolicy
   requiredExecutionMode?: 'managed_browser'
+  supportsStructuredVariantPriceWrite?: boolean
 }
 
 const platformMenuUpdatePolicies: Record<PlatformCode, PlatformMenuUpdatePolicy> = {
   baemin: {
-    multiPriceMenuUpdatePolicy: 'price_change_requires_review'
+    multiPriceMenuUpdatePolicy: 'price_change_requires_review',
+    supportsStructuredVariantPriceWrite: true
   },
   coupangeats: {
     multiPriceMenuUpdatePolicy: 'price_change_requires_review',
     requiredExecutionMode: 'managed_browser'
   },
   ddangyo: {
-    multiPriceMenuUpdatePolicy: 'price_change_requires_review'
+    multiPriceMenuUpdatePolicy: 'price_change_requires_review',
+    supportsStructuredVariantPriceWrite: true
   }
 }
 

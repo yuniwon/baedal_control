@@ -182,6 +182,104 @@ describe('buildSyncPreview', () => {
     ])
   })
 
+  it('schedules a baemin multi-price menu when the baemin channel structure matches after projecting shared variants', () => {
+    const preview = buildSyncPreview({
+      menus: [
+        {
+          menuId: 'm6b',
+          baseName: '칠성사이다',
+          basePrice: 1800,
+          basePriceVariants: [
+            {
+              variantLabel: '500ml',
+              channels: [
+                { channelCode: 'delivery', channelLabel: '배달', amount: 1800, amountText: '1,800원' },
+                { channelCode: 'pickup', channelLabel: '포장', amount: 1800, amountText: '1,800원' },
+                { channelCode: 'dine_in', channelLabel: '매장식사', amount: 1800, amountText: '1,800원' }
+              ]
+            },
+            {
+              variantLabel: '1.25L',
+              channels: [
+                { channelCode: 'delivery', channelLabel: '배달', amount: 3000, amountText: '3,000원' },
+                { channelCode: 'pickup', channelLabel: '포장', amount: 3000, amountText: '3,000원' },
+                { channelCode: 'dine_in', channelLabel: '매장식사', amount: 3000, amountText: '3,000원' }
+              ]
+            }
+          ],
+          isDirty: 1,
+          isManaged: 1
+        }
+      ],
+      platformMenus: [],
+      mappings: [
+        {
+          mappingId: 'map-6b',
+          menuId: 'm6b',
+          platformCode: 'baemin',
+          platformMenuId: '59707776',
+          platformMenuName: '칠성사이다',
+          platformMenuCurrentPrice: 1800,
+          platformMenuPriceCount: 2,
+          platformMenuPriceSummary:
+            '500ml · 배달 1,800원 · 픽업 1,800원 / 1.25L · 배달 2,800원 · 픽업 2,800원',
+          platformMenuPriceVariants: [
+            {
+              variantLabel: '500ml',
+              channels: [
+                { channelCode: 'delivery', channelLabel: '배달', amount: 1800, amountText: '1,800원' },
+                { channelCode: 'pickup', channelLabel: '픽업', amount: 1800, amountText: '1,800원' }
+              ]
+            },
+            {
+              variantLabel: '1.25L',
+              channels: [
+                { channelCode: 'delivery', channelLabel: '배달', amount: 2800, amountText: '2,800원' },
+                { channelCode: 'pickup', channelLabel: '픽업', amount: 2800, amountText: '2,800원' }
+              ]
+            }
+          ],
+          platformMenuBindingSummary: '[음식배달] 꾸버스피자 봉담점',
+          matchedBy: 'manual',
+          isConfirmed: 1
+        }
+      ]
+    })
+
+    expect(preview.needsReview).toEqual([])
+    expect(preview.items).toEqual([
+      expect.objectContaining({
+        menuId: 'm6b',
+        platformCode: 'baemin',
+        platformMenuId: '59707776',
+        previousName: '칠성사이다',
+        previousPrice: 1800,
+        nextName: '칠성사이다',
+        nextPrice: 1800,
+        previousPriceVariants: [
+          expect.objectContaining({ variantLabel: '500ml' }),
+          expect.objectContaining({ variantLabel: '1.25L' })
+        ],
+        nextPriceVariants: [
+          expect.objectContaining({
+            variantLabel: '500ml',
+            channels: [
+              expect.objectContaining({ channelCode: 'delivery', amount: 1800 }),
+              expect.objectContaining({ channelCode: 'pickup', amount: 1800 })
+            ]
+          }),
+          expect.objectContaining({
+            variantLabel: '1.25L',
+            channels: [
+              expect.objectContaining({ channelCode: 'delivery', amount: 3000 }),
+              expect.objectContaining({ channelCode: 'pickup', amount: 3000 })
+            ]
+          })
+        ]
+      })
+    ])
+  })
+
   it('marks ddangyo multi-price menus with a changed price as needsReview instead of scheduling a write', () => {
     const preview = buildSyncPreview({
       menus: [{ menuId: 'm6b', baseName: '치즈바이트', basePrice: 29900, isDirty: 1, isManaged: 1 }],
