@@ -29,12 +29,13 @@
   - `platform_menus`에 한 번도 저장되지 않은 legacy active 매핑도 import 결측 추적 대상에 포함되도록 보강
   - 첫 import에서 `missing_suspected`, 두 번째 import에서 `absent_confirmed + source_absent`로 승격되도록 테스트 추가
   - 배민 쓰기 실패 시 어댑터가 현재 페이지 스냅샷(`platform_page_snapshot`)을 에러에 부착하고, sync 엔진이 이를 실행 기록의 `failure_context_json`으로 저장하도록 보강
+    - 현재 화면 종류뿐 아니라 `operationStage`도 함께 남김
   - 실행 기록 UI가 배민 실패 당시 본문 텍스트 일부까지 보여주도록 보강
   - 실제 운영 DB 기준으로 배민 import 2회 연속 실행 검증 완료
     - 결과: 오래된 숨김 배민 매핑들이 `source_absent`로 정리되고 해당 로컬 메뉴도 `is_managed = 0` 처리됨
   - 실제 운영 DB 기준으로 배민 `통마늘바베큐피자(59707584)` 실패 재현 검증 완료
     - 로컬 기준 메뉴명만 일시 변경해 실행 후보를 만든 뒤 저장 전 차단 실패를 유도
-    - 결과: `failure_context_json`에 `platform_page_snapshot`, `menu_detail`, 실패 직전 본문 텍스트가 저장됨
+    - 결과: `failure_context_json`에 `platform_page_snapshot`, `operationStage: 이름 변경 전 상세 검증`, `menu_detail`, 실패 직전 본문 텍스트가 저장됨
     - 검증 직후 로컬 DB 원복 및 `sync-preview` 0건 재확인
 
 ## 3. 실행 방법
@@ -75,7 +76,7 @@ C:\Users\WON2\AppData\Roaming\delivery-menu-sync\credentials.json
 - 메뉴명/가격 변경 로직과 상세 검증 가드가 있음
 - 금칙어가 설명/구성에 남아 있으면 저장 전에 차단
 - legacy active 매핑이 `platform_menus`에 없더라도 import 2회로 `source_absent`까지 자동 정리됨
-- 쓰기 실패 시 현재 배민 화면 제목 / 화면 종류 / 본문 텍스트 일부를 `failure_context_json`으로 남긴다.
+- 쓰기 실패 시 현재 배민 화면 제목 / 화면 종류 / 실패 단계 / 본문 텍스트 일부를 `failure_context_json`으로 남긴다.
 - 새 메뉴 생성 마법사 구조는 읽어뒀지만, 안전한 숨김 테스트 메뉴 전략은 아직 확정되지 않음
 
 ### 쿠팡이츠

@@ -168,6 +168,7 @@ describe('HistoryPage', () => {
                   pageTitle: '배민 메뉴 관리',
                   pageUrl: 'https://self.baemin.com/menu',
                   pageKind: 'menu_detail',
+                  operationStage: '상세 패널 반영 확인',
                   visibleTextSnippet:
                     '메뉴 관리 검색 결과 가격 변경 검색 결과가 여러 개라 정확히 선택하지 못했습니다.'
                 }
@@ -188,6 +189,8 @@ describe('HistoryPage', () => {
         '메뉴 관리 검색 결과 가격 변경 검색 결과가 여러 개라 정확히 선택하지 못했습니다.'
       )
     ).toBeTruthy()
-    expect(screen.getByText('캡처 시각 2026. 04. 14. 11:05')).toBeTruthy()
+    expect(
+      screen.getByText('실패 단계 상세 패널 반영 확인 · 캡처 시각 2026. 04. 14. 11:05')
+    ).toBeTruthy()
   })
 })

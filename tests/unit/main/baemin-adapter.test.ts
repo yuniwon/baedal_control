@@ -183,7 +183,62 @@ describe('BaeminAdapter', () => {
         kind: 'platform_page_snapshot',
         status: 'captured',
         pageTitle: '배민 메뉴 관리',
-        pageKind: 'menu_detail'
+        pageKind: 'menu_detail',
+        operationStage: '메뉴 상세 열기'
+      })
+    })
+
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks the post-save verification stage when the detail modal does not reflect the saved values', async () => {
+    const adapter = new BaeminAdapter({
+      username: 'owner-id',
+      password: 'secret'
+    }) as any
+
+    const close = vi.fn().mockResolvedValue(undefined)
+    const fakePage = {
+      locator: vi.fn().mockReturnValue({
+        first: vi.fn().mockReturnThis(),
+        innerText: vi
+          .fn()
+          .mockResolvedValue('메뉴 관리 가격 변경 적용하기 저장 완료 후에도 이전 가격이 남아 있습니다.')
+      }),
+      title: vi.fn().mockResolvedValue('배민 메뉴 관리'),
+      url: vi.fn().mockReturnValue('https://self.baemin.com/menu')
+    }
+
+    adapter.createAuthenticatedSession = vi.fn().mockResolvedValue({
+      browser: { close },
+      page: fakePage
+    })
+    adapter.openMenuDetail = vi.fn().mockResolvedValue({
+      detailPayload: null,
+      visibleText: '',
+      nameChangeBlockerMessage: null
+    })
+    adapter.applyNameChange = vi.fn().mockResolvedValue(undefined)
+    adapter.waitForDetailModalToReflectUpdate = vi
+      .fn()
+      .mockRejectedValue(new Error('baemin_menu_detail_verification_timeout'))
+
+    await expect(
+      adapter.applyMenuUpdate({
+        platformCode: 'baemin',
+        menuId: 'menu-1',
+        platformMenuId: 'platform-1',
+        previousName: '포테이토골드',
+        previousPrice: 21000,
+        nextName: '포테이토골드 테스트',
+        nextPrice: 21000
+      })
+    ).rejects.toMatchObject({
+      message: 'baemin_menu_detail_verification_timeout',
+      syncFailureContext: expect.objectContaining({
+        kind: 'platform_page_snapshot',
+        status: 'captured',
+        operationStage: '상세 패널 반영 확인'
       })
     })
 

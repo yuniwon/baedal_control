@@ -122,10 +122,15 @@ export const formatSyncFailureContext = (
             : '현재 화면'
 
     if (context.status === 'captured') {
+      const metaParts = [
+        context.operationStage ? `실패 단계 ${context.operationStage}` : null,
+        `캡처 시각 ${formatContextDateTime(context.capturedAt)}`
+      ].filter((value): value is string => Boolean(value))
+
       return {
         summary: `실패 당시 화면: ${(context.pageTitle || '플랫폼 화면')} · ${pageKindLabel}`,
         detail: context.visibleTextSnippet ?? null,
-        meta: `캡처 시각 ${formatContextDateTime(context.capturedAt)}`
+        meta: metaParts.join(' · ')
       }
     }
 

@@ -71,6 +71,9 @@ export class BaeminAdapter implements PlatformAdapter {
       typeof item.previousPrice === 'number'
         ? item.previousPrice !== item.nextPrice
         : true
+    const stageTracker = {
+      current: '수정 대상 확인'
+    }
 
     if (!nameChanged && !priceChanged) {
       return
@@ -79,15 +82,17 @@ export class BaeminAdapter implements PlatformAdapter {
     const { browser, page } = await this.createAuthenticatedSession()
 
     try {
+      stageTracker.current = '메뉴 상세 열기'
       const detail = await this.openMenuDetail(page, item)
 
       if (nameChanged) {
+        stageTracker.current = '이름 변경 전 상세 검증'
         if (detail.nameChangeBlockerMessage) {
           throw new Error(detail.nameChangeBlockerMessage)
         }
 
         try {
-          await this.applyNameChange(page, item.nextName)
+          await this.applyNameChange(page, item.nextName, stageTracker)
         } catch (error) {
           const message = error instanceof Error ? error.message : 'unknown_error'
           throw new Error(
@@ -109,15 +114,20 @@ export class BaeminAdapter implements PlatformAdapter {
           throw new Error('baemin_previous_price_missing')
         }
 
-        await this.applyPriceChange(page, item.previousPrice, item.nextPrice)
+        await this.applyPriceChange(page, item.previousPrice, item.nextPrice, stageTracker)
       }
 
-      await this.waitForDetailModalToReflectUpdate(page, {
-        nextName: nameChanged ? item.nextName : undefined,
-        nextPrice: priceChanged ? item.nextPrice : undefined
-      })
+      stageTracker.current = '상세 패널 반영 확인'
+      await this.waitForDetailModalToReflectUpdate(
+        page,
+        {
+          nextName: nameChanged ? item.nextName : undefined,
+          nextPrice: priceChanged ? item.nextPrice : undefined
+        },
+        stageTracker
+      )
     } catch (error) {
-      throw await this.attachFailureContext(page, error)
+      throw await this.attachFailureContext(page, error, stageTracker.current)
     } finally {
       await browser.close()
     }
@@ -442,7 +452,11 @@ export class BaeminAdapter implements PlatformAdapter {
     })
   }
 
-  private async applyNameChange(page: Page, nextName: string) {
+  private async applyNameChange(
+    page: Page,
+    nextName: string,
+    stageTracker?: { current: string }
+  ) {
     const nameCheckState: {
       accepted: boolean | null
       message: string | null
@@ -480,13 +494,22 @@ export class BaeminAdapter implements PlatformAdapter {
       const confirmButton = page.getByRole('button', { name: '확인' })
       const applyButton = page.getByRole('button', { name: '적용하기' })
 
+      if (stageTracker) {
+        stageTracker.current = '이름 변경 입력'
+      }
       await page.getByRole('button', { name: '변경' }).first().click()
       await input.waitFor({ timeout: 10000 })
       await input.fill(nextName)
+      if (stageTracker) {
+        stageTracker.current = '이름 변경 검사 대기'
+      }
       await confirmButton.click()
 
       await this.waitForNameApplyReady(page, applyButton, nameCheckState)
 
+      if (stageTracker) {
+        stageTracker.current = '이름 변경 저장'
+      }
       const applyResponsePromise = page.waitForResponse(
         (response) =>
           response.request().method() === 'PUT' && response.url().includes('/base-info'),
@@ -499,13 +522,24 @@ export class BaeminAdapter implements PlatformAdapter {
         throw new Error(await this.buildApplyFailureMessage('baemin_menu_name_apply_failed', applyResponse))
       }
 
+      if (stageTracker) {
+        stageTracker.current = '이름 변경 저장 후 편집창 닫힘 대기'
+      }
       await input.waitFor({ state: 'hidden', timeout: 15000 })
     } finally {
       page.off('response', onResponse)
     }
   }
 
-  private async applyPriceChange(page: Page, previousPrice: number, nextPrice: number) {
+  private async applyPriceChange(
+    page: Page,
+    previousPrice: number,
+    nextPrice: number,
+    stageTracker?: { current: string }
+  ) {
+    if (stageTracker) {
+      stageTracker.current = '가격 변경 입력'
+    }
     await page.getByRole('button', { name: '가격 변경' }).click()
     const formattedPreviousPrice = this.formatPrice(previousPrice)
     const formattedNextPrice = this.formatPrice(nextPrice)
@@ -513,6 +547,9 @@ export class BaeminAdapter implements PlatformAdapter {
 
     await deliveryPriceInput.waitFor({ timeout: 10000 })
     await deliveryPriceInput.fill(formattedNextPrice)
+    if (stageTracker) {
+      stageTracker.current = '가격 변경 저장'
+    }
     const applyResponsePromise = page.waitForResponse(
       (response) =>
         response.request().method() === 'PUT' && response.url().includes('/price'),
@@ -525,6 +562,9 @@ export class BaeminAdapter implements PlatformAdapter {
         await this.buildApplyFailureMessage('baemin_menu_price_apply_failed', applyResponse)
       )
     }
+    if (stageTracker) {
+      stageTracker.current = '가격 변경 저장 후 편집창 닫힘 대기'
+    }
     await deliveryPriceInput.waitFor({ state: 'hidden', timeout: 15000 })
   }
 
@@ -534,7 +574,8 @@ export class BaeminAdapter implements PlatformAdapter {
       nextName?: string
       nextPrice?: number
       timeoutMs?: number
-    }
+    },
+    stageTracker?: { current: string }
   ) {
     const expectedTokens = [
       typeof options.nextName === 'string' && options.nextName.trim().length > 0
@@ -552,6 +593,9 @@ export class BaeminAdapter implements PlatformAdapter {
     const timeoutMs = options.timeoutMs ?? 15000
     const detailModal = page.locator('#menuDetailModal').first()
     const startedAt = Date.now()
+    if (stageTracker) {
+      stageTracker.current = '상세 패널 반영 확인'
+    }
 
     while (Date.now() - startedAt < timeoutMs) {
       const visibleText = await detailModal.innerText().catch(() => '')
@@ -565,8 +609,8 @@ export class BaeminAdapter implements PlatformAdapter {
     throw new Error(`baemin_menu_detail_verification_timeout:${JSON.stringify(expectedTokens)}`)
   }
 
-  private async attachFailureContext(page: Page, error: unknown) {
-    const context = await this.captureFailureContext(page)
+  private async attachFailureContext(page: Page, error: unknown, operationStage?: string | null) {
+    const context = await this.captureFailureContext(page, operationStage)
     if (!context) {
       return error instanceof Error ? error : new Error(String(error))
     }
@@ -577,7 +621,10 @@ export class BaeminAdapter implements PlatformAdapter {
     return nextError
   }
 
-  private async captureFailureContext(page: Page): Promise<SyncRunFailureContext | null> {
+  private async captureFailureContext(
+    page: Page,
+    operationStage?: string | null
+  ): Promise<SyncRunFailureContext | null> {
     try {
       const [pageTitle, visibleTextSnippet] = await Promise.all([
         page.title().catch(() => ''),
@@ -589,6 +636,7 @@ export class BaeminAdapter implements PlatformAdapter {
         kind: 'platform_page_snapshot',
         status: 'captured',
         capturedAt: new Date().toISOString(),
+        operationStage: operationStage ?? null,
         pageTitle: pageTitle || null,
         pageUrl: page.url(),
         pageKind: await this.inferFailurePageKind(page, normalizedText),
@@ -600,6 +648,7 @@ export class BaeminAdapter implements PlatformAdapter {
         kind: 'platform_page_snapshot',
         status: 'capture_failed',
         capturedAt: new Date().toISOString(),
+        operationStage: operationStage ?? null,
         pageTitle: null,
         pageUrl: page.url(),
         pageKind: 'unknown',

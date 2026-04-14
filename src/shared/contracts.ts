@@ -211,6 +211,7 @@ export interface SyncRunFailureContext {
   status: 'captured' | 'tab_not_found' | 'capture_failed'
   capturedAt: string
   snapshotId?: string | null
+  operationStage?: string | null
   pageTitle?: string | null
   pageUrl?: string | null
   pageKind?: BrowserInspectionPageKind | null
