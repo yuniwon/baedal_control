@@ -182,6 +182,104 @@ describe('registerHandlers', () => {
     })
   })
 
+  it('runs coupangeats items imported through the managed browser session when they remain executable', async () => {
+    const run = vi.fn().mockResolvedValue({ syncRunId: 'run-1', summary: '성공 1건, 실패 0건' })
+
+    registerHandlers({
+      menuRepository: {
+        list: vi.fn().mockReturnValue([
+          {
+            menuId: 'menu-10',
+            baseName: '왕새우갈비 테스트',
+            basePrice: 23900,
+            isDirty: 1,
+            isManaged: 1
+          }
+        ]),
+        upsert: vi.fn()
+      },
+      mappingRepository: {
+        listAll: vi.fn().mockReturnValue([
+          {
+            mappingId: 'menu-10:coupangeats',
+            menuId: 'menu-10',
+            platformCode: 'coupangeats',
+            platformMenuId: 'ce-10',
+            platformMenuName: '왕새우갈비',
+            platformMenuCurrentPrice: 23900,
+            platformMenuGroupName: '추천메뉴',
+            matchedBy: 'manual',
+            isConfirmed: 1
+          }
+        ]),
+        upsert: vi.fn()
+      },
+      platformMenuRepository: {
+        listAll: vi.fn().mockReturnValue([])
+      },
+      platformImportRunRepository: {
+        listLatest: vi.fn().mockReturnValue([
+          {
+            importRunId: 'import-10',
+            platformCode: 'coupangeats',
+            startedAt: '2026-04-13T04:00:00.000Z',
+            finishedAt: '2026-04-13T04:01:00.000Z',
+            status: 'completed',
+            menuFetchCompleted: 1,
+            optionFetchCompleted: 1,
+            summaryJson: JSON.stringify({
+              platformCode: 'coupangeats',
+              fetchedCount: 35,
+              fetchMode: 'managed_browser',
+              createdMenuCount: 35,
+              linkedMappingCount: 35,
+              verifiedMappingCount: 0
+            })
+          }
+        ])
+      },
+      syncRunRepository: {
+        list: vi.fn().mockReturnValue([])
+      },
+      syncRunItemRepository: {
+        listForRunIds: vi.fn().mockReturnValue([])
+      },
+      credentialVault: {
+        get: vi.fn(),
+        set: vi.fn()
+      } as never,
+      syncEngine: { run }
+    })
+
+    const handler = electronMock.registeredHandlers.get('sync:run-items')
+    const items = [
+      {
+        platformCode: 'coupangeats',
+        menuId: 'menu-10',
+        platformMenuId: 'ce-10',
+        previousName: '왕새우갈비',
+        previousPrice: 23900,
+        nextName: '왕새우갈비 테스트',
+        nextPrice: 23900,
+        executionMode: 'managed_browser'
+      }
+    ]
+
+    const result = await handler?.({}, items)
+
+    expect(run).toHaveBeenCalledWith([
+      expect.objectContaining({
+        platformCode: 'coupangeats',
+        menuId: 'menu-10',
+        executionMode: 'managed_browser'
+      })
+    ])
+    expect(result).toEqual({
+      syncRunId: 'run-1',
+      summary: '성공 1건, 실패 0건'
+    })
+  })
+
   it('returns saved platform option groups through IPC', async () => {
     registerHandlers({
       menuRepository: {
@@ -377,5 +475,339 @@ describe('registerHandlers', () => {
 
     expect(importRunListLatest.mock.calls).toEqual([[50], [50], [50], [200]])
     expect(importChangeListLatest.mock.calls).toEqual([[50], [50], [50], [200]])
+  })
+
+  it('returns inspection data together with import errors when platform import fails', async () => {
+    const importInspection = {
+      platformCode: 'coupangeats',
+      steps: [
+        {
+          kind: 'navigation',
+          title: '로그인 페이지',
+          detail: '쿠팡이츠 로그인 화면을 열었습니다.',
+          recordedAt: '2026-04-13T00:00:00.000Z'
+        }
+      ]
+    }
+
+    const importError = Object.assign(new Error('coupangeats_login_access_denied'), {
+      inspection: importInspection
+    })
+
+    registerHandlers({
+      menuRepository: {
+        list: vi.fn().mockReturnValue([]),
+        upsert: vi.fn()
+      },
+      mappingRepository: {
+        listAll: vi.fn().mockReturnValue([]),
+        upsert: vi.fn()
+      },
+      platformMenuRepository: {
+        listAll: vi.fn().mockReturnValue([])
+      },
+      syncRunRepository: {
+        list: vi.fn().mockReturnValue([])
+      },
+      syncRunItemRepository: {
+        listForRunIds: vi.fn().mockReturnValue([])
+      },
+      credentialVault: {
+        get: vi.fn().mockReturnValue({ username: 'saved-id', password: 'saved-password' }),
+        set: vi.fn()
+      } as never,
+      platformMenuImporter: {
+        importPlatform: vi.fn().mockRejectedValue(importError)
+      }
+    })
+
+    const handler = electronMock.registeredHandlers.get('settings:import-platform-menus')
+    const result = await handler?.({}, { platformCode: 'coupangeats' })
+
+    expect(result).toEqual({
+      ok: true,
+      importError: 'coupangeats_login_access_denied',
+      importInspection
+    })
+  })
+
+  it('exposes browser inspection snapshots and bridge status through IPC', async () => {
+    const listLatest = vi.fn().mockReturnValue([
+      {
+        snapshotId: 'snap-1',
+        platformCode: 'coupangeats',
+        source: 'browser_extension',
+        pageUrl: 'https://store.coupangeats.com/merchant/menu',
+        pageTitle: '메뉴 관리',
+        host: 'store.coupangeats.com',
+        capturedAt: '2026-04-13T00:00:00.000Z',
+        textSnippet: '왕새우갈비 23,900원',
+        menuNames: ['왕새우갈비'],
+        optionGroupNames: ['도우 선택'],
+        buttonLabels: ['저장'],
+        inputHints: ['메뉴명', '가격'],
+        fields: [],
+        apiEvents: []
+      }
+    ])
+    const getStatus = vi.fn().mockReturnValue({
+      receiverUrl: 'http://127.0.0.1:39481/inspection-snapshots',
+      extensionPath: 'C:\\dev\\bedal\\browser-extension\\delivery-menu-inspector',
+      isRunning: true
+    })
+    const launchManagedChrome = vi.fn().mockReturnValue({
+      chromeAvailable: true,
+      chromePath: 'C:\\Users\\WON2\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe',
+      chromeProfilePath: 'C:\\Users\\WON2\\AppData\\Roaming\\delivery-menu-sync\\managed-chrome',
+      managedChromeRunning: true,
+      lastLaunchUrl: 'https://store.coupangeats.com/merchant/management/menu/109935',
+      chromeError: null
+    })
+    const inspectManagedChromeSession = vi.fn().mockResolvedValue({
+      endpointUrl: 'http://127.0.0.1:39482',
+      connected: true,
+      error: null,
+      tabs: [
+        {
+          tabId: 'tab-1',
+          title: '쿠팡이츠 메뉴 관리',
+          url: 'https://store.coupangeats.com/merchant/management/menu/109935',
+          type: 'page',
+          host: 'store.coupangeats.com',
+          platformCode: 'coupangeats',
+          pageKind: 'menu_list'
+        }
+      ]
+    })
+    const captureManagedChromeTab = vi.fn().mockResolvedValue({
+      snapshotId: 'managed-tab-1-2026-04-13T13:05:00.000Z',
+      platformCode: 'coupangeats',
+      source: 'manual_browser',
+      pageUrl: 'https://store.coupangeats.com/merchant/management/menu/109935',
+      pageTitle: '쿠팡이츠 사장님 포털',
+      pageKind: 'menu_list',
+      captureMode: 'full_scroll',
+      host: 'store.coupangeats.com',
+      capturedAt: '2026-04-13T13:05:00.000Z',
+      textSnippet: '왕새우갈비 23,900원',
+      menuNames: ['왕새우갈비'],
+      menuItems: [],
+      optionGroupNames: [],
+      buttonLabels: ['저장'],
+      inputHints: ['메뉴명'],
+      fields: [],
+      apiEvents: [],
+      screenshotDataUrl: 'data:image/png;base64,ZmFrZQ=='
+    })
+    const saveSnapshot = vi.fn()
+
+    const dependencies = {
+      menuRepository: {
+        list: vi.fn().mockReturnValue([]),
+        upsert: vi.fn()
+      },
+      mappingRepository: {
+        listAll: vi.fn().mockReturnValue([]),
+        upsert: vi.fn()
+      },
+      platformMenuRepository: {
+        listAll: vi.fn().mockReturnValue([])
+      },
+      syncRunRepository: {
+        list: vi.fn().mockReturnValue([])
+      },
+      syncRunItemRepository: {
+        listForRunIds: vi.fn().mockReturnValue([])
+      },
+      credentialVault: {
+        get: vi.fn(),
+        set: vi.fn()
+      },
+      browserInspectionSnapshotRepository: {
+        listLatest,
+        save: saveSnapshot
+      },
+      browserInspectorBridge: {
+        getStatus
+      },
+      managedChromeLauncher: {
+        getStatus: vi.fn().mockReturnValue({
+          chromeAvailable: true,
+          chromePath: 'C:\\Users\\WON2\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe',
+          chromeProfilePath: 'C:\\Users\\WON2\\AppData\\Roaming\\delivery-menu-sync\\managed-chrome',
+          managedChromeRunning: false,
+          lastLaunchUrl: null,
+          chromeError: null
+        }),
+        launch: launchManagedChrome
+      },
+      managedChromeSessionProbe: {
+        inspect: inspectManagedChromeSession
+      },
+      managedChromeSnapshotCapturer: {
+        captureTab: captureManagedChromeTab
+      }
+    } as unknown as Parameters<typeof registerHandlers>[0]
+
+    registerHandlers(dependencies)
+
+    const snapshotsHandler = electronMock.registeredHandlers.get('browserInspectionSnapshots:listLatest')
+    const statusHandler = electronMock.registeredHandlers.get('browserInspector:getStatus')
+    const launchHandler = electronMock.registeredHandlers.get('browserInspector:launchManagedChrome')
+    const sessionHandler = electronMock.registeredHandlers.get('browserInspector:getManagedChromeSession')
+    const captureHandler = electronMock.registeredHandlers.get('browserInspector:captureManagedChromeTab')
+
+    expect(snapshotsHandler).toBeTypeOf('function')
+    expect(statusHandler).toBeTypeOf('function')
+    expect(launchHandler).toBeTypeOf('function')
+    expect(sessionHandler).toBeTypeOf('function')
+    expect(captureHandler).toBeTypeOf('function')
+
+    if (!snapshotsHandler || !statusHandler || !launchHandler || !sessionHandler || !captureHandler) {
+      return
+    }
+
+    await expect(snapshotsHandler({}, 5)).resolves.toEqual([
+      expect.objectContaining({
+        snapshotId: 'snap-1',
+        platformCode: 'coupangeats',
+        menuNames: ['왕새우갈비']
+      })
+    ])
+    await expect(statusHandler({})).resolves.toEqual({
+      receiverUrl: 'http://127.0.0.1:39481/inspection-snapshots',
+      extensionPath: 'C:\\dev\\bedal\\browser-extension\\delivery-menu-inspector',
+      isRunning: true,
+      chromeAvailable: true,
+      chromePath: 'C:\\Users\\WON2\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe',
+      chromeProfilePath: 'C:\\Users\\WON2\\AppData\\Roaming\\delivery-menu-sync\\managed-chrome',
+      managedChromeRunning: false,
+      lastLaunchUrl: null,
+      chromeError: null
+    })
+    await expect(
+      launchHandler({}, { url: 'https://store.coupangeats.com/merchant/management/menu/109935' })
+    ).resolves.toEqual({
+      receiverUrl: 'http://127.0.0.1:39481/inspection-snapshots',
+      extensionPath: 'C:\\dev\\bedal\\browser-extension\\delivery-menu-inspector',
+      isRunning: true,
+      chromeAvailable: true,
+      chromePath: 'C:\\Users\\WON2\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe',
+      chromeProfilePath: 'C:\\Users\\WON2\\AppData\\Roaming\\delivery-menu-sync\\managed-chrome',
+      managedChromeRunning: true,
+      lastLaunchUrl: 'https://store.coupangeats.com/merchant/management/menu/109935',
+      chromeError: null
+    })
+    await expect(sessionHandler({})).resolves.toEqual({
+      endpointUrl: 'http://127.0.0.1:39482',
+      connected: true,
+      error: null,
+      tabs: [
+        expect.objectContaining({
+          tabId: 'tab-1',
+          title: '쿠팡이츠 메뉴 관리',
+          pageKind: 'menu_list'
+        })
+      ]
+    })
+    await expect(captureHandler({}, { tabId: 'tab-1' })).resolves.toEqual(
+      expect.objectContaining({
+        snapshotId: 'managed-tab-1-2026-04-13T13:05:00.000Z',
+        source: 'manual_browser',
+        pageKind: 'menu_list'
+      })
+    )
+    expect(listLatest).toHaveBeenCalledWith(5)
+    expect(saveSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshotId: 'managed-tab-1-2026-04-13T13:05:00.000Z',
+        source: 'manual_browser'
+      })
+    )
+    expect(getStatus).toHaveBeenCalledTimes(2)
+    expect(launchManagedChrome).toHaveBeenCalledWith(
+      'https://store.coupangeats.com/merchant/management/menu/109935'
+    )
+    expect(inspectManagedChromeSession).toHaveBeenCalledTimes(1)
+    expect(captureManagedChromeTab).toHaveBeenCalledWith('tab-1')
+  })
+
+  it('uses the saved coupangeats credentials for managed chrome auto-login when requested', async () => {
+    const launchManagedChrome = vi.fn().mockReturnValue({
+      chromeAvailable: true,
+      chromePath: 'C:\\Users\\WON2\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe',
+      chromeProfilePath: 'C:\\Users\\WON2\\AppData\\Roaming\\delivery-menu-sync\\managed-chrome',
+      managedChromeRunning: true,
+      lastLaunchUrl: 'https://store.coupangeats.com/merchant/login',
+      chromeError: null
+    })
+    const autoLogin = vi.fn().mockResolvedValue({
+      platformCode: 'coupangeats',
+      status: 'submitted',
+      message: '저장된 쿠팡이츠 계정으로 로그인을 시도했습니다.'
+    })
+
+    registerHandlers({
+      menuRepository: {
+        list: vi.fn().mockReturnValue([]),
+        upsert: vi.fn()
+      },
+      mappingRepository: {
+        listAll: vi.fn().mockReturnValue([]),
+        upsert: vi.fn()
+      },
+      platformMenuRepository: {
+        listAll: vi.fn().mockReturnValue([])
+      },
+      syncRunRepository: {
+        list: vi.fn().mockReturnValue([])
+      },
+      syncRunItemRepository: {
+        listForRunIds: vi.fn().mockReturnValue([])
+      },
+      credentialVault: {
+        get: vi.fn().mockImplementation((platformCode: string) =>
+          platformCode === 'coupangeats'
+            ? { username: 'saved-id', password: 'saved-password' }
+            : null
+        ),
+        set: vi.fn()
+      } as never,
+      managedChromeLauncher: {
+        getStatus: vi.fn().mockReturnValue({
+          chromeAvailable: true,
+          chromePath: 'C:\\Users\\WON2\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe',
+          chromeProfilePath: 'C:\\Users\\WON2\\AppData\\Roaming\\delivery-menu-sync\\managed-chrome',
+          managedChromeRunning: false,
+          lastLaunchUrl: null,
+          chromeError: null
+        }),
+        launch: launchManagedChrome
+      },
+      managedChromeLoginAutomator: {
+        getLaunchUrl: vi.fn().mockReturnValue('https://store.coupangeats.com/merchant/login'),
+        autoLogin
+      }
+    } as unknown as Parameters<typeof registerHandlers>[0])
+
+    const launchHandler = electronMock.registeredHandlers.get('browserInspector:launchManagedChrome')
+
+    await expect(
+      launchHandler?.({}, { platformCode: 'coupangeats', autoLogin: true })
+    ).resolves.toEqual(
+      expect.objectContaining({
+        chromeAvailable: true,
+        managedChromeRunning: true,
+        lastLaunchUrl: 'https://store.coupangeats.com/merchant/login',
+        managedChromeAutoLoginStatus: 'submitted',
+        managedChromeAutoLoginMessage: '저장된 쿠팡이츠 계정으로 로그인을 시도했습니다.'
+      })
+    )
+
+    expect(launchManagedChrome).toHaveBeenCalledWith('https://store.coupangeats.com/merchant/login')
+    expect(autoLogin).toHaveBeenCalledWith('coupangeats', {
+      username: 'saved-id',
+      password: 'saved-password'
+    })
   })
 })

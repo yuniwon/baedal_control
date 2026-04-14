@@ -9,6 +9,13 @@ import { appApi } from '../lib/api'
 import { formatSyncSummary } from '../lib/format-sync-summary'
 import { SyncPreviewDialog } from '../components/SyncPreviewDialog'
 import { formatNeedsReviewLabel, getPlatformLabel } from '../lib/menu-source-labels'
+import {
+  buildCompactPlatformImportRunDescription,
+  formatPlatformImportError,
+  getPlatformImportStatusLabel,
+  getPlatformImportTone,
+  pickLatestImportRuns
+} from '../lib/platform-imports'
 
 type PlatformStatus = {
   platformCode: 'baemin' | 'coupangeats' | 'ddangyo'
@@ -91,6 +98,9 @@ export const DashboardPage = () => {
   const [platformStatuses, setPlatformStatuses] = useState<PlatformStatus[]>(defaultPlatformStatuses)
   const [importChanges, setImportChanges] = useState<PlatformImportChangeRecord[]>([])
   const [menuNamesById, setMenuNamesById] = useState<Record<string, string>>({})
+  const [latestImports, setLatestImports] = useState<
+    Partial<Record<PlatformStatus['platformCode'], PlatformImportRunRecord>>
+  >({})
 
   useEffect(() => {
     void appApi.menus.list().then((value) => {
@@ -155,6 +165,7 @@ export const DashboardPage = () => {
           : []
         const latestImportRunId = runs[0]?.importRunId
 
+        setLatestImports(pickLatestImportRuns(runs))
         setImportChanges(
           latestImportRunId
             ? changes.filter((change) => change.importRunId === latestImportRunId)
@@ -172,6 +183,14 @@ export const DashboardPage = () => {
     () => summarizeImportChanges(importChanges),
     [importChanges]
   )
+  const buildLatestImportLabel = (run?: PlatformImportRunRecord) => {
+    if (!run) {
+      return '아직 가져오기 기록이 없습니다.'
+    }
+
+    const compactDescription = buildCompactPlatformImportRunDescription(run)
+    return compactDescription ?? formatPlatformImportError(run.platformCode, run.errorMessage)
+  }
 
   return (
     <section className="page">
@@ -216,10 +235,13 @@ export const DashboardPage = () => {
       {previewDialog ? (
         <SyncPreviewDialog
           items={previewDialog.items}
-          onConfirm={() =>
-            void appApi.sync.run().then((result) => {
+          onConfirm={(selectedItems) =>
+            void appApi.sync.runItems(selectedItems).then((result) => {
               const next = result as { summary?: string }
               setSummary(formatSyncSummary(next.summary) || '아직 반영한 기록이 없습니다.')
+              void appApi.sync.preview().then((value) => {
+                setPreviewSummary(value as SyncPreviewResult)
+              })
               setPreviewDialog(null)
             })
           }
@@ -248,6 +270,31 @@ export const DashboardPage = () => {
           </div>
         </section>
       ) : null}
+
+      <section className="panel">
+        <div className="page-header">
+          <h2>플랫폼 최근 가져오기</h2>
+          <p>플랫폼별 마지막 수집 상태를 짧게 다시 확인합니다.</p>
+        </div>
+        <div className="status-list">
+          {defaultPlatformStatuses.map((platform) => {
+            const latestRun = latestImports[platform.platformCode]
+            const detail = buildLatestImportLabel(latestRun)
+
+            return (
+              <article key={`import-${platform.platformCode}`} className="status-row">
+                <div className="status-row-copy">
+                  <strong>{platform.name}</strong>
+                  <span>{`${platform.name} · ${detail}`}</span>
+                </div>
+                <span className={`status-pill ${getPlatformImportTone(latestRun)}`}>
+                  {getPlatformImportStatusLabel(latestRun)}
+                </span>
+              </article>
+            )
+          })}
+        </div>
+      </section>
 
       <section className="panel">
         <div className="page-header">

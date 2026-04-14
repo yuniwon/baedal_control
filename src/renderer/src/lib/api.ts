@@ -1,5 +1,8 @@
 import type {
+  BrowserInspectionSnapshot,
+  BrowserInspectorStatus,
   LogicalOptionGroupRecord,
+  ManagedChromeSessionStatus,
   PlatformImportChangeRecord,
   PlatformImportRunRecord,
   PlatformMenuCatalogRecord,
@@ -65,6 +68,19 @@ declare global {
       platformImportChanges: {
         listLatest: (limit?: number) => Promise<PlatformImportChangeRecord[]>
       }
+      browserInspectionSnapshots: {
+        listLatest: (limit?: number) => Promise<BrowserInspectionSnapshot[]>
+      }
+      browserInspector: {
+        getStatus: () => Promise<BrowserInspectorStatus>
+        getManagedChromeSession: () => Promise<ManagedChromeSessionStatus>
+        captureManagedChromeTab: (payload: { tabId: string }) => Promise<BrowserInspectionSnapshot>
+        launchManagedChrome: (payload?: {
+          url?: string
+          platformCode?: 'baemin' | 'coupangeats' | 'ddangyo'
+          autoLogin?: boolean
+        }) => Promise<BrowserInspectorStatus>
+      }
     }
   }
 }
@@ -122,5 +138,56 @@ export const appApi: AppApi = window.appApi ?? {
   },
   platformImportChanges: {
     listLatest: () => noopPromise([] as PlatformImportChangeRecord[])
+  },
+  browserInspectionSnapshots: {
+    listLatest: () => noopPromise([] as BrowserInspectionSnapshot[])
+  },
+  browserInspector: {
+    getStatus: () =>
+      noopPromise({
+        receiverUrl: '',
+        extensionPath: '',
+        isRunning: false
+      } as BrowserInspectorStatus),
+    getManagedChromeSession: () =>
+      noopPromise({
+        endpointUrl: 'http://127.0.0.1:39482',
+        connected: false,
+        error: null,
+        tabs: []
+      } as ManagedChromeSessionStatus),
+    captureManagedChromeTab: () =>
+      noopPromise({
+        snapshotId: '',
+        platformCode: 'coupangeats',
+        source: 'manual_browser',
+        pageUrl: '',
+        pageTitle: '',
+        pageKind: 'unknown',
+        captureMode: 'viewport',
+        host: '',
+        capturedAt: '',
+        textSnippet: null,
+        menuNames: [],
+        menuItems: [],
+        optionGroupNames: [],
+        buttonLabels: [],
+        inputHints: [],
+        fields: [],
+        apiEvents: [],
+        screenshotDataUrl: null
+      } as BrowserInspectionSnapshot),
+    launchManagedChrome: () =>
+      noopPromise({
+        receiverUrl: '',
+        extensionPath: '',
+        isRunning: false,
+        chromeAvailable: false,
+        chromePath: null,
+        chromeProfilePath: null,
+        managedChromeRunning: false,
+        lastLaunchUrl: null,
+        chromeError: null
+      } as BrowserInspectorStatus)
   }
 }

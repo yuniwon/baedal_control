@@ -6,6 +6,8 @@ export const appApiKeys = [
   'platformMenus',
   'platformImportRuns',
   'platformImportChanges',
+  'browserInspectionSnapshots',
+  'browserInspector',
   'settings',
   'syncRuns',
   'sync'
@@ -22,6 +24,7 @@ export type CatalogPresenceStatus =
 
 export type CatalogEntityType = 'menu' | 'option_group'
 export type PlatformImportRunStatus = 'running' | 'completed' | 'partial_failed'
+export type PlatformImportFetchMode = 'managed_browser'
 export type PlatformImportChangeType =
   | 'created'
   | 'missing_suspected'
@@ -37,6 +40,20 @@ export type PlatformMenuBindingStatus =
   | '가게 연결 없음'
   | '다른 가게 연결'
   | '복수 연결'
+
+export type PlatformMenuPriceChannelCode = 'base' | 'delivery' | 'pickup' | 'dine_in'
+
+export interface PlatformMenuPriceChannelRecord {
+  channelCode: PlatformMenuPriceChannelCode
+  channelLabel: string
+  amount?: number | null
+  amountText: string
+}
+
+export interface PlatformMenuPriceVariantRecord {
+  variantLabel?: string | null
+  channels: PlatformMenuPriceChannelRecord[]
+}
 
 export interface MenuRecord {
   menuId: string
@@ -60,6 +77,7 @@ export interface PlatformMenuMappingRecord {
   platformMenuGroupName?: string | null
   platformMenuStatus?: string | null
   platformMenuPriceSummary?: string | null
+  platformMenuPriceVariants?: PlatformMenuPriceVariantRecord[] | null
   platformMenuBindingSummary?: string | null
   platformMenuBindingStatus?: PlatformMenuBindingStatus | null
   matchedBy: 'auto' | 'manual'
@@ -76,6 +94,7 @@ export interface PlatformMenuCatalogRecord {
   platformMenuGroupName?: string | null
   platformMenuStatus?: string | null
   platformMenuPriceSummary?: string | null
+  platformMenuPriceVariants?: PlatformMenuPriceVariantRecord[] | null
   platformMenuBindingSummary?: string | null
   platformMenuBindingStatus?: PlatformMenuBindingStatus | null
   lastSeenImportId?: string | null
@@ -125,6 +144,7 @@ export interface PlatformImportRunRecord {
   menuFetchCompleted: number
   optionFetchCompleted: number
   summaryJson?: string | null
+  errorMessage?: string | null
 }
 
 export interface PlatformImportChangeRecord {
@@ -151,6 +171,10 @@ export interface LogicalOptionGroupRecord {
   connectedMenuCount: number
   sourceGroupCount: number
   sampleOptionNames: string[]
+  logicalOptions: Array<{
+    optionName: string
+    optionPrice: number
+  }>
   status:
     | 'single'
     | 'merge_candidate'
@@ -163,7 +187,12 @@ export interface LogicalOptionGroupRecord {
     optionGroupName: string
     presenceStatus: CatalogPresenceStatus
     lastSeenAt?: string | null
+    linkedMenuCount: number
     linkedMenuNames: string[]
+    options: Array<{
+      optionName: string
+      optionPrice: number
+    }>
   }>
 }
 
@@ -174,6 +203,19 @@ export interface SyncRunRecord {
   triggerType: 'manual'
   resultSummary?: string | null
   items?: SyncRunItemRecord[]
+}
+
+export interface SyncRunFailureContext {
+  kind: 'managed_browser_snapshot'
+  status: 'captured' | 'tab_not_found' | 'capture_failed'
+  capturedAt: string
+  snapshotId?: string | null
+  pageTitle?: string | null
+  pageUrl?: string | null
+  pageKind?: BrowserInspectionPageKind | null
+  menuCount?: number | null
+  optionGroupCount?: number | null
+  detail?: string | null
 }
 
 export interface SyncRunItemRecord {
@@ -187,6 +229,7 @@ export interface SyncRunItemRecord {
   status: string
   errorCode: string | null
   errorMessage: string | null
+  failureContext?: SyncRunFailureContext | null
 }
 
 export interface SyncPreviewItem {
@@ -197,8 +240,11 @@ export interface SyncPreviewItem {
   previousPrice?: number | null
   nextName: string
   nextPrice: number
+  executionMode?: 'managed_browser'
   platformMenuPriceCount?: number | null
+  platformMenuGroupName?: string | null
   platformMenuPriceSummary?: string | null
+  platformMenuPriceVariants?: PlatformMenuPriceVariantRecord[] | null
   platformMenuBindingSummary?: string | null
 }
 
@@ -211,6 +257,7 @@ export interface SyncPreviewNeedsReview {
     | 'binding_review'
     | 'price_variant_review'
     | 'source_missing_review'
+    | 'managed_session_write_review'
   detail?: string
 }
 
@@ -222,6 +269,9 @@ export interface SyncPreviewResult {
 export interface PlatformImportSummary {
   platformCode: PlatformCode
   fetchedCount: number
+  optionGroupCount?: number
+  duplicateMenuCount?: number
+  fetchMode?: PlatformImportFetchMode
   createdMenuCount: number
   linkedMappingCount: number
   verifiedMappingCount: number
@@ -253,4 +303,89 @@ export interface PlatformInspectionReport {
 export interface PlatformImportResult {
   summary: PlatformImportSummary
   inspection?: PlatformInspectionReport
+}
+
+export type BrowserInspectionSource = 'browser_extension' | 'manual_browser'
+export type BrowserInspectionPageKind = 'menu_list' | 'option_list' | 'menu_detail' | 'unknown'
+export type BrowserInspectionCaptureMode = 'viewport' | 'full_scroll'
+
+export interface BrowserInspectionMenuItem {
+  name: string
+  priceText?: string | null
+  categoryName?: string | null
+}
+
+export interface BrowserInspectionField {
+  name: string
+  value: string
+  source: 'dom' | 'input' | 'button' | 'text' | 'api'
+}
+
+export interface BrowserInspectionApiEvent {
+  url: string
+  method: string
+  status?: number | null
+  capturedAt: string
+  requestPreview?: string | null
+  responsePreview?: string | null
+}
+
+export interface BrowserInspectionSnapshot {
+  snapshotId: string
+  platformCode: PlatformCode
+  source: BrowserInspectionSource
+  pageUrl: string
+  pageTitle: string
+  pageKind?: BrowserInspectionPageKind
+  captureMode?: BrowserInspectionCaptureMode
+  host: string
+  capturedAt: string
+  textSnippet?: string | null
+  menuNames: string[]
+  menuItems: BrowserInspectionMenuItem[]
+  optionGroupNames: string[]
+  buttonLabels: string[]
+  inputHints: string[]
+  fields: BrowserInspectionField[]
+  apiEvents: BrowserInspectionApiEvent[]
+  screenshotDataUrl?: string | null
+}
+
+export interface BrowserInspectorStatus {
+  receiverUrl: string
+  extensionPath: string
+  isRunning: boolean
+  chromeAvailable?: boolean
+  chromePath?: string | null
+  chromeProfilePath?: string | null
+  managedChromeRunning?: boolean
+  lastLaunchUrl?: string | null
+  chromeError?: string | null
+  managedChromeAutoLoginStatus?:
+    | 'submitted'
+    | 'already_authenticated'
+    | 'credential_missing'
+    | 'login_tab_not_found'
+    | 'unsupported'
+    | 'failed'
+    | null
+  managedChromeAutoLoginMessage?: string | null
+  managedChromeAutoLoginPlatformCode?: PlatformCode | null
+}
+
+export interface ManagedChromeTabInfo {
+  tabId: string
+  title: string
+  url: string
+  type: string
+  host: string
+  platformCode: PlatformCode | null
+  pageKind: BrowserInspectionPageKind
+}
+
+export interface ManagedChromeSessionStatus {
+  endpointUrl: string
+  connected: boolean
+  error?: string | null
+  tabs: ManagedChromeTabInfo[]
 }

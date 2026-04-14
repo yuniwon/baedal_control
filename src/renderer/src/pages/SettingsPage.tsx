@@ -1,28 +1,127 @@
 import { useEffect, useState } from 'react'
-import type { PlatformImportSummary } from '../../../shared/contracts'
+import type {
+  BrowserInspectionSnapshot,
+  BrowserInspectorStatus,
+  ManagedChromeSessionStatus,
+  PlatformImportRunRecord,
+  PlatformInspectionField,
+  PlatformInspectionReport
+} from '../../../shared/contracts'
 import { appApi } from '../lib/api'
+import {
+  buildPlatformImportRunDescription,
+  buildPlatformImportRunTitle,
+  formatPlatformImportError,
+  getPlatformImportStatusLabel,
+  getPlatformImportTone,
+  pickLatestImportRuns
+} from '../lib/platform-imports'
+import { formatDateTimeLabel, getPlatformLabel } from '../lib/menu-source-labels'
 
 const platforms = ['baemin', 'coupangeats', 'ddangyo'] as const
+const emptyCredentials = {
+  baemin: { username: '', password: '' },
+  coupangeats: { username: '', password: '' },
+  ddangyo: { username: '', password: '' }
+}
+
+type PlatformKey = (typeof platforms)[number]
+type CredentialFormState = Record<PlatformKey, { username: string; password: string }>
+type LatestImportState = Partial<Record<PlatformKey, PlatformImportRunRecord>>
+type ImportResponse = {
+  ok: true
+  importSummary?: import('../../../shared/contracts').PlatformImportSummary
+  importInspection?: PlatformInspectionReport
+  importError?: string
+}
+
+const getManagedChromePageLabel = (
+  pageKind: BrowserInspectionSnapshot['pageKind']
+) =>
+  pageKind === 'menu_list'
+    ? '메뉴 페이지'
+    : pageKind === 'option_list'
+      ? '옵션 페이지'
+      : pageKind === 'unknown'
+        ? '일반 페이지'
+        : pageKind
+
+const buildManagedChromeTabTitle = (
+  platformCode: PlatformKey | null,
+  pageKind: BrowserInspectionSnapshot['pageKind'],
+  fallbackTitle: string
+) => {
+  if (pageKind === 'menu_list' || pageKind === 'option_list') {
+    return `${platformCode ? getPlatformLabel(platformCode) : '알 수 없는 플랫폼'} ${getManagedChromePageLabel(pageKind)}`
+  }
+
+  return fallbackTitle
+}
+
+const inferManagedChromePlatformCode = (url?: string | null): PlatformKey | null => {
+  if (!url) {
+    return null
+  }
+
+  if (url.includes('baemin.com')) {
+    return 'baemin'
+  }
+
+  if (url.includes('coupangeats.com')) {
+    return 'coupangeats'
+  }
+
+  if (url.includes('ddangyo.com')) {
+    return 'ddangyo'
+  }
+
+  return null
+}
 
 export const SettingsPage = () => {
   const [status, setStatus] = useState<Record<string, boolean>>({})
-  const [credentials, setCredentials] = useState<Record<string, { username: string; password: string }>>({
-    baemin: { username: '', password: '' },
-    coupangeats: { username: '', password: '' },
-    ddangyo: { username: '', password: '' }
-  })
-  const [isSaving, setIsSaving] = useState<Record<string, boolean>>({})
+  const [credentials, setCredentials] = useState<CredentialFormState>(emptyCredentials)
+  const [isSubmitting, setIsSubmitting] = useState<Record<string, boolean>>({})
   const [messages, setMessages] = useState<Record<string, string>>({})
+  const [inspections, setInspections] = useState<Record<string, PlatformInspectionReport | undefined>>({})
+  const [expandedInspections, setExpandedInspections] = useState<Record<string, boolean>>({})
+  const [latestImports, setLatestImports] = useState<LatestImportState>({})
+  const [browserInspectionStatus, setBrowserInspectionStatus] = useState<BrowserInspectorStatus | null>(
+    null
+  )
+  const [browserInspectionSnapshots, setBrowserInspectionSnapshots] = useState<
+    BrowserInspectionSnapshot[]
+  >([])
+  const [isLaunchingManagedChrome, setIsLaunchingManagedChrome] = useState(false)
+  const [managedChromeSession, setManagedChromeSession] = useState<ManagedChromeSessionStatus | null>(
+    null
+  )
+  const [browserInspectionMessage, setBrowserInspectionMessage] = useState('')
+  const [capturingManagedChromeTabId, setCapturingManagedChromeTabId] = useState<string | null>(null)
+
+  const refreshLatestImports = () =>
+    appApi.platformImportRuns.list().then((value) => {
+      if (Array.isArray(value)) {
+        setLatestImports(pickLatestImportRuns(value as PlatformImportRunRecord[]))
+      }
+    })
+
+  const refreshBrowserInspection = () =>
+    Promise.all([
+      appApi.browserInspector.getStatus(),
+      appApi.browserInspectionSnapshots.listLatest(20),
+      appApi.browserInspector.getManagedChromeSession()
+    ]).then(([statusValue, snapshotsValue, sessionValue]) => {
+      setBrowserInspectionStatus(statusValue)
+      setBrowserInspectionSnapshots(Array.isArray(snapshotsValue) ? snapshotsValue : [])
+      setManagedChromeSession(sessionValue)
+    })
 
   useEffect(() => {
     void appApi.settings.listPlatformCredentials().then((value) => {
       if (Array.isArray(value)) {
         const nextStatus: Record<string, boolean> = {}
-        const nextCredentials = {
-          baemin: { username: '', password: '' },
-          coupangeats: { username: '', password: '' },
-          ddangyo: { username: '', password: '' }
-        }
+        const nextCredentials: CredentialFormState = { ...emptyCredentials }
 
         value.forEach((entry) => {
           const item = entry as {
@@ -45,22 +144,182 @@ export const SettingsPage = () => {
         )
       }
     })
+
+    void refreshLatestImports()
+    void refreshBrowserInspection()
   }, [])
 
-  const buildSuccessMessage = (summary?: PlatformImportSummary) => {
+  const buildSuccessMessage = (summary?: import('../../../shared/contracts').PlatformImportSummary) => {
     if (!summary) {
       return '계정을 저장했습니다.'
     }
 
-    return `메뉴 ${summary.fetchedCount}개를 가져와 ${summary.linkedMappingCount}개 연결했습니다.`
+    const subject =
+      typeof summary.optionGroupCount === 'number'
+        ? `메뉴 ${summary.fetchedCount}개와 옵션 그룹 ${summary.optionGroupCount}개`
+        : `메뉴 ${summary.fetchedCount}개`
+    const suffix = [
+      typeof summary.duplicateMenuCount === 'number' && summary.duplicateMenuCount > 0
+        ? `중복 ${summary.duplicateMenuCount}건을 정리했습니다.`
+        : null,
+      summary.fetchMode === 'managed_browser'
+        ? '현재 로그인된 전용 크롬 세션에서 읽었습니다.'
+        : null
+    ]
+      .filter((value): value is string => Boolean(value))
+      .join(' ')
+
+    if (summary.createdMenuCount > 0 || summary.linkedMappingCount > 0) {
+      return `${subject}를 가져왔습니다. 새 메뉴 ${summary.createdMenuCount}개, 새 연결 ${summary.linkedMappingCount}개를 반영했습니다.${suffix ? ` ${suffix}` : ''}`
+    }
+
+    if (summary.verifiedMappingCount > 0) {
+      return `${subject}를 다시 확인했습니다. 기존 연결 ${summary.verifiedMappingCount}개를 유지했습니다.${suffix ? ` ${suffix}` : ''}`
+    }
+
+    return `${subject}를 다시 확인했습니다.${suffix ? ` ${suffix}` : ''}`
   }
 
-  const buildErrorMessage = (value: string) => {
-    if (value.startsWith('playwright_install_failed:')) {
-      return '브라우저 엔진 설치에 실패했습니다. 인터넷 연결을 확인한 뒤 다시 저장해 주세요.'
+  const buildErrorMessage = (platform: PlatformKey, value: string) => {
+    const formatted = formatPlatformImportError(platform, value)
+    if (formatted && formatted !== value) {
+      return formatted
     }
 
     return `메뉴를 가져오지 못했습니다. ${value}`
+  }
+
+  const getUsageLabel = (usage: PlatformInspectionField['usage']) =>
+    usage === 'used' ? '사용' : usage === 'ignored' ? '제외' : '제어'
+
+  const buildBrowserSnapshotSummary = (snapshot: BrowserInspectionSnapshot) =>
+    `메뉴 후보 ${snapshot.menuNames.length}개 · 옵션 그룹 ${snapshot.optionGroupNames.length}개 · 버튼 ${snapshot.buttonLabels.length}개 · 입력 ${snapshot.inputHints.length}개 · API ${snapshot.apiEvents.length}건`
+
+  const launchManagedChrome = (options?: { url?: string; platformCode?: PlatformKey }) => {
+    setIsLaunchingManagedChrome(true)
+    setBrowserInspectionMessage('')
+
+    const platformCode =
+      options?.platformCode ?? inferManagedChromePlatformCode(options?.url) ?? 'coupangeats'
+
+    void appApi.browserInspector
+      .launchManagedChrome({
+        ...(options?.url ? { url: options.url } : {}),
+        platformCode,
+        autoLogin: true
+      })
+      .then((statusValue) => {
+        setBrowserInspectionStatus(statusValue)
+        if (statusValue.managedChromeAutoLoginMessage) {
+          setBrowserInspectionMessage(statusValue.managedChromeAutoLoginMessage)
+        }
+        return appApi.browserInspector.getManagedChromeSession()
+      })
+      .then((sessionValue) => {
+        setManagedChromeSession(sessionValue)
+      })
+      .finally(() => {
+        setIsLaunchingManagedChrome(false)
+      })
+  }
+
+  const findLatestSnapshotForTab = (tab: ManagedChromeSessionStatus['tabs'][number]) => {
+    const exactMatch = browserInspectionSnapshots.find((snapshot) => snapshot.pageUrl === tab.url)
+    if (exactMatch) {
+      return {
+        snapshot: exactMatch,
+        statusLabel: '현재 URL 캡처 있음'
+      }
+    }
+
+    const sameKindMatch = browserInspectionSnapshots.find(
+      (snapshot) => snapshot.platformCode === tab.platformCode && snapshot.pageKind === tab.pageKind
+    )
+
+    if (sameKindMatch) {
+      return {
+        snapshot: sameKindMatch,
+        statusLabel: '같은 유형 캡처 있음'
+      }
+    }
+
+    return null
+  }
+
+  const captureManagedChromeTab = (tab: ManagedChromeSessionStatus['tabs'][number]) => {
+    setCapturingManagedChromeTabId(tab.tabId)
+    setBrowserInspectionMessage('')
+
+    void appApi.browserInspector
+      .captureManagedChromeTab({ tabId: tab.tabId })
+      .then(() => refreshBrowserInspection())
+      .then(() => {
+        setBrowserInspectionMessage(
+          `${buildManagedChromeTabTitle(
+            tab.platformCode as PlatformKey | null,
+            tab.pageKind,
+            tab.title
+          )}를 읽어 최근 검사 기록에 저장했습니다.`
+        )
+      })
+      .catch((error) => {
+        setBrowserInspectionMessage(
+          `현재 탭을 읽지 못했습니다. ${error instanceof Error ? error.message : 'unknown_error'}`
+        )
+      })
+      .finally(() => {
+        setCapturingManagedChromeTabId(null)
+      })
+  }
+
+  const latestMenuSnapshot = browserInspectionSnapshots.find((snapshot) => snapshot.pageKind === 'menu_list')
+  const latestOptionSnapshot = browserInspectionSnapshots.find(
+    (snapshot) => snapshot.pageKind === 'option_list'
+  )
+  const latestMenuUrl =
+    latestMenuSnapshot?.pageUrl ??
+    managedChromeSession?.tabs.find((tab) => tab.pageKind === 'menu_list')?.url
+  const latestOptionUrl =
+    latestOptionSnapshot?.pageUrl ??
+    managedChromeSession?.tabs.find((tab) => tab.pageKind === 'option_list')?.url
+  const chromeStatusLabel = browserInspectionStatus?.managedChromeRunning
+    ? '전용 프로필 실행 중'
+    : browserInspectionStatus?.chromeAvailable
+      ? '전용 크롬 준비됨'
+      : '크롬 확인 필요'
+
+  const runImport = (
+    platform: PlatformKey,
+    request: Promise<ImportResponse>,
+    options?: { savedCredential?: boolean }
+  ) => {
+    setIsSubmitting((current) => ({ ...current, [platform]: true }))
+    setMessages((current) => ({ ...current, [platform]: '' }))
+
+    void request
+      .then((result) => {
+        if (options?.savedCredential) {
+          setStatus((current) => ({ ...current, [platform]: true }))
+        }
+
+        setMessages((current) => ({
+          ...current,
+          [platform]:
+            (result.importError ? buildErrorMessage(platform, result.importError) : undefined) ??
+            buildSuccessMessage(result.importSummary)
+        }))
+        setInspections((current) => ({
+          ...current,
+          [platform]: result.importInspection
+        }))
+        if (result.importInspection?.steps.length) {
+          setExpandedInspections((current) => ({ ...current, [platform]: true }))
+        }
+        void refreshLatestImports()
+      })
+      .finally(() =>
+        setIsSubmitting((current) => ({ ...current, [platform]: false }))
+      )
   }
 
   return (
@@ -73,66 +332,390 @@ export const SettingsPage = () => {
       <div className="credential-list">
         {platforms.map((platform) => (
           <section key={platform} className="credential-row">
-            <div>
-              <strong>{platform === 'baemin' ? '배민' : platform === 'coupangeats' ? '쿠팡이츠' : '땡겨요'}</strong>
-              <div className="status-pill">{status[platform] ? '저장됨' : '미저장'}</div>
+            <div className="credential-main">
+              <div className="credential-head">
+                <div className="credential-title">
+                  <strong>{platform === 'baemin' ? '배민' : platform === 'coupangeats' ? '쿠팡이츠' : '땡겨요'}</strong>
+                  <div className={`status-pill ${status[platform] ? 'connected' : 'pending'}`}>
+                    {status[platform] ? '저장됨' : '미저장'}
+                  </div>
+                </div>
+                <div className="credential-action-row">
+                  <button
+                    className={status[platform] ? 'secondary-button' : 'primary-button'}
+                    disabled={isSubmitting[platform]}
+                    onClick={() =>
+                      runImport(
+                        platform,
+                        appApi.settings.savePlatformCredential({
+                          platformCode: platform,
+                          username: credentials[platform].username,
+                          password: credentials[platform].password
+                        }),
+                        { savedCredential: true }
+                      )
+                    }
+                  >
+                    {isSubmitting[platform] ? '저장 중' : '저장'}
+                  </button>
+                  {status[platform] ? (
+                    <button
+                      className="primary-button"
+                      disabled={isSubmitting[platform]}
+                      onClick={() =>
+                        runImport(
+                          platform,
+                          appApi.settings.importPlatformMenus({
+                            platformCode: platform
+                          })
+                        )
+                      }
+                    >
+                      {isSubmitting[platform] ? '가져오는 중' : '다시 가져오기'}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              <div className="credential-form">
+                <input
+                  placeholder="아이디"
+                  value={credentials[platform].username}
+                  onChange={(event) =>
+                    setCredentials((current) => ({
+                      ...current,
+                      [platform]: { ...current[platform], username: event.target.value }
+                    }))
+                  }
+                />
+                <input
+                  placeholder="비밀번호"
+                  type="password"
+                  value={credentials[platform].password}
+                  onChange={(event) =>
+                    setCredentials((current) => ({
+                      ...current,
+                      [platform]: { ...current[platform], password: event.target.value }
+                    }))
+                  }
+                />
+              </div>
+              {latestImports[platform] ? (
+                <div className="credential-import-summary">
+                  <div className="credential-import-summary-head">
+                    <strong>{buildPlatformImportRunTitle(latestImports[platform])}</strong>
+                    <span className={`status-pill ${getPlatformImportTone(latestImports[platform])}`}>
+                      {getPlatformImportStatusLabel(latestImports[platform])}
+                    </span>
+                  </div>
+                  <p>{buildPlatformImportRunDescription(latestImports[platform])}</p>
+                </div>
+              ) : null}
+              {messages[platform] ? <p className="credential-message">{messages[platform]}</p> : null}
+              {inspections[platform]?.steps.length ? (
+                <button
+                  className="secondary-button inspection-toggle"
+                  onClick={() =>
+                    setExpandedInspections((current) => ({
+                      ...current,
+                      [platform]: !current[platform]
+                    }))
+                  }
+                  type="button"
+                >
+                  {expandedInspections[platform] ? '수집 검사 접기' : '수집 검사 보기'}
+                </button>
+              ) : null}
             </div>
-            <div className="credential-form">
-              <input
-                placeholder="아이디"
-                value={credentials[platform].username}
-                onChange={(event) =>
-                  setCredentials((current) => ({
-                    ...current,
-                    [platform]: { ...current[platform], username: event.target.value }
-                  }))
-                }
-              />
-              <input
-                placeholder="비밀번호"
-                type="password"
-                value={credentials[platform].password}
-                onChange={(event) =>
-                  setCredentials((current) => ({
-                    ...current,
-                    [platform]: { ...current[platform], password: event.target.value }
-                  }))
-                }
-              />
-              <button
-                className="secondary-button"
-                disabled={isSaving[platform]}
-                onClick={() => {
-                  setIsSaving((current) => ({ ...current, [platform]: true }))
-                  setMessages((current) => ({ ...current, [platform]: '' }))
-
-                  void appApi.settings
-                    .savePlatformCredential({
-                      platformCode: platform,
-                      username: credentials[platform].username,
-                      password: credentials[platform].password
-                    })
-                    .then((result) => {
-                      setStatus((current) => ({ ...current, [platform]: true }))
-                      setMessages((current) => ({
-                        ...current,
-                        [platform]:
-                          (result.importError ? buildErrorMessage(result.importError) : undefined) ??
-                          buildSuccessMessage(result.importSummary)
-                      }))
-                    })
-                    .finally(() =>
-                      setIsSaving((current) => ({ ...current, [platform]: false }))
-                    )
-                }}
-              >
-                {isSaving[platform] ? '저장 중' : '저장'}
-              </button>
-            </div>
-            {messages[platform] ? <p>{messages[platform]}</p> : null}
+            {inspections[platform]?.steps.length && expandedInspections[platform] ? (
+              <section className="inspection-panel">
+                <h2>수집 검사</h2>
+                <p className="credential-message">
+                  최근 수집에서 어떤 화면을 거쳤는지와 실제로 읽은 필드만 확인할 수 있습니다.
+                </p>
+                <div className="inspection-list">
+                  {inspections[platform]?.steps.map((step, index) => (
+                    <article
+                      key={`${platform}-${step.recordedAt}-${step.title}-${index}`}
+                      className="inspection-step"
+                    >
+                      <div className="inspection-header">
+                        <strong>{step.title}</strong>
+                        <span className="status-pill">{step.kind === 'navigation' ? '화면' : step.kind === 'api' ? 'API' : '결과'}</span>
+                      </div>
+                      {step.detail ? <p>{step.detail}</p> : null}
+                      {step.url ? <p>{step.url}</p> : null}
+                      {step.pageTitle ? <p>{step.pageTitle}</p> : null}
+                      {step.screenshotDataUrl ? (
+                        <img
+                          className="inspection-image"
+                          src={step.screenshotDataUrl}
+                          alt={`${step.title} 화면`}
+                        />
+                      ) : null}
+                      {step.visibleTextSnippet ? (
+                        <pre className="inspection-snippet">{step.visibleTextSnippet}</pre>
+                      ) : null}
+                      {step.fields?.length ? (
+                        <div className="inspection-field-list">
+                          {step.fields.map((field) => (
+                            <div
+                              key={`${step.title}-${field.name}`}
+                              className="inspection-field-row"
+                            >
+                              <div className="inspection-field-copy">
+                                <strong>{field.name}</strong>
+                                <span>{field.value}</span>
+                              </div>
+                              <span className={`field-pill ${field.usage}`}>
+                                {getUsageLabel(field.usage)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ) : null}
           </section>
         ))}
       </div>
+
+      <section className="panel browser-inspection-section">
+        <div className="browser-inspection-head">
+          <div className="browser-inspection-copy">
+            <h2>브라우저 검사</h2>
+            <p>
+              자동 로그인이 막히는 플랫폼은 확장프로그램으로 현재 화면과 API 흔적을 읽어와
+              메뉴 구조를 확인합니다.
+            </p>
+          </div>
+          <div className="browser-inspection-actions">
+            <div className="browser-inspection-launch-group">
+              <button
+                className="secondary-button table-button"
+                type="button"
+                onClick={() => void refreshBrowserInspection()}
+              >
+                검사 기록 새로고침
+              </button>
+              <button
+                className="secondary-button table-button"
+                type="button"
+                disabled={isLaunchingManagedChrome}
+                onClick={() => launchManagedChrome()}
+              >
+                {isLaunchingManagedChrome ? '크롬 여는 중' : '전용 크롬 열기'}
+              </button>
+              <button
+                className="secondary-button table-button"
+                type="button"
+                disabled={isLaunchingManagedChrome}
+                onClick={() => launchManagedChrome({ platformCode: 'baemin' })}
+              >
+                배민 메뉴 열기
+              </button>
+              <button
+                className="secondary-button table-button"
+                type="button"
+                disabled={isLaunchingManagedChrome || !latestMenuUrl}
+                onClick={() => launchManagedChrome({ url: latestMenuUrl })}
+              >
+                마지막 메뉴 페이지
+              </button>
+              <button
+                className="secondary-button table-button"
+                type="button"
+                disabled={isLaunchingManagedChrome || !latestOptionUrl}
+                onClick={() => launchManagedChrome({ url: latestOptionUrl })}
+              >
+                마지막 옵션 페이지
+              </button>
+            </div>
+            <span
+              className={`status-pill ${
+                browserInspectionStatus?.managedChromeRunning
+                  ? 'connected'
+                  : browserInspectionStatus?.chromeAvailable
+                    ? 'pending'
+                    : 'failed'
+              }`}
+            >
+              {chromeStatusLabel}
+            </span>
+            <span
+              className={`status-pill ${
+                browserInspectionStatus?.isRunning ? 'connected' : 'failed'
+              }`}
+            >
+              {browserInspectionStatus?.isRunning ? '수신 대기 중' : '연결 꺼짐'}
+            </span>
+          </div>
+        </div>
+
+        <p className="browser-inspection-summary">
+          전용 크롬은 일반 사용 크롬과 분리된 프로필로 열립니다. 확장프로그램을 항상 같은 상태로
+          유지해서 캡처와 반자동 조작을 같은 환경에서 반복할 수 있습니다. 배민과 쿠팡이츠는
+          저장된 계정이 있으면 로그인 탭을 자동 제출할 수 있고, 쿠팡이츠는 이 전용 크롬에
+          로그인해 두면 다시 가져오기가 현재 세션을 재사용해 메뉴와 옵션을 읽을 수 있습니다.
+        </p>
+
+        <div className="browser-inspection-meta">
+          <div className="browser-inspection-meta-item">
+            <strong>수신 주소</strong>
+            <span>{browserInspectionStatus?.receiverUrl || '로컬 수신기를 시작하지 못했습니다.'}</span>
+          </div>
+          <div className="browser-inspection-meta-item">
+            <strong>확장프로그램 폴더</strong>
+            <span>{browserInspectionStatus?.extensionPath || '확장프로그램 경로를 아직 확인하지 못했습니다.'}</span>
+          </div>
+          <div className="browser-inspection-meta-item">
+            <strong>크롬 실행 파일</strong>
+            <span>
+              {browserInspectionStatus?.chromePath ||
+                browserInspectionStatus?.chromeError ||
+                '아직 찾지 못했습니다.'}
+            </span>
+          </div>
+          <div className="browser-inspection-meta-item">
+            <strong>전용 프로필</strong>
+            <span>{browserInspectionStatus?.chromeProfilePath || '아직 준비되지 않았습니다.'}</span>
+          </div>
+          <div className="browser-inspection-meta-item">
+            <strong>마지막 실행 페이지</strong>
+            <span>{browserInspectionStatus?.lastLaunchUrl || '아직 열지 않았습니다.'}</span>
+          </div>
+          <div className="browser-inspection-meta-item">
+            <strong>빠른 열기 기준</strong>
+            <span>
+              메뉴 페이지 {latestMenuUrl ? '준비됨' : '없음'} · 옵션 페이지{' '}
+              {latestOptionUrl ? '준비됨' : '없음'}
+            </span>
+          </div>
+        </div>
+
+        <div className="browser-inspection-session">
+          <div className="browser-inspection-session-head">
+            <div className="browser-inspection-copy">
+              <h2>현재 전용 크롬 탭</h2>
+              <p>앱이 전용 크롬의 현재 로그인 세션을 읽어온 결과입니다.</p>
+            </div>
+            <div className="browser-inspection-actions">
+              <span className={`status-pill ${managedChromeSession?.connected ? 'connected' : 'failed'}`}>
+                {managedChromeSession?.connected ? `탭 ${managedChromeSession.tabs.length}개 연결됨` : '세션 연결 안 됨'}
+              </span>
+            </div>
+          </div>
+          <div className="browser-inspection-meta">
+            <div className="browser-inspection-meta-item">
+              <strong>디버깅 주소</strong>
+              <span>{managedChromeSession?.endpointUrl || 'http://127.0.0.1:39482'}</span>
+            </div>
+            <div className="browser-inspection-meta-item">
+              <strong>세션 상태</strong>
+              <span>{managedChromeSession?.connected ? '탭 목록 읽기 성공' : managedChromeSession?.error || '아직 확인하지 못했습니다.'}</span>
+            </div>
+          </div>
+          {browserInspectionMessage ? (
+            <p className="browser-inspection-summary browser-inspection-message">
+              {browserInspectionMessage}
+            </p>
+          ) : null}
+          <div className="browser-inspection-snapshot-list">
+            {managedChromeSession?.tabs.length ? (
+              managedChromeSession.tabs.map((tab) => {
+                const latestSnapshotMatch = findLatestSnapshotForTab(tab)
+
+                return (
+                  <article key={tab.tabId} className="browser-inspection-snapshot-card">
+                    <div className="browser-inspection-snapshot-head">
+                      <div>
+                        <strong>
+                          {buildManagedChromeTabTitle(
+                            tab.platformCode as PlatformKey | null,
+                            tab.pageKind,
+                            tab.title
+                          )}
+                        </strong>
+                        <p>{tab.host || 'host 없음'}</p>
+                      </div>
+                      <span className="status-pill">{getManagedChromePageLabel(tab.pageKind)}</span>
+                    </div>
+                    <div className="browser-inspection-tab-meta">
+                      <span
+                        className={`status-pill ${latestSnapshotMatch ? 'connected' : 'pending'}`}
+                      >
+                        {latestSnapshotMatch ? latestSnapshotMatch.statusLabel : '저장된 캡처 없음'}
+                      </span>
+                      <span className="browser-inspection-summary">
+                        {latestSnapshotMatch?.snapshot
+                          ? `최근 캡처 ${formatDateTimeLabel(latestSnapshotMatch.snapshot.capturedAt)}`
+                          : '앱에서 바로 읽어 최신 화면을 저장할 수 있습니다.'}
+                      </span>
+                    </div>
+                    <p className="browser-inspection-summary">
+                      {(tab.platformCode ?? 'unknown')} · {tab.type}
+                    </p>
+                    {tab.title ? <p className="browser-inspection-summary">{tab.title}</p> : null}
+                    <p className="browser-inspection-summary">{tab.url}</p>
+                    <div className="browser-inspection-card-actions">
+                      <button
+                        className="secondary-button table-button"
+                        type="button"
+                        disabled={capturingManagedChromeTabId === tab.tabId}
+                        onClick={() => captureManagedChromeTab(tab)}
+                      >
+                        {capturingManagedChromeTabId === tab.tabId ? '읽는 중' : '현재 탭 읽기'}
+                      </button>
+                    </div>
+                  </article>
+                )
+              })
+            ) : (
+              <div className="browser-inspection-empty">
+                <strong>아직 읽은 탭이 없습니다.</strong>
+                <span>전용 크롬이 열려 있어도 디버깅 포트에 붙지 못하면 목록이 비어 있을 수 있습니다.</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="browser-inspection-snapshot-list">
+          {browserInspectionSnapshots.length ? (
+            browserInspectionSnapshots.map((snapshot) => (
+              <article
+                key={snapshot.snapshotId}
+                className="browser-inspection-snapshot-card"
+              >
+                <div className="browser-inspection-snapshot-head">
+                  <div>
+                    <strong>{snapshot.pageTitle}</strong>
+                    <p>{snapshot.host}</p>
+                  </div>
+                  <span className="status-pill">{snapshot.platformCode}</span>
+                </div>
+                <p className="browser-inspection-summary">{buildBrowserSnapshotSummary(snapshot)}</p>
+                <p className="browser-inspection-summary">{snapshot.menuNames.join(', ') || '메뉴 후보 없음'}</p>
+                {snapshot.textSnippet ? (
+                  <pre className="inspection-snippet">{snapshot.textSnippet}</pre>
+                ) : null}
+                {snapshot.apiEvents[0]?.url ? (
+                  <div className="browser-inspection-api-list">
+                    <strong>최근 API</strong>
+                    <span>{snapshot.apiEvents[0].url}</span>
+                  </div>
+                ) : null}
+              </article>
+            ))
+          ) : (
+            <div className="browser-inspection-empty">
+              <strong>아직 저장된 검사 기록이 없습니다.</strong>
+              <span>사장님 사이트를 일반 브라우저로 연 뒤 확장프로그램에서 전체 캡처 보내기를 실행하면 바로 쌓입니다.</span>
+            </div>
+          )}
+        </div>
+      </section>
     </section>
   )
 }

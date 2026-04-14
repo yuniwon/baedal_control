@@ -84,7 +84,7 @@ export const buildLogicalOptionGroups = (
     groupsByKey.set(logicalGroupKey, [...(groupsByKey.get(logicalGroupKey) ?? []), sourceGroup])
   }
 
-  return [...groupsByKey.entries()]
+  const logicalGroups = [...groupsByKey.entries()]
     .map(([logicalGroupKey, groupedSourceGroups]) => {
       const sourceGroups = [...groupedSourceGroups].sort(compareSourceGroups)
       const primaryGroup = sourceGroups[0]
@@ -109,15 +109,56 @@ export const buildLogicalOptionGroups = (
         sampleOptionNames: primaryNormalizedSignature.options
           .slice(0, 3)
           .map((option) => option.optionName),
+        logicalOptions: primaryNormalizedSignature.options.map((option) => ({
+          optionName: option.optionName,
+          optionPrice: option.optionPrice
+        })),
         status: resolveLogicalStatus(sourceGroups),
-        sourceGroups: sourceGroups.map((group) => ({
-          optionGroupId: group.optionGroupId,
-          optionGroupName: group.optionGroupName,
-          presenceStatus: group.presenceStatus ?? 'present',
-          lastSeenAt: group.lastSeenAt ?? null,
-          linkedMenuNames: normalizeLinkedMenuNames(group)
-        }))
+        sourceGroups: sourceGroups.map((group) => {
+          const linkedMenuNames = normalizeLinkedMenuNames(group)
+
+          return {
+            optionGroupId: group.optionGroupId,
+            optionGroupName: group.optionGroupName,
+            presenceStatus: group.presenceStatus ?? 'present',
+            lastSeenAt: group.lastSeenAt ?? null,
+            linkedMenuCount: linkedMenuNames.length,
+            linkedMenuNames,
+            options: group.normalizedSignature.options.map((option) => ({
+              optionName: option.optionName,
+              optionPrice: option.optionPrice
+            }))
+          }
+        })
       } satisfies LogicalOptionGroupRecord
     })
     .sort(compareGroups)
+
+  const displayNameCounts = logicalGroups.reduce<Map<string, number>>((result, group) => {
+    const key = `${group.platformCode}:${group.displayName}`
+    result.set(key, (result.get(key) ?? 0) + 1)
+    return result
+  }, new Map())
+
+  return logicalGroups.map((group) => {
+    const key = `${group.platformCode}:${group.displayName}`
+    const hasShapeConflict = (displayNameCounts.get(key) ?? 0) > 1
+
+    if (!hasShapeConflict) {
+      return group
+    }
+
+    if (
+      group.status === 'missing_suspected' ||
+      group.status === 'absent_confirmed' ||
+      group.status === 'resurfaced'
+    ) {
+      return group
+    }
+
+    return {
+      ...group,
+      status: 'shape_conflict'
+    }
+  })
 }

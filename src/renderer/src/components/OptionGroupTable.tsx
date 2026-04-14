@@ -41,6 +41,10 @@ const getOptionStatusTone = (status: LogicalOptionGroupRecord['status']) => {
     return 'info'
   }
 
+  if (status === 'shape_conflict') {
+    return 'warning'
+  }
+
   return 'success'
 }
 
@@ -95,6 +99,17 @@ const buildRuleSummary = (group: LogicalOptionGroupRecord) => {
   return '선택 규칙 자유'
 }
 
+const formatOptionPrice = (price: number) =>
+  price > 0 ? `+${price.toLocaleString('ko-KR')}원` : '무료'
+
+const buildLinkedMenuPreview = (linkedMenuNames: string[]) => {
+  if (linkedMenuNames.length <= 3) {
+    return linkedMenuNames.join(', ')
+  }
+
+  return `${linkedMenuNames.slice(0, 3).join(', ')} 외 ${linkedMenuNames.length - 3}개`
+}
+
 export const OptionGroupTable = ({ groups }: { groups: LogicalOptionGroupRecord[] }) => {
   if (!groups.length) {
     return <p className="source-empty">조건에 맞는 옵션 묶음이 없습니다.</p>
@@ -119,13 +134,33 @@ export const OptionGroupTable = ({ groups }: { groups: LogicalOptionGroupRecord[
                 {getOptionStatusLabel(group.status)}
               </span>
             </header>
-            <div className="meta-chip-list">
-              {group.sampleOptionNames.map((name) => (
-                <span className="meta-chip" key={`${group.logicalGroupKey}:${name}`}>
-                  {name}
-                </span>
-              ))}
+            <div className="option-group-structure">
+              <div className="option-group-structure-head">
+                <strong>구성</strong>
+                <span>{`${group.logicalOptions.length}개 항목`}</span>
+              </div>
+              <div className="option-group-option-list">
+                {group.logicalOptions.map((option) => (
+                  <div
+                    className="option-group-option-row"
+                    key={`${group.logicalGroupKey}:${option.optionName}:${option.optionPrice}`}
+                  >
+                    <strong>{option.optionName}</strong>
+                    <span>{formatOptionPrice(option.optionPrice)}</span>
+                  </div>
+                ))}
+              </div>
             </div>
+            {group.status === 'merge_candidate' ? (
+              <p className="option-group-summary-note">
+                구성이 같아서 나중에 하나의 공용 옵션으로 합칠 수 있는 후보입니다.
+              </p>
+            ) : null}
+            {group.status === 'shape_conflict' ? (
+              <p className="option-group-summary-note">
+                옵션명은 같지만 실제 구성이나 가격이 달라 먼저 비교가 필요합니다.
+              </p>
+            ) : null}
             <div className="option-group-source-list">
               {group.sourceGroups.map((sourceGroup, index) => (
                 <div className="option-group-source-item" key={`${group.logicalGroupKey}:${index}`}>
@@ -141,8 +176,11 @@ export const OptionGroupTable = ({ groups }: { groups: LogicalOptionGroupRecord[
                   </div>
                   <p className="source-detail">
                     {sourceGroup.linkedMenuNames.length
-                      ? sourceGroup.linkedMenuNames.join(', ')
+                      ? buildLinkedMenuPreview(sourceGroup.linkedMenuNames)
                       : '연결 메뉴 없음'}
+                  </p>
+                  <p className="source-note">
+                    {`연결 메뉴 ${sourceGroup.linkedMenuCount}개`}
                   </p>
                   {sourceGroup.lastSeenAt ? (
                     <p className="source-note source-note-muted">

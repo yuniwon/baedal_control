@@ -39,6 +39,28 @@ describe('buildSyncPreview', () => {
     ])
   })
 
+  it('skips dirty menus when the mapped platform values are already identical', () => {
+    const preview = buildSyncPreview({
+      menus: [{ menuId: 'm2b', baseName: '갈릭디핑', basePrice: 500, isDirty: 1, isManaged: 1 }],
+      platformMenus: [],
+      mappings: [
+        {
+          mappingId: 'map-2b',
+          menuId: 'm2b',
+          platformCode: 'baemin',
+          platformMenuId: 'p-2b',
+          platformMenuName: '갈릭디핑',
+          platformMenuCurrentPrice: 500,
+          matchedBy: 'manual',
+          isConfirmed: 1
+        }
+      ]
+    })
+
+    expect(preview.items).toEqual([])
+    expect(preview.needsReview).toEqual([])
+  })
+
   it('marks binding-review menus as needsReview instead of scheduling a write', () => {
     const preview = buildSyncPreview({
       menus: [{ menuId: 'm3', baseName: '사이다', basePrice: 1800, isDirty: 1, isManaged: 1 }],
@@ -160,6 +182,70 @@ describe('buildSyncPreview', () => {
     ])
   })
 
+  it('marks ddangyo multi-price menus with a changed price as needsReview instead of scheduling a write', () => {
+    const preview = buildSyncPreview({
+      menus: [{ menuId: 'm6b', baseName: '치즈바이트', basePrice: 29900, isDirty: 1, isManaged: 1 }],
+      platformMenus: [],
+      mappings: [
+        {
+          mappingId: 'map-6b',
+          menuId: 'm6b',
+          platformCode: 'ddangyo',
+          platformMenuId: '10000021',
+          platformMenuName: '치즈바이트',
+          platformMenuCurrentPrice: 28900,
+          platformMenuPriceCount: 2,
+          platformMenuPriceSummary:
+            'L · 배달 28,900원 · 포장 28,900원 / M · 배달 25,900원 · 포장 25,900원',
+          matchedBy: 'manual',
+          isConfirmed: 1
+        }
+      ]
+    })
+
+    expect(preview.items).toEqual([])
+    expect(preview.needsReview).toEqual([
+      expect.objectContaining({
+        menuId: 'm6b',
+        platformCode: 'ddangyo',
+        platformMenuId: '10000021',
+        reason: 'price_variant_review'
+      })
+    ])
+  })
+
+  it('marks ddangyo multi-price menus with a changed name as needsReview instead of scheduling a write', () => {
+    const preview = buildSyncPreview({
+      menus: [{ menuId: 'm6c', baseName: '칠성사이다 검증', basePrice: 1800, isDirty: 1, isManaged: 1 }],
+      platformMenus: [],
+      mappings: [
+        {
+          mappingId: 'map-6c',
+          menuId: 'm6c',
+          platformCode: 'ddangyo',
+          platformMenuId: '10000039',
+          platformMenuName: '칠성사이다',
+          platformMenuCurrentPrice: 1800,
+          platformMenuPriceCount: 2,
+          platformMenuPriceSummary:
+            '500ml · 배달 1,800원 · 포장 1,800원 · 매장식사 1,800원 / 1.25L · 배달 2,800원 · 포장 2,800원 · 매장식사 2,800원',
+          matchedBy: 'manual',
+          isConfirmed: 1
+        }
+      ]
+    })
+
+    expect(preview.items).toEqual([])
+    expect(preview.needsReview).toEqual([
+      expect.objectContaining({
+        menuId: 'm6c',
+        platformCode: 'ddangyo',
+        platformMenuId: '10000039',
+        reason: 'price_variant_review'
+      })
+    ])
+  })
+
   it('marks source-absent mappings and missing source platform menus as needsReview', () => {
     const preview = buildSyncPreview({
       menus: [{ menuId: 'm7', baseName: '한정피자', basePrice: 25900, isDirty: 1, isManaged: 1 }],
@@ -207,6 +293,60 @@ describe('buildSyncPreview', () => {
         platformCode: 'coupangeats',
         platformMenuId: 'p-8',
         reason: 'source_missing_review'
+      })
+    ])
+  })
+
+  it('marks missing catalog rows as source-missing review after the platform has been imported', () => {
+    const preview = buildSyncPreview({
+      menus: [{ menuId: 'm7b', baseName: '포테이토골드', basePrice: 21000, isDirty: 1, isManaged: 1 }],
+      platformMenus: [
+        {
+          platformCode: 'baemin',
+          platformMenuId: 'p-other',
+          platformMenuName: '다른메뉴',
+          presenceStatus: 'present'
+        }
+      ],
+      mappings: [
+        {
+          mappingId: 'map-7b',
+          menuId: 'm7b',
+          platformCode: 'baemin',
+          platformMenuId: 'p-missing',
+          platformMenuName: '포테이토골드',
+          matchedBy: 'manual',
+          isConfirmed: 1
+        }
+      ],
+      platformImportRuns: [
+        {
+          importRunId: 'import-7b',
+          platformCode: 'baemin',
+          startedAt: '2026-04-14T01:00:00.000Z',
+          finishedAt: '2026-04-14T01:05:00.000Z',
+          status: 'completed',
+          menuFetchCompleted: 10,
+          optionFetchCompleted: 0,
+          summaryJson: JSON.stringify({
+            platformCode: 'baemin',
+            fetchedCount: 10,
+            createdMenuCount: 10,
+            linkedMappingCount: 10,
+            verifiedMappingCount: 10
+          })
+        }
+      ]
+    } as never)
+
+    expect(preview.items).toEqual([])
+    expect(preview.needsReview).toEqual([
+      expect.objectContaining({
+        menuId: 'm7b',
+        platformCode: 'baemin',
+        platformMenuId: 'p-missing',
+        reason: 'source_missing_review',
+        detail: 'catalog_missing'
       })
     ])
   })
@@ -283,5 +423,61 @@ describe('buildSyncPreview', () => {
         reason: 'source_missing_review'
       })
     ])
+  })
+
+  it('schedules current-session imports as managed-browser execution items', () => {
+    const preview = buildSyncPreview({
+      menus: [
+        { menuId: 'm10', baseName: '왕새우갈비 새이름', basePrice: 23900, isDirty: 1, isManaged: 1 }
+      ],
+      platformMenus: [],
+      mappings: [
+        {
+          mappingId: 'map-10',
+          menuId: 'm10',
+          platformCode: 'coupangeats',
+          platformMenuId: 'ce-10',
+          platformMenuName: '왕새우갈비',
+          platformMenuGroupName: '추천메뉴',
+          platformMenuCurrentPrice: 23900,
+          matchedBy: 'manual',
+          isConfirmed: 1
+        }
+      ],
+      platformImportRuns: [
+        {
+          importRunId: 'import-10',
+          platformCode: 'coupangeats',
+          startedAt: '2026-04-13T04:00:00.000Z',
+          finishedAt: '2026-04-13T04:01:00.000Z',
+          status: 'completed',
+          menuFetchCompleted: 1,
+          optionFetchCompleted: 1,
+          summaryJson: JSON.stringify({
+            platformCode: 'coupangeats',
+            fetchedCount: 35,
+            fetchMode: 'managed_browser',
+            createdMenuCount: 35,
+            linkedMappingCount: 35,
+            verifiedMappingCount: 0
+          })
+        }
+      ]
+    } as never)
+
+    expect(preview.items).toEqual([
+      expect.objectContaining({
+        menuId: 'm10',
+        platformCode: 'coupangeats',
+        platformMenuId: 'ce-10',
+        previousName: '왕새우갈비',
+        previousPrice: 23900,
+        nextName: '왕새우갈비 새이름',
+        nextPrice: 23900,
+        platformMenuGroupName: '추천메뉴',
+        executionMode: 'managed_browser'
+      })
+    ])
+    expect(preview.needsReview).toEqual([])
   })
 })

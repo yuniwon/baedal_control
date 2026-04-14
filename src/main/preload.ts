@@ -26,6 +26,21 @@ export const appApi = {
   platformImportChanges: {
     listLatest: (limit?: number) => ipcRenderer.invoke('platformImportChanges:listLatest', limit)
   },
+  browserInspectionSnapshots: {
+    listLatest: (limit?: number) => ipcRenderer.invoke('browserInspectionSnapshots:listLatest', limit)
+  },
+  browserInspector: {
+    getStatus: () => ipcRenderer.invoke('browserInspector:getStatus'),
+    getManagedChromeSession: () => ipcRenderer.invoke('browserInspector:getManagedChromeSession'),
+    captureManagedChromeTab: (payload: { tabId: string }) =>
+      ipcRenderer.invoke('browserInspector:captureManagedChromeTab', payload),
+    launchManagedChrome: (payload?: {
+      url?: string
+      platformCode?: 'baemin' | 'coupangeats' | 'ddangyo'
+      autoLogin?: boolean
+    }) =>
+      ipcRenderer.invoke('browserInspector:launchManagedChrome', payload)
+  },
   settings: {
     getPlatformCredentialStatus: () => ipcRenderer.invoke('settings:get-platform-credential-status'),
     listPlatformCredentials: () => ipcRenderer.invoke('settings:list-platform-credentials'),

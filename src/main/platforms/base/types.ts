@@ -1,7 +1,9 @@
 import type {
   PlatformCode,
+  PlatformMenuPriceVariantRecord,
   PlatformOptionGroupMenuRecord,
   PlatformOptionItemRecord,
+  PlatformImportFetchMode,
   PlatformMenuBindingStatus,
   PlatformInspectionReport,
   SyncPreviewItem
@@ -19,6 +21,7 @@ export interface PlatformMenuSnapshot {
   platformMenuGroupName?: string
   platformMenuStatus?: string
   platformMenuPriceSummary?: string
+  platformMenuPriceVariants?: PlatformMenuPriceVariantRecord[]
   platformMenuBindingLabels?: string[]
   platformMenuBindingSummary?: string
   platformMenuBindingStatus?: PlatformMenuBindingStatus
@@ -26,6 +29,10 @@ export interface PlatformMenuSnapshot {
 
 export interface PlatformMenuFetchResult {
   menus: PlatformMenuSnapshot[]
+  optionGroups?: PlatformOptionGroupSnapshot[]
+  optionCatalogFetched?: boolean
+  rawMenuCount?: number
+  fetchMode?: PlatformImportFetchMode
   inspection?: PlatformInspectionReport
 }
 

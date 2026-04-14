@@ -27,6 +27,19 @@ describe('MappingRepository', () => {
       platformMenuGroupName: '대표 메뉴',
       platformMenuStatus: '판매중',
       platformMenuPriceSummary: '배달 22,900원',
+      platformMenuPriceVariants: [
+        {
+          variantLabel: '기본',
+          channels: [
+            {
+              channelCode: 'delivery',
+              channelLabel: '배달',
+              amount: 22900,
+              amountText: '22,900원'
+            }
+          ]
+        }
+      ],
       platformMenuBindingSummary: '[음식배달] 꾸버스피자 봉담점',
       platformMenuBindingStatus: '연결 정상',
       matchedBy: 'manual',
@@ -41,6 +54,19 @@ describe('MappingRepository', () => {
         platformMenuGroupName: '대표 메뉴',
         platformMenuStatus: '판매중',
         platformMenuPriceSummary: '배달 22,900원',
+        platformMenuPriceVariants: [
+          {
+            variantLabel: '기본',
+            channels: [
+              {
+                channelCode: 'delivery',
+                channelLabel: '배달',
+                amount: 22900,
+                amountText: '22,900원'
+              }
+            ]
+          }
+        ],
         platformMenuBindingSummary: '[음식배달] 꾸버스피자 봉담점',
         platformMenuBindingStatus: '연결 정상',
         isConfirmed: 1

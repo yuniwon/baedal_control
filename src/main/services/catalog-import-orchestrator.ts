@@ -16,7 +16,7 @@ import type {
   PlatformOptionGroupSnapshot
 } from '../platforms/base/types'
 import { withSavepoint } from '../db/savepoint'
-import { scoreMenuMatch } from './menu-matcher'
+import { isSafeAutoLinkMatch, scoreMenuMatch } from './menu-matcher'
 import { buildOptionSignature } from './option-signature'
 import { diffCatalogRows, type CatalogPresenceUpdate } from './catalog-diff-service'
 
@@ -28,6 +28,7 @@ interface MenuRepositoryLike {
 interface MappingRepositoryLike {
   listAll(): PlatformMenuMappingRecord[]
   listForMenu(menuId: string): PlatformMenuMappingRecord[]
+  remove(mappingId: string): void
   upsert(record: PlatformMenuMappingRecord): void
   setMappingStatus(mappingId: string, mappingStatus: 'source_absent'): void
 }
@@ -63,6 +64,7 @@ interface PlatformImportRunRepositoryLike {
       menuFetchCompleted: number
       optionFetchCompleted: number
       summaryJson?: string | null
+      errorMessage?: string | null
     }
   ): void
 }
@@ -136,8 +138,18 @@ export class CatalogImportOrchestrator {
         : { menus: await adapter.fetchMenus(), inspection: undefined }
       menuFetchCompleted = 1
       const fetchedMenus = this.normalizePlatformMenus(fetchResult.menus)
-      const fetchedOptionGroups = adapter.fetchOptionGroups ? await adapter.fetchOptionGroups() : []
-      optionFetchCompleted = adapter.fetchOptionGroups ? 1 : 0
+      const duplicateMenuCount = Math.max(
+        (fetchResult.rawMenuCount ?? fetchResult.menus.length) - fetchedMenus.length,
+        0
+      )
+      const fetchedOptionGroups =
+        fetchResult.optionCatalogFetched === true
+          ? fetchResult.optionGroups ?? []
+          : adapter.fetchOptionGroups
+            ? await adapter.fetchOptionGroups()
+            : []
+      optionFetchCompleted =
+        fetchResult.optionCatalogFetched === true ? 1 : adapter.fetchOptionGroups ? 1 : 0
       const normalizedOptionGroups = this.normalizePlatformOptionGroups(platformCode, fetchedOptionGroups)
       const currentMenuRows = this.buildMenuRows(fetchedMenus)
       const previousMenus = this.deps.platformMenuRepository
@@ -167,6 +179,7 @@ export class CatalogImportOrchestrator {
             platformMenuGroupName: record.platformMenuGroupName ?? null,
             platformMenuStatus: record.platformMenuStatus ?? null,
             platformMenuPriceSummary: record.platformMenuPriceSummary ?? null,
+            platformMenuPriceVariants: record.platformMenuPriceVariants ?? null,
             platformMenuBindingSummary: record.platformMenuBindingSummary ?? null,
             platformMenuBindingStatus: record.platformMenuBindingStatus ?? null
           },
@@ -221,14 +234,22 @@ export class CatalogImportOrchestrator {
         )
       })
 
-      const summary = this.buildSummary(platformCode, fetchedMenus, menuPlan)
+      const summary = this.buildSummary(
+        platformCode,
+        fetchedMenus,
+        normalizedOptionGroups,
+        menuPlan,
+        duplicateMenuCount,
+        fetchResult.fetchMode
+      )
       const inspection = this.appendResultStep(fetchResult.inspection, summary, fetchedMenus)
 
       this.deps.platformImportRunRepository.finish(importRunId, {
         status: 'completed',
         menuFetchCompleted,
         optionFetchCompleted,
-        summaryJson: JSON.stringify(summary)
+        summaryJson: JSON.stringify(summary),
+        errorMessage: null
       })
 
       return { summary, inspection }
@@ -237,7 +258,8 @@ export class CatalogImportOrchestrator {
         status: 'partial_failed',
         menuFetchCompleted,
         optionFetchCompleted,
-        summaryJson: null
+        summaryJson: null,
+        errorMessage: error instanceof Error ? error.message : 'unknown_error'
       })
       throw error
     }
@@ -266,6 +288,8 @@ export class CatalogImportOrchestrator {
         platformMenuStatus: platformMenu.platformMenuStatus ?? existingMenu.platformMenuStatus,
         platformMenuPriceSummary:
           platformMenu.platformMenuPriceSummary ?? existingMenu.platformMenuPriceSummary,
+        platformMenuPriceVariants:
+          platformMenu.platformMenuPriceVariants ?? existingMenu.platformMenuPriceVariants,
         platformMenuBindingLabels: this.mergeBindingLabels(
           existingMenu.platformMenuBindingLabels,
           platformMenu.platformMenuBindingLabels
@@ -299,6 +323,26 @@ export class CatalogImportOrchestrator {
   }
 
   private assignBindingMetadata(platformMenus: PlatformMenuSnapshot[]) {
+    const hasBindingSignals = platformMenus.some((platformMenu) => {
+      const labels = this.mergeBindingLabels(platformMenu.platformMenuBindingLabels)
+      return (
+        labels.length > 0 ||
+        Boolean(platformMenu.platformMenuBindingSummary) ||
+        Boolean(platformMenu.platformMenuBindingStatus)
+      )
+    })
+
+    if (!hasBindingSignals) {
+      return platformMenus.map((platformMenu) => {
+        const platformMenuBindingLabels = this.mergeBindingLabels(platformMenu.platformMenuBindingLabels)
+
+        return {
+          ...platformMenu,
+          ...(platformMenuBindingLabels.length > 0 ? { platformMenuBindingLabels } : {})
+        }
+      })
+    }
+
     const dominantBindingLabel = this.resolveDominantBindingLabel(platformMenus)
 
     return platformMenus.map((platformMenu) => {
@@ -381,6 +425,7 @@ export class CatalogImportOrchestrator {
     const usedMenuIds = new Set(
       mappings.filter((mapping) => mapping.platformCode === platformCode).map((mapping) => mapping.menuId)
     )
+    const menusById = new Map(menus.map((menu) => [menu.menuId, menu]))
     const mappingsByPlatformMenuId = new Map(
       mappings
         .filter((mapping) => mapping.platformCode === platformCode)
@@ -388,13 +433,24 @@ export class CatalogImportOrchestrator {
     )
     const createdMenus: MenuRecord[] = []
     const mappingUpserts: PlatformMenuMappingRecord[] = []
+    const mappingRemovals: string[] = []
     let createdMenuCount = 0
     let linkedMappingCount = 0
     let verifiedMappingCount = 0
 
     for (const platformMenu of platformMenus) {
       const existingMapping = mappingsByPlatformMenuId.get(platformMenu.platformMenuId)
-      if (existingMapping) {
+      const existingMenu = existingMapping ? menusById.get(existingMapping.menuId) : undefined
+      const keepExistingMapping =
+        existingMapping &&
+        (existingMapping.matchedBy === 'manual' ||
+          (existingMenu &&
+            isSafeAutoLinkMatch(existingMenu.baseName, platformMenu.platformMenuName)))
+
+      if (existingMapping && keepExistingMapping) {
+        const hasBindingSummary = 'platformMenuBindingSummary' in platformMenu
+        const hasBindingStatus = 'platformMenuBindingStatus' in platformMenu
+
         mappingUpserts.push({
           ...existingMapping,
           platformMenuName: platformMenu.platformMenuName,
@@ -408,17 +464,24 @@ export class CatalogImportOrchestrator {
             platformMenu.platformMenuStatus ?? existingMapping.platformMenuStatus ?? null,
           platformMenuPriceSummary:
             platformMenu.platformMenuPriceSummary ?? existingMapping.platformMenuPriceSummary ?? null,
+          platformMenuPriceVariants:
+            platformMenu.platformMenuPriceVariants ?? existingMapping.platformMenuPriceVariants ?? null,
           platformMenuBindingSummary:
-            platformMenu.platformMenuBindingSummary ??
-            existingMapping.platformMenuBindingSummary ??
-            null,
+            hasBindingSummary
+              ? platformMenu.platformMenuBindingSummary ?? null
+              : null,
           platformMenuBindingStatus:
-            platformMenu.platformMenuBindingStatus ??
-            existingMapping.platformMenuBindingStatus ??
-            null
+            hasBindingStatus
+              ? platformMenu.platformMenuBindingStatus ?? null
+              : null
         })
         verifiedMappingCount += 1
         continue
+      }
+
+      if (existingMapping) {
+        mappingRemovals.push(existingMapping.mappingId)
+        usedMenuIds.delete(existingMapping.menuId)
       }
 
       const matchedMenu = this.findBestAvailableMenu(menus, usedMenuIds, platformMenu.platformMenuName)
@@ -435,6 +498,7 @@ export class CatalogImportOrchestrator {
 
         createdMenus.push(nextMenu)
         menus.push(nextMenu)
+        menusById.set(nextMenu.menuId, nextMenu)
         createdMenuCount += 1
       }
 
@@ -449,6 +513,7 @@ export class CatalogImportOrchestrator {
         platformMenuGroupName: platformMenu.platformMenuGroupName ?? null,
         platformMenuStatus: platformMenu.platformMenuStatus ?? null,
         platformMenuPriceSummary: platformMenu.platformMenuPriceSummary ?? null,
+        platformMenuPriceVariants: platformMenu.platformMenuPriceVariants ?? null,
         platformMenuBindingSummary: platformMenu.platformMenuBindingSummary ?? null,
         platformMenuBindingStatus: platformMenu.platformMenuBindingStatus ?? null,
         matchedBy: 'auto',
@@ -461,6 +526,7 @@ export class CatalogImportOrchestrator {
     return {
       createdMenuCount,
       linkedMappingCount,
+      mappingRemovals,
       verifiedMappingCount,
       createdMenus,
       mappingUpserts
@@ -485,6 +551,7 @@ export class CatalogImportOrchestrator {
         platformMenuGroupName: platformMenu.platformMenuGroupName ?? null,
         platformMenuStatus: platformMenu.platformMenuStatus ?? null,
         platformMenuPriceSummary: platformMenu.platformMenuPriceSummary ?? null,
+        platformMenuPriceVariants: platformMenu.platformMenuPriceVariants ?? null,
         platformMenuBindingSummary: platformMenu.platformMenuBindingSummary ?? null,
         platformMenuBindingStatus: platformMenu.platformMenuBindingStatus ?? null
       }))
@@ -497,8 +564,13 @@ export class CatalogImportOrchestrator {
 
   private persistLocalMenuState(menuPlan: {
     createdMenus: MenuRecord[]
+    mappingRemovals: string[]
     mappingUpserts: PlatformMenuMappingRecord[]
   }) {
+    for (const mappingId of menuPlan.mappingRemovals) {
+      this.deps.mappingRepository.remove(mappingId)
+    }
+
     for (const menu of menuPlan.createdMenus) {
       this.deps.menuRepository.upsert(menu)
     }
@@ -575,15 +647,21 @@ export class CatalogImportOrchestrator {
   private buildSummary(
     platformCode: PlatformCode,
     platformMenus: PlatformMenuSnapshot[],
+    optionGroups: PlatformOptionGroupRecord[],
     menuPlan: {
       createdMenuCount: number
       linkedMappingCount: number
       verifiedMappingCount: number
-    }
+    },
+    duplicateMenuCount: number,
+    fetchMode?: 'managed_browser'
   ): PlatformImportSummary {
     return {
       platformCode,
       fetchedCount: platformMenus.length,
+      ...(optionGroups.length > 0 ? { optionGroupCount: optionGroups.length } : {}),
+      ...(duplicateMenuCount > 0 ? { duplicateMenuCount } : {}),
+      ...(fetchMode ? { fetchMode } : {}),
       createdMenuCount: menuPlan.createdMenuCount,
       linkedMappingCount: menuPlan.linkedMappingCount,
       verifiedMappingCount: menuPlan.verifiedMappingCount
@@ -602,6 +680,15 @@ export class CatalogImportOrchestrator {
     const sampleMenu = platformMenus[0]
     const fields = [
       { name: 'fetchedCount', value: String(summary.fetchedCount), usage: 'control' as const },
+      ...(typeof summary.optionGroupCount === 'number'
+        ? [{ name: 'optionGroupCount', value: String(summary.optionGroupCount), usage: 'control' as const }]
+        : []),
+      ...(typeof summary.duplicateMenuCount === 'number'
+        ? [{ name: 'duplicateMenuCount', value: String(summary.duplicateMenuCount), usage: 'control' as const }]
+        : []),
+      ...(summary.fetchMode
+        ? [{ name: 'fetchMode', value: summary.fetchMode, usage: 'control' as const }]
+        : []),
       { name: 'createdMenuCount', value: String(summary.createdMenuCount), usage: 'control' as const },
       { name: 'linkedMappingCount', value: String(summary.linkedMappingCount), usage: 'control' as const },
       { name: 'verifiedMappingCount', value: String(summary.verifiedMappingCount), usage: 'control' as const },
@@ -631,6 +718,13 @@ export class CatalogImportOrchestrator {
               usage: 'used' as const
             },
             {
+              name: 'sample.platformMenuPriceVariants',
+              value: sampleMenu.platformMenuPriceVariants?.length
+                ? JSON.stringify(sampleMenu.platformMenuPriceVariants)
+                : '-',
+              usage: 'used' as const
+            },
+            {
               name: 'sample.platformMenuBindingStatus',
               value: sampleMenu.platformMenuBindingStatus ?? '-',
               usage: 'used' as const
@@ -657,15 +751,30 @@ export class CatalogImportOrchestrator {
   }
 
   private buildResultDetail(summary: PlatformImportSummary) {
+    const subject =
+      typeof summary.optionGroupCount === 'number'
+        ? `메뉴 ${summary.fetchedCount}개와 옵션 그룹 ${summary.optionGroupCount}개`
+        : `메뉴 ${summary.fetchedCount}개`
+    const detailSuffix = [
+      typeof summary.duplicateMenuCount === 'number' && summary.duplicateMenuCount > 0
+        ? `중복 ${summary.duplicateMenuCount}건을 정리했습니다.`
+        : null,
+      summary.fetchMode === 'managed_browser'
+        ? '현재 로그인된 전용 크롬 세션에서 읽었습니다.'
+        : null
+    ]
+      .filter((value): value is string => Boolean(value))
+      .join(' ')
+
     if (summary.createdMenuCount > 0 || summary.linkedMappingCount > 0) {
-      return `메뉴 ${summary.fetchedCount}개를 읽고 새 메뉴 ${summary.createdMenuCount}개, 새 연결 ${summary.linkedMappingCount}개를 반영했습니다.`
+      return `${subject}를 읽고 새 메뉴 ${summary.createdMenuCount}개, 새 연결 ${summary.linkedMappingCount}개를 반영했습니다.${detailSuffix ? ` ${detailSuffix}` : ''}`
     }
 
     if (summary.verifiedMappingCount > 0) {
-      return `메뉴 ${summary.fetchedCount}개를 다시 확인했고 기존 연결 ${summary.verifiedMappingCount}개를 유지했습니다.`
+      return `${subject}를 다시 확인했고 기존 연결 ${summary.verifiedMappingCount}개를 유지했습니다.${detailSuffix ? ` ${detailSuffix}` : ''}`
     }
 
-    return `메뉴 ${summary.fetchedCount}개를 읽었습니다.`
+    return `${subject}를 읽었습니다.${detailSuffix ? ` ${detailSuffix}` : ''}`
   }
 
   private buildMenuRows(platformMenus: PlatformMenuSnapshot[]) {
@@ -679,6 +788,7 @@ export class CatalogImportOrchestrator {
         platformMenuGroupName: platformMenu.platformMenuGroupName ?? null,
         platformMenuStatus: platformMenu.platformMenuStatus ?? null,
         platformMenuPriceSummary: platformMenu.platformMenuPriceSummary ?? null,
+        platformMenuPriceVariants: platformMenu.platformMenuPriceVariants ?? null,
         platformMenuBindingSummary: platformMenu.platformMenuBindingSummary ?? null,
         platformMenuBindingStatus: platformMenu.platformMenuBindingStatus ?? null
       }
@@ -702,14 +812,17 @@ export class CatalogImportOrchestrator {
     platformMenuName: string
   ) {
     const candidates = menus
-      .filter((menu) => !usedMenuIds.has(menu.menuId))
+      .filter(
+        (menu) =>
+          !usedMenuIds.has(menu.menuId) && isSafeAutoLinkMatch(menu.baseName, platformMenuName)
+      )
       .map((menu) => ({
         menu,
         score: scoreMenuMatch(menu.baseName, platformMenuName)
       }))
       .sort((left, right) => right.score - left.score)
 
-    return candidates[0] && candidates[0].score >= 0.9 ? candidates[0].menu : null
+    return candidates[0]?.menu ?? null
   }
 }
 

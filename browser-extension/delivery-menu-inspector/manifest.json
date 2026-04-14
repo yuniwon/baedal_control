@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "배달앱 메뉴 검사기",
+  "version": "0.1.0",
+  "description": "사장님 사이트 화면과 API 흔적을 로컬 메뉴 동기화 앱으로 전송합니다.",
+  "permissions": ["activeTab", "scripting", "tabs"],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "https://*.baemin.com/*",
+    "https://*.coupangeats.com/*",
+    "https://*.ddangyo.com/*"
+  ],
+  "action": {
+    "default_title": "배달앱 메뉴 검사기",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.baemin.com/*",
+        "https://*.coupangeats.com/*",
+        "https://*.ddangyo.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

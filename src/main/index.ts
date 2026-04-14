@@ -1,9 +1,10 @@
 import { app, BrowserWindow, safeStorage } from 'electron'
 import { join } from 'node:path'
-import type { PlatformCode } from '../shared/contracts'
+import type { BrowserInspectionSnapshot, PlatformCode } from '../shared/contracts'
 import { createConnection } from './db/connection'
 import { migrate } from './db/migrations'
 import { registerHandlers } from './ipc/register-handlers'
+import { BrowserInspectionSnapshotRepository } from './repositories/browser-inspection-snapshot-repository'
 import { MappingRepository } from './repositories/mapping-repository'
 import { MenuRepository } from './repositories/menu-repository'
 import { PlatformImportChangeRepository } from './repositories/platform-import-change-repository'
@@ -15,10 +16,21 @@ import { SyncRunRepository } from './repositories/sync-run-repository'
 import { PlatformAdapterRegistry } from './platforms/base/registry'
 import { BaeminAdapter } from './platforms/baemin/adapter'
 import { CoupangEatsAdapter } from './platforms/coupangeats/adapter'
+import { CoupangEatsManagedBrowserUpdater } from './platforms/coupangeats/managed-browser-updater'
 import { DdangyoAdapter } from './platforms/ddangyo/adapter'
 import { CredentialVault } from './services/credential-vault'
+import { BrowserInspectorBridge } from './services/browser-inspector-bridge'
 import { createCatalogImportOrchestrator } from './services/catalog-import-orchestrator'
 import { buildLogicalOptionGroups } from './services/logical-option-group-service'
+import { ManagedChromeLauncher } from './services/managed-chrome-launcher'
+import { ManagedChromeLoginAutomator } from './services/managed-chrome-login-automator'
+import { ManagedChromeSessionProbe } from './services/managed-chrome-session-probe'
+import { ManagedChromeSnapshotCapturer } from './services/managed-chrome-snapshot-capturer'
+import { ManagedChromeScriptRunner } from './services/managed-chrome-script-runner'
+import {
+  ManagedBrowserFailureContextHandler,
+  SyncFailureContextCollector
+} from './services/sync-failure-context'
 import { SyncEngine } from './services/sync-engine'
 
 type PlatformCredential = NonNullable<ReturnType<CredentialVault['get']>>
@@ -57,13 +69,61 @@ app.whenReady().then(() => {
   const platformOptionGroupRepository = new PlatformOptionGroupRepository(db)
   const platformImportRunRepository = new PlatformImportRunRepository(db)
   const platformImportChangeRepository = new PlatformImportChangeRepository(db)
+  const browserInspectionSnapshotRepository = new BrowserInspectionSnapshotRepository(db)
   const syncRunRepository = new SyncRunRepository(db)
   const syncRunItemRepository = new SyncRunItemRepository(db)
   const credentialVault = new CredentialVault(join(app.getPath('userData'), 'credentials.json'), safeStorage)
+  const browserInspectorBridge = new BrowserInspectorBridge(browserInspectionSnapshotRepository, {
+    extensionPath: join(process.cwd(), 'browser-extension', 'delivery-menu-inspector')
+  })
+  const managedChromeLauncher = new ManagedChromeLauncher({
+    extensionPath: join(process.cwd(), 'browser-extension', 'delivery-menu-inspector'),
+    profileDir: join(app.getPath('userData'), 'managed-chrome')
+  })
+  const managedChromeSessionProbe = new ManagedChromeSessionProbe()
+  const managedChromeSnapshotCapturer = new ManagedChromeSnapshotCapturer()
+  const managedChromeScriptRunner = new ManagedChromeScriptRunner()
+  const managedChromeLoginAutomator = new ManagedChromeLoginAutomator({
+    managedChromeSessionProbe,
+    managedChromeScriptRunner
+  })
+  const coupangEatsManagedBrowserUpdater = new CoupangEatsManagedBrowserUpdater({
+    managedChromeSessionProbe,
+    managedChromeScriptRunner
+  })
+  const syncFailureContextCollector = new SyncFailureContextCollector([
+    new ManagedBrowserFailureContextHandler({
+      platformCode: 'coupangeats',
+      managedChromeSessionProbe,
+      managedChromeSnapshotCapturer,
+      browserInspectionSnapshotRepository
+    })
+  ])
   const adapterRegistry = new PlatformAdapterRegistry()
   const adapterFactories: Record<PlatformCode, PlatformAdapterFactory> = {
     baemin: (credential) => new BaeminAdapter(credential),
-    coupangeats: (credential) => new CoupangEatsAdapter(credential),
+    coupangeats: (credential) =>
+      new CoupangEatsAdapter(credential, 'https://store.coupangeats.com/', {
+        captureManagedBrowserSnapshots: async () => {
+          const session = await managedChromeSessionProbe.inspect()
+          const tabs = session.tabs.filter(
+            (tab) =>
+              tab.platformCode === 'coupangeats' &&
+              (tab.pageKind === 'menu_list' || tab.pageKind === 'option_list')
+          )
+
+          const snapshots: BrowserInspectionSnapshot[] = []
+
+          for (const tab of tabs) {
+            const snapshot = await managedChromeSnapshotCapturer.captureTab(tab.tabId)
+            browserInspectionSnapshotRepository.save(snapshot)
+            snapshots.push(snapshot)
+          }
+
+          return snapshots
+        },
+        applyManagedBrowserUpdate: (item) => coupangEatsManagedBrowserUpdater.applyMenuUpdate(item)
+      }),
     ddangyo: (credential) => new DdangyoAdapter(credential)
   }
 
@@ -80,7 +140,7 @@ app.whenReady().then(() => {
     create: (record) => syncRunRepository.create(record),
     finish: (record) => syncRunRepository.update(record),
     addItem: (record) => syncRunItemRepository.addItem(record)
-  })
+  }, syncFailureContextCollector)
   const catalogImportOrchestrator = createCatalogImportOrchestrator({
     db,
     adapterRegistry,
@@ -92,6 +152,9 @@ app.whenReady().then(() => {
     platformImportChangeRepository
   });
   (Object.keys(adapterFactories) as PlatformCode[]).forEach(registerPlatformAdapter)
+  void browserInspectorBridge.start().catch((error) => {
+    console.error('Failed to start browser inspector bridge', error)
+  })
 
   registerHandlers({
     menuRepository,
@@ -100,6 +163,12 @@ app.whenReady().then(() => {
     platformOptionGroupRepository,
     platformImportRunRepository,
     platformImportChangeRepository,
+    browserInspectionSnapshotRepository,
+    browserInspectorBridge,
+    managedChromeLauncher,
+    managedChromeLoginAutomator,
+    managedChromeSessionProbe,
+    managedChromeSnapshotCapturer,
     logicalOptionGroupService: {
       list: () => buildLogicalOptionGroups(platformOptionGroupRepository.listAll())
     },
@@ -117,6 +186,10 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
     }
+  })
+
+  app.on('before-quit', () => {
+    void browserInspectorBridge.stop()
   })
 })
 

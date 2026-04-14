@@ -11,6 +11,7 @@ interface FinishPlatformImportRunInput {
   menuFetchCompleted: number
   optionFetchCompleted: number
   summaryJson?: string | null
+  errorMessage?: string | null
 }
 
 export class PlatformImportRunRepository {
@@ -34,13 +35,15 @@ export class PlatformImportRunRepository {
         status = ?,
         menu_fetch_completed = ?,
         option_fetch_completed = ?,
-        summary_json = ?
+        summary_json = ?,
+        error_message = ?
       where import_run_id = ?
     `).run(
       input.status,
       input.menuFetchCompleted,
       input.optionFetchCompleted,
       input.summaryJson ?? null,
+      input.errorMessage ?? null,
       importRunId
     )
 
@@ -59,7 +62,8 @@ export class PlatformImportRunRepository {
         status,
         menu_fetch_completed as menuFetchCompleted,
         option_fetch_completed as optionFetchCompleted,
-        summary_json as summaryJson
+        summary_json as summaryJson,
+        error_message as errorMessage
       from platform_import_runs
       order by started_at desc, rowid desc
       limit ?

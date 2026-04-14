@@ -25,6 +25,19 @@ const {
       platformMenuGroupName: '숨김 메뉴',
       platformMenuStatus: '숨김',
       platformMenuPriceSummary: '배달 22,900원',
+      platformMenuPriceVariants: [
+        {
+          variantLabel: null,
+          channels: [
+            {
+              channelCode: 'delivery',
+              channelLabel: '배달',
+              amount: 22900,
+              amountText: '22,900원'
+            }
+          ]
+        }
+      ],
       platformMenuBindingSummary: '[음식배달] 꾸버스피자 봉담점',
       platformMenuBindingStatus: '연결 정상',
       matchedBy: 'auto',
@@ -77,6 +90,19 @@ const {
       platformMenuGroupName: '숨김 메뉴',
       platformMenuStatus: '숨김',
       platformMenuPriceSummary: '배달 22,900원',
+      platformMenuPriceVariants: [
+        {
+          variantLabel: null,
+          channels: [
+            {
+              channelCode: 'delivery',
+              channelLabel: '배달',
+              amount: 22900,
+              amountText: '22,900원'
+            }
+          ]
+        }
+      ],
       platformMenuBindingSummary: '[음식배달] 꾸버스피자 봉담점',
       platformMenuBindingStatus: '연결 정상',
       presenceStatus: 'present',
@@ -207,7 +233,8 @@ describe('MenuPage', () => {
     expect(screen.queryByText(/ID p-11/)).toBeNull()
     expect(screen.getByText('확인됨')).toBeTruthy()
     expect(screen.getAllByText(/숨김 메뉴/).length).toBeGreaterThan(0)
-    expect(screen.getByText(/배달 22,900원/)).toBeTruthy()
+    expect(screen.getByText('배달 22,900원')).toBeTruthy()
+    expect(screen.getByText(/기본 · 배달 22,900원/)).toBeTruthy()
     expect(screen.getByText(/\[음식배달\] 꾸버스피자 봉담점/)).toBeTruthy()
     expect(screen.getByText(/마지막 확인 2026\. 04\. 13\. 09:00/)).toBeTruthy()
   })
@@ -267,6 +294,24 @@ describe('MenuPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /재등장/ }))
     expect(screen.queryByDisplayValue('콤비네이션')).toBeNull()
     expect(screen.getByDisplayValue('테스트 메뉴')).toBeTruthy()
+  })
+
+  it('filters menus by the search box using base and platform menu names', async () => {
+    render(<MenuPage />)
+
+    expect(await screen.findByDisplayValue('콤비네이션')).toBeTruthy()
+    fireEvent.change(screen.getByPlaceholderText('기준 메뉴 또는 플랫폼 메뉴 검색'), {
+      target: { value: '핫소스' }
+    })
+
+    expect(screen.queryByDisplayValue('콤비네이션')).toBeNull()
+    expect(screen.getByLabelText('m2-name')).toBeTruthy()
+
+    fireEvent.change(screen.getByPlaceholderText('기준 메뉴 또는 플랫폼 메뉴 검색'), {
+      target: { value: '없는 메뉴' }
+    })
+
+    expect(screen.getByText('조건에 맞는 메뉴가 없습니다.')).toBeTruthy()
   })
 
   it('lets the user exclude a menu from management', async () => {

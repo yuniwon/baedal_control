@@ -18,7 +18,8 @@ describe('PlatformImportRunRepository', () => {
       status: 'completed',
       menuFetchCompleted: 1,
       optionFetchCompleted: 0,
-      summaryJson: '{"menus":1}'
+      summaryJson: '{"menus":1}',
+      errorMessage: null
     })
 
     repository.start({ importRunId: 'run-2', platformCode: 'coupangeats' })
@@ -31,7 +32,8 @@ describe('PlatformImportRunRepository', () => {
         menuFetchCompleted: 0,
         optionFetchCompleted: 0,
         finishedAt: null,
-        summaryJson: null
+        summaryJson: null,
+        errorMessage: null
       }),
       expect.objectContaining({
         importRunId: 'run-1',
@@ -40,7 +42,27 @@ describe('PlatformImportRunRepository', () => {
         menuFetchCompleted: 1,
         optionFetchCompleted: 0,
         finishedAt: expect.any(String),
-        summaryJson: '{"menus":1}'
+        summaryJson: '{"menus":1}',
+        errorMessage: null
+      })
+    ])
+  })
+
+  it('stores the latest import failure message for partial failures', () => {
+    repository.start({ importRunId: 'run-1', platformCode: 'baemin' })
+    repository.finish('run-1', {
+      status: 'partial_failed',
+      menuFetchCompleted: 1,
+      optionFetchCompleted: 0,
+      summaryJson: null,
+      errorMessage: 'baemin_menu_page_collection_incomplete:2/3'
+    })
+
+    expect(repository.listLatest()).toEqual([
+      expect.objectContaining({
+        importRunId: 'run-1',
+        status: 'partial_failed',
+        errorMessage: 'baemin_menu_page_collection_incomplete:2/3'
       })
     ])
   })

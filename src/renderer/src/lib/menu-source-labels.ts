@@ -84,5 +84,9 @@ export const formatNeedsReviewLabel = (item: SyncPreviewNeedsReview) => {
     return item.detail ? `원본 메뉴 확인 필요 · ${item.detail}` : '원본 메뉴 확인 필요'
   }
 
+  if (item.reason === 'managed_session_write_review') {
+    return item.detail ? `현재 세션 반영 경로 필요 · ${item.detail}` : '현재 세션 반영 경로 필요'
+  }
+
   return item.detail ? `가게 연결 검토 필요 · ${item.detail}` : '가게 연결 검토 필요'
 }

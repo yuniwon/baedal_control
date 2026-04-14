@@ -18,5 +18,5 @@
     "types": ["node", "vitest/globals"],
     "baseUrl": "."
   },
-  "include": ["electron.vite.config.ts", "vitest.config.ts", "src", "tests"]
+  "include": ["electron.vite.config.ts", "vitest.config.ts", "src", "tests", "browser-extension"]
 }

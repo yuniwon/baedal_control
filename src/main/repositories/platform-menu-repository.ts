@@ -1,6 +1,10 @@
 import type { PlatformCode, PlatformMenuCatalogRecord } from '../../shared/contracts'
 import type { DatabaseConnection } from '../db/connection'
 import { withSavepoint } from '../db/savepoint'
+import {
+  parsePlatformMenuPriceVariants,
+  stringifyPlatformMenuPriceVariants
+} from './platform-menu-price-variants'
 
 interface PlatformMenuPresenceUpdate {
   platformCode: PlatformCode
@@ -29,10 +33,11 @@ export class PlatformMenuRepository {
           platform_menu_group_name,
           platform_menu_status,
           platform_menu_price_summary,
+          platform_menu_price_variants_json,
           platform_menu_binding_summary,
           platform_menu_binding_status,
           last_seen_at
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, current_timestamp)
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, current_timestamp)
       `)
 
       for (const record of records) {
@@ -45,6 +50,7 @@ export class PlatformMenuRepository {
           record.platformMenuGroupName ?? null,
           record.platformMenuStatus ?? null,
           record.platformMenuPriceSummary ?? null,
+          stringifyPlatformMenuPriceVariants(record.platformMenuPriceVariants),
           record.platformMenuBindingSummary ?? null,
           record.platformMenuBindingStatus ?? null
         )
@@ -71,11 +77,12 @@ export class PlatformMenuRepository {
         platform_menu_group_name,
         platform_menu_status,
         platform_menu_price_summary,
+        platform_menu_price_variants_json,
         platform_menu_binding_summary,
         platform_menu_binding_status,
         last_seen_import_id,
         last_seen_at
-      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, current_timestamp)
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, current_timestamp)
       on conflict(platform_code, platform_menu_id) do update set
         platform_menu_name = excluded.platform_menu_name,
         platform_menu_current_price = excluded.platform_menu_current_price,
@@ -83,6 +90,7 @@ export class PlatformMenuRepository {
         platform_menu_group_name = excluded.platform_menu_group_name,
         platform_menu_status = excluded.platform_menu_status,
         platform_menu_price_summary = excluded.platform_menu_price_summary,
+        platform_menu_price_variants_json = excluded.platform_menu_price_variants_json,
         platform_menu_binding_summary = excluded.platform_menu_binding_summary,
         platform_menu_binding_status = excluded.platform_menu_binding_status,
         last_seen_import_id = excluded.last_seen_import_id,
@@ -106,6 +114,7 @@ export class PlatformMenuRepository {
           record.platformMenuGroupName ?? null,
           record.platformMenuStatus ?? null,
           record.platformMenuPriceSummary ?? null,
+          stringifyPlatformMenuPriceVariants(record.platformMenuPriceVariants),
           record.platformMenuBindingSummary ?? null,
           record.platformMenuBindingStatus ?? null,
           importRunId
@@ -145,7 +154,7 @@ export class PlatformMenuRepository {
   }
 
   listAll(): PlatformMenuCatalogRecord[] {
-    return this.db.prepare(`
+    const rows = this.db.prepare(`
       select
         platform_code as platformCode,
         platform_menu_id as platformMenuId,
@@ -155,6 +164,7 @@ export class PlatformMenuRepository {
         platform_menu_group_name as platformMenuGroupName,
         platform_menu_status as platformMenuStatus,
         platform_menu_price_summary as platformMenuPriceSummary,
+        platform_menu_price_variants_json as platformMenuPriceVariantsJson,
         platform_menu_binding_summary as platformMenuBindingSummary,
         platform_menu_binding_status as platformMenuBindingStatus,
         last_seen_import_id as lastSeenImportId,
@@ -164,6 +174,13 @@ export class PlatformMenuRepository {
         presence_changed_at as presenceChangedAt
       from platform_menus
       order by platform_code asc, platform_menu_name asc, platform_menu_id asc
-    `).all() as unknown as PlatformMenuCatalogRecord[]
+    `).all() as unknown as Array<
+      PlatformMenuCatalogRecord & { platformMenuPriceVariantsJson?: string | null }
+    >
+
+    return rows.map(({ platformMenuPriceVariantsJson, ...record }) => ({
+      ...record,
+      platformMenuPriceVariants: parsePlatformMenuPriceVariants(platformMenuPriceVariantsJson)
+    }))
   }
 }

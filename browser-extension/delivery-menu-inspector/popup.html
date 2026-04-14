@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>배달앱 메뉴 검사기</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        width: 320px;
+        font-family: "Segoe UI", sans-serif;
+        background: #f7f8fa;
+        color: #101828;
+      }
+
+      .panel {
+        display: grid;
+        gap: 12px;
+        border: 1px solid #e4e7ec;
+        border-radius: 8px;
+        background: #ffffff;
+        padding: 14px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 17px;
+      }
+
+      p,
+      li,
+      #status {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.5;
+        color: #475467;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 6px;
+      }
+
+      button {
+        border: 1px solid #2563eb;
+        border-radius: 8px;
+        background: #2563eb;
+        color: #ffffff;
+        padding: 10px 12px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        cursor: wait;
+        opacity: 0.7;
+      }
+
+      code {
+        font-family: Consolas, monospace;
+        background: #f2f4f7;
+        border-radius: 6px;
+        padding: 1px 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="panel">
+      <h1>현재 페이지 전체 캡처</h1>
+      <p>로그인된 사장님 사이트 탭에서 메뉴 화면을 위에서 아래까지 읽고, 최근 API 흔적과 함께 로컬 앱으로 보냅니다.</p>
+      <button id="capture-button" type="button">전체 캡처 보내기</button>
+      <p id="status">로컬 앱이 열려 있고 설정 화면에 수신 대기 중이 보이는 상태에서 사용해 주세요.</p>
+      <ul>
+        <li>수신 주소: <code>http://127.0.0.1:39481/inspection-snapshots</code></li>
+        <li>로그인은 일반 브라우저에서 직접 진행합니다.</li>
+        <li>캡처 중에는 화면이 잠깐 자동 스크롤된 뒤 원래 위치로 돌아옵니다.</li>
+        <li>캡처는 읽기 전용이며 메뉴 저장 버튼을 누르지 않습니다.</li>
+      </ul>
+    </section>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

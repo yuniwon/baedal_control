@@ -13,20 +13,64 @@ const { listLogicalOptionGroups } = vi.hoisted(() => ({
       connectedMenuCount: 2,
       sourceGroupCount: 2,
       sampleOptionNames: ['M', 'L'],
+      logicalOptions: [
+        { optionName: 'M', optionPrice: 0 },
+        { optionName: 'L', optionPrice: 3000 }
+      ],
       status: 'merge_candidate',
       sourceGroups: [
         {
           optionGroupId: 'g-1',
           optionGroupName: '사이즈 선택',
           presenceStatus: 'present',
+          linkedMenuCount: 1,
           linkedMenuNames: ['불고기피자'],
+          options: [
+            { optionName: 'M', optionPrice: 0 },
+            { optionName: 'L', optionPrice: 3000 }
+          ],
           lastSeenAt: '2026-04-13T00:00:00Z'
         },
         {
           optionGroupId: 'g-2',
           optionGroupName: '사이즈 선택',
           presenceStatus: 'present',
+          linkedMenuCount: 1,
           linkedMenuNames: ['새우피자'],
+          options: [
+            { optionName: 'M', optionPrice: 0 },
+            { optionName: 'L', optionPrice: 3000 }
+          ],
+          lastSeenAt: '2026-04-13T00:00:00Z'
+        }
+      ]
+    },
+    {
+      logicalGroupKey: 'baemin:conflict-1',
+      platformCode: 'baemin',
+      displayName: '도우 선택',
+      minOrderQuantity: 1,
+      maxOrderQuantity: 1,
+      optionCount: 2,
+      connectedMenuCount: 1,
+      sourceGroupCount: 1,
+      sampleOptionNames: ['씬', '오리지널'],
+      logicalOptions: [
+        { optionName: '씬', optionPrice: 0 },
+        { optionName: '오리지널', optionPrice: 2000 }
+      ],
+      status: 'shape_conflict',
+      sourceGroups: [
+        {
+          optionGroupId: 'g-4',
+          optionGroupName: '도우 선택',
+          presenceStatus: 'present',
+          linkedMenuCount: 1,
+          linkedMenuNames: ['콰트로피자'],
+          options: [
+            { optionName: '씬', optionPrice: 0 },
+            { optionName: '오리지널', optionPrice: 2000 }
+          ],
           lastSeenAt: '2026-04-13T00:00:00Z'
         }
       ]
@@ -38,16 +82,27 @@ const { listLogicalOptionGroups } = vi.hoisted(() => ({
       minOrderQuantity: 0,
       maxOrderQuantity: 3,
       optionCount: 3,
-      connectedMenuCount: 1,
+      connectedMenuCount: 4,
       sourceGroupCount: 1,
       sampleOptionNames: ['치즈', '베이컨', '올리브'],
+      logicalOptions: [
+        { optionName: '치즈', optionPrice: 1000 },
+        { optionName: '베이컨', optionPrice: 1500 },
+        { optionName: '올리브', optionPrice: 700 }
+      ],
       status: 'missing_suspected',
       sourceGroups: [
         {
           optionGroupId: 'g-3',
           optionGroupName: '토핑 추가',
           presenceStatus: 'missing_suspected',
-          linkedMenuNames: ['콤비네이션'],
+          linkedMenuCount: 4,
+          linkedMenuNames: ['콤비네이션', '포테이토', '불고기', '페퍼로니'],
+          options: [
+            { optionName: '치즈', optionPrice: 1000 },
+            { optionName: '베이컨', optionPrice: 1500 },
+            { optionName: '올리브', optionPrice: 700 }
+          ],
           lastSeenAt: '2026-04-12T00:00:00Z'
         }
       ]
@@ -110,6 +165,13 @@ describe('OptionPage', () => {
     expect(screen.getByText('통합 가능')).toBeTruthy()
     expect(screen.getByText(/불고기피자/)).toBeTruthy()
     expect(screen.getByText(/새우피자/)).toBeTruthy()
+    expect(
+      screen.getByText((_, element) => element?.textContent?.replace(/\s+/g, '') === 'L+3,000원')
+    ).toBeTruthy()
+    expect(
+      screen.getByText((_, element) => element?.textContent?.replace(/\s+/g, '') === 'M무료')
+    ).toBeTruthy()
+    expect(screen.getByText('콤비네이션, 포테이토, 불고기 외 1개')).toBeTruthy()
     expect(screen.queryByText(/^g-1$/)).toBeNull()
   })
 
@@ -121,5 +183,25 @@ describe('OptionPage', () => {
 
     expect(screen.getByRole('heading', { name: '토핑 추가' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: '사이즈 선택' })).toBeNull()
+  })
+
+  it('filters option bundles by shape conflicts and search text', async () => {
+    render(<OptionPage />)
+
+    expect(await screen.findByRole('heading', { name: '도우 선택' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /구성 다름/ }))
+
+    expect(screen.getByRole('heading', { name: '도우 선택' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: '사이즈 선택' })).toBeNull()
+
+    fireEvent.change(screen.getByPlaceholderText('옵션명, 가격 또는 연결 메뉴 검색'), {
+      target: { value: '콰트로' }
+    })
+
+    expect(screen.getByRole('heading', { name: '도우 선택' })).toBeTruthy()
+    fireEvent.change(screen.getByPlaceholderText('옵션명, 가격 또는 연결 메뉴 검색'), {
+      target: { value: '없는 검색어' }
+    })
+    expect(screen.getByText('조건에 맞는 옵션 묶음이 없습니다.')).toBeTruthy()
   })
 })

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import type { PlatformCode, SyncPreviewItem } from '../../shared/contracts'
+import type { PlatformCode, SyncPreviewItem, SyncRunItemRecord } from '../../shared/contracts'
+import { normalizeSyncFailure } from '../../shared/sync-error-catalog'
 
 interface SyncRunLogger {
   create: (record: {
@@ -8,18 +9,7 @@ interface SyncRunLogger {
     triggerType: 'manual'
   }) => void
   finish: (record: { syncRunId: string; finishedAt: string; resultSummary: string }) => void
-  addItem: (record: {
-    syncRunItemId: string
-    syncRunId: string
-    platformCode: string
-    menuId: string
-    fieldType: string
-    beforeValue: string | null
-    afterValue: string
-    status: string
-    errorCode: string | null
-    errorMessage: string | null
-  }) => void
+  addItem: (record: SyncRunItemRecord) => void
 }
 
 interface AdapterRegistryLike {
@@ -28,10 +18,18 @@ interface AdapterRegistryLike {
   ) => { applyMenuUpdate: (item: SyncPreviewItem) => Promise<void> | void }
 }
 
+interface FailureContextCollectorLike {
+  capture: (
+    item: SyncPreviewItem,
+    error: unknown
+  ) => Promise<SyncRunItemRecord['failureContext']> | SyncRunItemRecord['failureContext']
+}
+
 export class SyncEngine {
   constructor(
     private readonly adapterRegistry: AdapterRegistryLike,
-    private readonly runLogger: SyncRunLogger
+    private readonly runLogger: SyncRunLogger,
+    private readonly failureContextCollector?: FailureContextCollectorLike
   ) {}
 
   async run(items: SyncPreviewItem[]) {
@@ -62,6 +60,8 @@ export class SyncEngine {
           errorMessage: null
         })
       } catch (error) {
+        const failure = normalizeSyncFailure(error)
+        const failureContext = await this.captureFailureContext(item, error)
         failureCount += 1
         this.runLogger.addItem({
           syncRunItemId: randomUUID(),
@@ -72,13 +72,14 @@ export class SyncEngine {
           beforeValue: item.previousName ?? null,
           afterValue: JSON.stringify({ name: item.nextName, price: item.nextPrice }),
           status: 'failed',
-          errorCode: 'apply_failed',
-          errorMessage: error instanceof Error ? error.message : 'unknown_error'
+          errorCode: failure.errorCode,
+          errorMessage: failure.errorMessage,
+          failureContext
         })
       }
     }
 
-    const summary = `${successCount} succeeded, ${failureCount} failed`
+    const summary = `성공 ${successCount}건, 실패 ${failureCount}건`
     this.runLogger.finish({
       syncRunId,
       finishedAt: new Date().toISOString(),
@@ -86,5 +87,17 @@ export class SyncEngine {
     })
 
     return { syncRunId, summary }
+  }
+
+  private async captureFailureContext(item: SyncPreviewItem, error: unknown) {
+    if (!this.failureContextCollector) {
+      return null
+    }
+
+    try {
+      return (await this.failureContextCollector.capture(item, error)) ?? null
+    } catch {
+      return null
+    }
   }
 }

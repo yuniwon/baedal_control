@@ -1,6 +1,8 @@
 import { ipcMain } from 'electron'
 import type { CredentialVault } from '../services/credential-vault'
 import type {
+  BrowserInspectionSnapshot,
+  BrowserInspectorStatus,
   PlatformImportResult,
   MenuRecord,
   PlatformCode,
@@ -9,6 +11,7 @@ import type {
   PlatformImportChangeRecord,
   PlatformImportRunRecord,
   LogicalOptionGroupRecord,
+  ManagedChromeSessionStatus,
   PlatformMenuCatalogRecord,
   PlatformOptionGroupRecord,
   PlatformMenuMappingRecord,
@@ -34,6 +37,50 @@ interface HandlerDependencies {
   platformOptionGroupRepository?: { listAll: () => PlatformOptionGroupRecord[] }
   platformImportRunRepository?: { listLatest: (limit?: number) => PlatformImportRunRecord[] }
   platformImportChangeRepository?: { listLatest: (limit?: number) => PlatformImportChangeRecord[] }
+  browserInspectionSnapshotRepository?: {
+    listLatest: (limit?: number) => BrowserInspectionSnapshot[]
+    save?: (snapshot: BrowserInspectionSnapshot) => void
+  }
+  browserInspectorBridge?: { getStatus: () => BrowserInspectorStatus }
+  managedChromeLauncher?: {
+    getStatus: () => BrowserInspectorStatus
+    launch: (url?: string) => Promise<BrowserInspectorStatus> | BrowserInspectorStatus
+  }
+  managedChromeLoginAutomator?: {
+    getLaunchUrl: (platformCode: PlatformCode) => string | null
+    autoLogin: (
+      platformCode: PlatformCode,
+      credential?: { username: string; password: string } | null
+    ) =>
+      | Promise<{
+          platformCode: PlatformCode
+          status:
+            | 'submitted'
+            | 'already_authenticated'
+            | 'credential_missing'
+            | 'login_tab_not_found'
+            | 'unsupported'
+            | 'failed'
+          message: string
+        }>
+      | {
+          platformCode: PlatformCode
+          status:
+            | 'submitted'
+            | 'already_authenticated'
+            | 'credential_missing'
+            | 'login_tab_not_found'
+            | 'unsupported'
+            | 'failed'
+          message: string
+        }
+  }
+  managedChromeSessionProbe?: {
+    inspect: () => Promise<ManagedChromeSessionStatus> | ManagedChromeSessionStatus
+  }
+  managedChromeSnapshotCapturer?: {
+    captureTab: (tabId: string) => Promise<BrowserInspectionSnapshot> | BrowserInspectionSnapshot
+  }
   logicalOptionGroupService?: { list: () => LogicalOptionGroupRecord[] }
   syncRunRepository: { list: () => SyncRunRecord[] }
   syncRunItemRepository?: { listForRunIds: (syncRunIds: string[]) => SyncRunItemRecord[] }
@@ -50,6 +97,12 @@ export const registerHandlers = ({
   platformOptionGroupRepository,
   platformImportRunRepository,
   platformImportChangeRepository,
+  browserInspectionSnapshotRepository,
+  browserInspectorBridge,
+  managedChromeLauncher,
+  managedChromeLoginAutomator,
+  managedChromeSessionProbe,
+  managedChromeSnapshotCapturer,
   logicalOptionGroupService,
   syncRunRepository,
   syncRunItemRepository,
@@ -74,7 +127,8 @@ export const registerHandlers = ({
       previousName: item.previousName,
       previousPrice: item.previousPrice ?? null,
       nextName: item.nextName,
-      nextPrice: item.nextPrice
+      nextPrice: item.nextPrice,
+      executionMode: item.executionMode ?? null
     })
 
   const normalizeListLimit = (value: unknown, defaultLimit = 50, maxLimit = 200) => {
@@ -86,6 +140,31 @@ export const registerHandlers = ({
 
     return Math.min(Math.floor(numericLimit), maxLimit)
   }
+
+  const isPlatformCode = (value: unknown): value is PlatformCode =>
+    value === 'baemin' || value === 'coupangeats' || value === 'ddangyo'
+
+  const getBrowserInspectorStatus = (): BrowserInspectorStatus => ({
+    receiverUrl: '',
+    extensionPath: '',
+    isRunning: false,
+    chromeAvailable: false,
+    chromePath: null,
+    chromeProfilePath: null,
+    managedChromeRunning: false,
+    lastLaunchUrl: null,
+    chromeError: null,
+    ...(managedChromeLauncher?.getStatus() ?? {}),
+    ...(browserInspectorBridge?.getStatus() ?? {})
+  })
+
+  const getSyncPreview = () =>
+    buildSyncPreview({
+      menus: menuRepository.list(),
+      mappings: mappingRepository.listAll(),
+      platformMenus: platformMenuRepository.listAll(),
+      platformImportRuns: platformImportRunRepository?.listLatest(50) ?? []
+    })
 
   register('menus:list', async () => menuRepository.list())
   register('menus:save', async (_event, payload) => {
@@ -116,6 +195,75 @@ export const registerHandlers = ({
   register('platformImportChanges:listLatest', async (_event, limit?: number) =>
     platformImportChangeRepository?.listLatest(normalizeListLimit(limit)) ?? []
   )
+  register('browserInspectionSnapshots:listLatest', async (_event, limit?: number) =>
+    browserInspectionSnapshotRepository?.listLatest(normalizeListLimit(limit)) ?? []
+  )
+  register('browserInspector:getStatus', async () => getBrowserInspectorStatus())
+  register('browserInspector:getManagedChromeSession', async () => {
+    return (
+      (await managedChromeSessionProbe?.inspect()) ?? {
+        endpointUrl: 'http://127.0.0.1:39482',
+        connected: false,
+        error: null,
+        tabs: []
+      }
+    )
+  })
+  register(
+    'browserInspector:launchManagedChrome',
+    async (
+      _event,
+      payload?: { url?: string; platformCode?: PlatformCode; autoLogin?: boolean }
+    ) => {
+      const requestedUrl =
+        payload && typeof payload.url === 'string' && payload.url.trim().length > 0
+          ? payload.url.trim()
+          : undefined
+      const platformCode = isPlatformCode(payload?.platformCode) ? payload.platformCode : null
+      const autoLoginRequested = Boolean(platformCode) && payload?.autoLogin === true
+      const launchUrl =
+        requestedUrl ??
+        (platformCode && autoLoginRequested
+          ? managedChromeLoginAutomator?.getLaunchUrl(platformCode) ?? undefined
+          : undefined)
+
+      let launchStatus: BrowserInspectorStatus | undefined
+      if (managedChromeLauncher) {
+        launchStatus = await managedChromeLauncher.launch(launchUrl)
+      }
+
+      const autoLoginStatus =
+        platformCode && autoLoginRequested && managedChromeLoginAutomator
+          ? await managedChromeLoginAutomator.autoLogin(platformCode, credentialVault.get(platformCode))
+          : null
+
+      return {
+        ...getBrowserInspectorStatus(),
+        ...(launchStatus ?? {}),
+        ...(autoLoginStatus
+          ? {
+              managedChromeAutoLoginPlatformCode: autoLoginStatus.platformCode,
+              managedChromeAutoLoginStatus: autoLoginStatus.status,
+              managedChromeAutoLoginMessage: autoLoginStatus.message
+            }
+          : {})
+      }
+    }
+  )
+  register('browserInspector:captureManagedChromeTab', async (_event, payload?: { tabId?: string }) => {
+    const tabId = typeof payload?.tabId === 'string' ? payload.tabId.trim() : ''
+    if (!tabId) {
+      throw new Error('managed_chrome_tab_id_required')
+    }
+
+    const snapshot = await managedChromeSnapshotCapturer?.captureTab(tabId)
+    if (!snapshot) {
+      throw new Error('managed_chrome_capture_unavailable')
+    }
+
+    browserInspectionSnapshotRepository?.save?.(snapshot)
+    return snapshot
+  })
   register('mappings:save', async (_event, payload) => {
     mappingRepository.upsert(payload)
     return { ok: true }
@@ -173,9 +321,16 @@ export const registerHandlers = ({
         importInspection: importResult?.inspection as PlatformInspectionReport | undefined
       }
     } catch (error) {
+      const importInspection =
+        error && typeof error === 'object' && 'inspection' in error
+          ? ((error as { inspection?: PlatformInspectionReport }).inspection as
+              | PlatformInspectionReport
+              | undefined)
+          : undefined
       return {
         ok: true as const,
-        importError: error instanceof Error ? error.message : 'unknown_error'
+        importError: error instanceof Error ? error.message : 'unknown_error',
+        importInspection
       }
     }
   }
@@ -200,31 +355,17 @@ export const registerHandlers = ({
     return runPlatformImport(platformCode)
   })
 
-  register('sync:preview', async () =>
-    buildSyncPreview({
-      menus: menuRepository.list(),
-      mappings: mappingRepository.listAll(),
-      platformMenus: platformMenuRepository.listAll()
-    })
-  )
+  register('sync:preview', async () => getSyncPreview())
 
   register('sync:run', async () => {
-    const preview = buildSyncPreview({
-      menus: menuRepository.list(),
-      mappings: mappingRepository.listAll(),
-      platformMenus: platformMenuRepository.listAll()
-    })
+    const preview = getSyncPreview()
 
     return syncEngine?.run(preview.items) ?? { syncRunId: null, summary: '0 succeeded, 0 failed' }
   })
 
   register('sync:run-items', async (_event, payload) => {
     const requestedItems = Array.isArray(payload) ? (payload as SyncPreviewItem[]) : []
-    const preview = buildSyncPreview({
-      menus: menuRepository.list(),
-      mappings: mappingRepository.listAll(),
-      platformMenus: platformMenuRepository.listAll()
-    })
+    const preview = getSyncPreview()
     const executableItemKeys = new Set(preview.items.map(getSyncPreviewItemKey))
     const executableItems = requestedItems.filter((item) =>
       executableItemKeys.has(getSyncPreviewItemKey(item))

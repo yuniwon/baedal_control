@@ -3,15 +3,92 @@ import { describe, expect, it } from 'vitest'
 import { parseDdangyoMenus } from '../../../src/main/platforms/ddangyo/parser'
 
 describe('parseDdangyoMenus', () => {
-  it('extracts menu rows from the fixture', () => {
+  it('extracts menu cards, status badges, and grouped prices from the fixture', () => {
     const html = readFileSync('tests/fixtures/platforms/ddangyo/menu-list.html', 'utf8')
-    const menus = parseDdangyoMenus(html)
+    const menus = parseDdangyoMenus(html, '피자 메뉴')
 
-    expect(menus[0]).toEqual(
-      expect.objectContaining({
-        platformMenuId: 'dd-1',
-        platformMenuName: '콤비네이션'
-      })
-    )
+    expect(menus).toEqual([
+      {
+        platformMenuId: '10000001',
+        platformMenuName: "콰트로피자 15''",
+        currentPrice: 32900,
+        platformMenuPriceCount: 1,
+        platformMenuPriceVariants: [
+          {
+            variantLabel: 'F사이즈',
+            channels: [
+              {
+                channelCode: 'delivery',
+                channelLabel: '배달',
+                amount: 32900,
+                amountText: '32,900원'
+              },
+              {
+                channelCode: 'pickup',
+                channelLabel: '포장',
+                amount: 32900,
+                amountText: '32,900원'
+              },
+              {
+                channelCode: 'dine_in',
+                channelLabel: '매장식사',
+                amount: 32900,
+                amountText: '32,900원'
+              }
+            ]
+          }
+        ],
+        platformMenuGroupName: '피자 메뉴',
+        platformMenuStatus: '대표메뉴 · 품절 · 배달숨김',
+        platformMenuPriceSummary:
+          'F사이즈 · 배달 32,900원 · 포장 32,900원 · 매장식사 32,900원'
+      },
+      {
+        platformMenuId: '10000002',
+        platformMenuName: '사이다',
+        currentPrice: 1800,
+        platformMenuPriceCount: 2,
+        platformMenuPriceVariants: [
+          {
+            variantLabel: '500ml',
+            channels: [
+              {
+                channelCode: 'delivery',
+                channelLabel: '배달',
+                amount: 1800,
+                amountText: '1,800원'
+              },
+              {
+                channelCode: 'pickup',
+                channelLabel: '포장',
+                amount: 1800,
+                amountText: '1,800원'
+              }
+            ]
+          },
+          {
+            variantLabel: '1.25L',
+            channels: [
+              {
+                channelCode: 'delivery',
+                channelLabel: '배달',
+                amount: 2800,
+                amountText: '2,800원'
+              },
+              {
+                channelCode: 'pickup',
+                channelLabel: '포장',
+                amount: 2800,
+                amountText: '2,800원'
+              }
+            ]
+          }
+        ],
+        platformMenuGroupName: '피자 메뉴',
+        platformMenuStatus: '판매중',
+        platformMenuPriceSummary:
+          '500ml · 배달 1,800원 · 포장 1,800원 / 1.25L · 배달 2,800원 · 포장 2,800원'
+      }
+    ])
   })
 })

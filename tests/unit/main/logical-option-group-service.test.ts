@@ -113,7 +113,49 @@ describe('buildLogicalOptionGroups', () => {
 
     expect(groups[0]).toMatchObject({
       displayName: '추가 선택',
-      sampleOptionNames: ['L', 'M']
+      sampleOptionNames: ['L', 'M'],
+      logicalOptions: [
+        { optionName: 'L', optionPrice: 3000 },
+        { optionName: 'M', optionPrice: 0 }
+      ]
+    })
+  })
+
+  it('includes logical option rows and source-level option rows for downstream UI', () => {
+    const groups = buildLogicalOptionGroups([
+      {
+        platformCode: 'baemin',
+        optionGroupId: 'g-1',
+        optionGroupName: '소스 선택',
+        minOrderQuantity: 0,
+        maxOrderQuantity: 2,
+        options: [
+          { optionId: 'a', optionName: '갈릭소스', optionPrice: 500 },
+          { optionId: 'b', optionName: '핫소스', optionPrice: 200 }
+        ],
+        menus: [
+          { platformMenuId: 'menu-a', platformMenuName: '메뉴 A' },
+          { platformMenuId: 'menu-b', platformMenuName: '메뉴 B' }
+        ],
+        presenceStatus: 'present'
+      }
+    ])
+
+    expect(groups[0]).toMatchObject({
+      logicalOptions: [
+        { optionName: '갈릭소스', optionPrice: 500 },
+        { optionName: '핫소스', optionPrice: 200 }
+      ],
+      sourceGroups: [
+        {
+          optionGroupName: '소스 선택',
+          linkedMenuCount: 2,
+          options: [
+            { optionName: '갈릭소스', optionPrice: 500 },
+            { optionName: '핫소스', optionPrice: 200 }
+          ]
+        }
+      ]
     })
   })
 
@@ -226,5 +268,39 @@ describe('buildLogicalOptionGroups', () => {
       expect.stringMatching(/^coupangeats:B 그룹:/)
     ])
     expect(groups[0].sourceGroups.map((group) => group.optionGroupId)).toEqual(['g-1'])
+  })
+
+  it('marks same-named option groups with different compositions as shape_conflict', () => {
+    const groups = buildLogicalOptionGroups([
+      {
+        platformCode: 'baemin',
+        optionGroupId: 'g-1',
+        optionGroupName: '사이즈 선택',
+        minOrderQuantity: 1,
+        maxOrderQuantity: 1,
+        options: [
+          { optionId: 'a', optionName: 'M', optionPrice: 0 },
+          { optionId: 'b', optionName: 'L', optionPrice: 3000 }
+        ],
+        menus: [{ platformMenuId: 'menu-a', platformMenuName: '메뉴 A' }],
+        presenceStatus: 'present'
+      },
+      {
+        platformCode: 'baemin',
+        optionGroupId: 'g-2',
+        optionGroupName: '사이즈 선택',
+        minOrderQuantity: 1,
+        maxOrderQuantity: 1,
+        options: [
+          { optionId: 'c', optionName: 'R', optionPrice: 0 },
+          { optionId: 'd', optionName: 'L', optionPrice: 2000 }
+        ],
+        menus: [{ platformMenuId: 'menu-b', platformMenuName: '메뉴 B' }],
+        presenceStatus: 'present'
+      }
+    ])
+
+    expect(groups).toHaveLength(2)
+    expect(groups.every((group) => group.status === 'shape_conflict')).toBe(true)
   })
 })

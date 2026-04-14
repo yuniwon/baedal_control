@@ -15,6 +15,7 @@ import {
   isSourcePlatformAbsent,
   isSourceResurfaced
 } from '../lib/menu-source-labels'
+import { flattenPlatformMenuPriceVariants } from '../lib/platform-menu-price-variants'
 
 type MenuFilter =
   | 'all'
@@ -26,6 +27,8 @@ type MenuFilter =
   | 'resurfaced'
 const uncategorizedLabel = '미분류'
 const preferredPlatformOrder = ['baemin', 'coupangeats', 'ddangyo'] as const
+const normalizeSearchValue = (value: string) =>
+  value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ko-KR')
 
 const buildDuplicateCounts = (mappings: PlatformMenuMappingRecord[]) =>
   mappings.reduce<Record<string, number>>((counts, mapping) => {
@@ -91,6 +94,8 @@ const buildMenuRows = (
           platformMenuStatus: platformMenu?.platformMenuStatus ?? mapping.platformMenuStatus ?? undefined,
           platformMenuPriceSummary:
             platformMenu?.platformMenuPriceSummary ?? mapping.platformMenuPriceSummary ?? undefined,
+          platformMenuPriceVariants:
+            platformMenu?.platformMenuPriceVariants ?? mapping.platformMenuPriceVariants ?? undefined,
           platformMenuBindingSummary:
             platformMenu?.platformMenuBindingSummary ?? mapping.platformMenuBindingSummary ?? undefined,
           platformMenuBindingStatus:
@@ -174,6 +179,7 @@ const needsResurfacedReview = (menu: MenuRow) =>
 export const MenuPage = () => {
   const [menus, setMenus] = useState<MenuRow[]>([])
   const [filter, setFilter] = useState<MenuFilter>('all')
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     void Promise.all([
@@ -285,32 +291,60 @@ export const MenuPage = () => {
   ]
 
   const filteredMenus = menus.filter((menu) => {
+    let passesFilter = true
+
     if (filter === 'managed') {
-      return (menu.isManaged ?? 1) === 1
+      passesFilter = (menu.isManaged ?? 1) === 1
     }
-
     if (filter === 'excluded') {
-      return (menu.isManaged ?? 1) === 0
+      passesFilter = (menu.isManaged ?? 1) === 0
     }
-
     if (filter === 'binding-review') {
-      return needsBindingReview(menu)
+      passesFilter = needsBindingReview(menu)
     }
-
     if (filter === 'missing-suspected') {
-      return needsMissingSuspectedReview(menu)
+      passesFilter = needsMissingSuspectedReview(menu)
     }
-
     if (filter === 'platform-absent') {
-      return needsPlatformAbsentReview(menu)
+      passesFilter = needsPlatformAbsentReview(menu)
     }
-
     if (filter === 'resurfaced') {
-      return needsResurfacedReview(menu)
+      passesFilter = needsResurfacedReview(menu)
     }
 
-    return true
+    if (!passesFilter) {
+      return false
+    }
+
+    const normalizedSearch = normalizeSearchValue(search)
+    if (!normalizedSearch) {
+      return true
+    }
+
+    const searchableText = normalizeSearchValue(
+      [
+        menu.baseName,
+        menu.categoryName,
+        ...(menu.sources ?? []).flatMap((source) => [
+          source.platformMenuName,
+          source.platformMenuGroupName,
+          source.platformMenuStatus,
+          source.platformMenuBindingStatus,
+          source.platformMenuBindingSummary,
+          source.platformMenuPriceSummary,
+          ...flattenPlatformMenuPriceVariants(source.platformMenuPriceVariants)
+        ])
+      ].join(' ')
+    )
+
+    return searchableText.includes(normalizedSearch)
   })
+
+  const reviewCounts = {
+    managed: menus.filter((menu) => (menu.isManaged ?? 1) === 1).length,
+    binding: menus.filter((menu) => needsBindingReview(menu)).length,
+    absent: menus.filter((menu) => needsPlatformAbsentReview(menu)).length
+  }
 
   const groupedMenus = buildMenuCategoryGroups(filteredMenus)
 
@@ -321,23 +355,49 @@ export const MenuPage = () => {
         <p>메뉴명과 가격을 수정하고, 관리할 메뉴만 남겨서 반영 전에 다시 확인합니다.</p>
       </header>
 
-      <section className="panel">
-        <div className="inline-actions">
-          <button className="secondary-button" onClick={handleAddMenu}>
-            메뉴 추가
-          </button>
-        </div>
+      <section className="panel panel-flat">
         {menus.length ? (
-          <div className="menu-filter-list">
-            {filterOptions.map((option) => (
-              <button
-                key={option.key}
-                className={filter === option.key ? 'primary-button' : 'secondary-button'}
-                onClick={() => setFilter(option.key)}
-              >
-                {option.label}
+          <div className="workspace-summary">
+            <article className="change-summary-row">
+              <strong>{reviewCounts.managed}</strong>
+              <span>관리 대상 메뉴</span>
+            </article>
+            <article className="change-summary-row">
+              <strong>{reviewCounts.binding}</strong>
+              <span>가게 연결 검토 필요</span>
+            </article>
+            <article className="change-summary-row">
+              <strong>{reviewCounts.absent}</strong>
+              <span>플랫폼에 없음</span>
+            </article>
+          </div>
+        ) : null}
+        {menus.length ? (
+          <div className="panel-toolbar workspace-toolbar">
+            <div className="menu-filter-list">
+              {filterOptions.map((option) => (
+                <button
+                  key={option.key}
+                  className={filter === option.key ? 'primary-button' : 'secondary-button'}
+                  onClick={() => setFilter(option.key)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <div className="workspace-toolbar-actions">
+              <label className="toolbar-search">
+                <input
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="기준 메뉴 또는 플랫폼 메뉴 검색"
+                  type="search"
+                  value={search}
+                />
+              </label>
+              <button className="secondary-button" onClick={handleAddMenu} type="button">
+                메뉴 추가
               </button>
-            ))}
+            </div>
           </div>
         ) : null}
         {!menus.length ? <p>아직 불러온 메뉴가 없습니다. 계정 연결에서 메뉴를 먼저 가져오세요.</p> : null}
@@ -353,6 +413,9 @@ export const MenuPage = () => {
               </section>
             ))}
           </div>
+        ) : null}
+        {menus.length && !groupedMenus.length ? (
+          <p className="source-empty">조건에 맞는 메뉴가 없습니다.</p>
         ) : null}
       </section>
     </section>

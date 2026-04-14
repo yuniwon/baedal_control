@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react'
-import type { CatalogPresenceStatus, PlatformCode, PlatformMappingStatus } from '../../../shared/contracts'
+import type {
+  CatalogPresenceStatus,
+  PlatformCode,
+  PlatformMappingStatus,
+  PlatformMenuPriceVariantRecord
+} from '../../../shared/contracts'
 import {
   describeMenuSourceStatus,
   formatDateTimeLabel,
   getPlatformLabel
 } from '../lib/menu-source-labels'
+import { flattenPlatformMenuPriceVariants } from '../lib/platform-menu-price-variants'
 
 export type MenuSourceInfo = {
   platformCode: PlatformCode
@@ -16,6 +22,7 @@ export type MenuSourceInfo = {
   platformMenuGroupName?: string
   platformMenuStatus?: string
   platformMenuPriceSummary?: string
+  platformMenuPriceVariants?: PlatformMenuPriceVariantRecord[]
   platformMenuBindingSummary?: string
   platformMenuBindingStatus?: string
   duplicateNameCount?: number
@@ -228,6 +235,27 @@ export const MenuTable = ({
                           ) : null}
                           {source.platformMenuBindingSummary ? (
                             <p className="source-note">{source.platformMenuBindingSummary}</p>
+                          ) : null}
+                          {source.platformMenuPriceVariants?.length ? (
+                            <div className="source-price-variant-list">
+                              {flattenPlatformMenuPriceVariants(
+                                source.platformMenuPriceVariants
+                              )
+                                .slice(0, 4)
+                                .map((line) => (
+                                  <p
+                                    className="source-price-variant-line"
+                                    key={`${source.platformCode}:${source.platformMenuId}:${line}`}
+                                  >
+                                    {line}
+                                  </p>
+                                ))}
+                              {source.platformMenuPriceVariants.length > 4 ? (
+                                <p className="source-option-more">
+                                  {`외 ${source.platformMenuPriceVariants.length - 4}개 가격 항목`}
+                                </p>
+                              ) : null}
+                            </div>
                           ) : null}
                           {source.lastSeenAt ? (
                             <p className="source-note source-note-muted">

@@ -42,6 +42,19 @@ describe('MenuTable', () => {
                 platformMenuGroupName: '숨김 메뉴',
                 platformMenuStatus: '판매중',
                 platformMenuPriceSummary: '배달 22,900원',
+                platformMenuPriceVariants: [
+                  {
+                    variantLabel: null,
+                    channels: [
+                      {
+                        channelCode: 'delivery',
+                        channelLabel: '배달',
+                        amount: 22900,
+                        amountText: '22,900원'
+                      }
+                    ]
+                  }
+                ],
                 platformMenuBindingSummary: '[음식배달] 꾸버스피자 봉담점',
                 platformMenuBindingStatus: '연결 정상'
               }
@@ -65,6 +78,7 @@ describe('MenuTable', () => {
     expect(screen.getByText('확인됨')).toBeTruthy()
     expect(screen.getByText('배민')).toBeTruthy()
     expect(screen.getByText('숨김 메뉴')).toBeTruthy()
+    expect(screen.getByText(/기본 · 배달 22,900원/)).toBeTruthy()
     expect(screen.getByText(/마지막 확인 2026\. 04\. 13\. 09:00/)).toBeTruthy()
   })
 

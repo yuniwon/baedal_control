@@ -210,7 +210,8 @@ describe('CatalogImportOrchestrator', () => {
     expect(platformImportChangeRepository.listLatest()).toEqual([])
     expect(platformImportRunRepository.listLatest()).toEqual([
       expect.objectContaining({
-        status: 'partial_failed'
+        status: 'partial_failed',
+        errorMessage: 'timeout'
       })
     ])
   })
@@ -356,6 +357,8 @@ describe('CatalogImportOrchestrator', () => {
     expect(result.summary).toEqual({
       platformCode: 'baemin',
       fetchedCount: 2,
+      optionGroupCount: 1,
+      duplicateMenuCount: 1,
       createdMenuCount: 1,
       linkedMappingCount: 1,
       verifiedMappingCount: 1
@@ -423,6 +426,8 @@ describe('CatalogImportOrchestrator', () => {
         summaryJson: JSON.stringify({
           platformCode: 'baemin',
           fetchedCount: 2,
+          optionGroupCount: 1,
+          duplicateMenuCount: 1,
           createdMenuCount: 1,
           linkedMappingCount: 1,
           verifiedMappingCount: 1
@@ -488,7 +493,8 @@ describe('CatalogImportOrchestrator', () => {
       expect.objectContaining({
         status: 'partial_failed',
         menuFetchCompleted: 1,
-        optionFetchCompleted: 1
+        optionFetchCompleted: 1,
+        errorMessage: 'late write failure'
       })
     ])
   })
@@ -555,6 +561,262 @@ describe('CatalogImportOrchestrator', () => {
       expect.objectContaining({
         menuId: 'menu-1',
         isManaged: 0
+      })
+    ])
+  })
+
+  it('uses option groups returned together with fetchMenusWithInspection without calling a second option fetch', async () => {
+    adapter.fetchMenusWithInspection = vi.fn().mockResolvedValue({
+      menus: [
+        {
+          platformMenuId: 'dish-1',
+          platformMenuName: '왕새우갈비',
+          currentPrice: 23900
+        },
+        {
+          platformMenuId: 'dish-1',
+          platformMenuName: '왕새우갈비',
+          currentPrice: 23900
+        }
+      ],
+      optionGroups: [
+        {
+          optionGroupId: 'option-1',
+          optionGroupName: '기본',
+          minOrderQuantity: 1,
+          maxOrderQuantity: 1,
+          mappingMenusCount: 1,
+          options: [
+            {
+              optionId: 'item-1',
+              optionName: 'L',
+              optionPrice: 4000,
+              itemStatus: '판매중',
+              restockedAt: null
+            }
+          ],
+          menus: [
+            {
+              platformMenuId: 'dish-1',
+              platformMenuName: '왕새우갈비',
+              platformMenuGroupName: null
+            }
+          ]
+        }
+      ],
+      rawMenuCount: 2,
+      fetchMode: 'managed_browser',
+      optionCatalogFetched: true,
+      inspection: createInspection()
+    })
+    adapter.fetchOptionGroups = vi.fn().mockRejectedValue(new Error('should not be called'))
+
+    const orchestrator = createOrchestrator()
+    await orchestrator.importPlatform('coupangeats')
+
+    expect(adapter.fetchOptionGroups).not.toHaveBeenCalled()
+    expect(platformOptionGroupRepository.listAll()).toEqual([
+      expect.objectContaining({
+        platformCode: 'coupangeats',
+        optionGroupId: 'option-1',
+        optionGroupName: '기본',
+        mappingMenusCount: 1
+      })
+    ])
+    const latestRun = platformImportRunRepository.listLatest()[0]
+    expect(latestRun?.summaryJson ? JSON.parse(latestRun.summaryJson) : null).toEqual(
+      expect.objectContaining({
+        platformCode: 'coupangeats',
+        fetchedCount: 1,
+        optionGroupCount: 1,
+        duplicateMenuCount: 1,
+        fetchMode: 'managed_browser',
+        createdMenuCount: 1,
+        linkedMappingCount: 1,
+        verifiedMappingCount: 0
+      })
+    )
+    expect(platformImportRunRepository.listLatest()).toEqual([
+      expect.objectContaining({
+        platformCode: 'coupangeats',
+        status: 'completed',
+        optionFetchCompleted: 1
+      })
+    ])
+  })
+
+  it('replaces invalid existing auto mappings instead of preserving loose partial-name matches', async () => {
+    menuRepository.upsert({
+      menuId: 'menu-cola',
+      baseName: '콜라',
+      basePrice: 1800,
+      isDirty: 0,
+      isManaged: 1
+    })
+    mappingRepository.upsert({
+      mappingId: 'menu-cola:coupangeats',
+      menuId: 'menu-cola',
+      platformCode: 'coupangeats',
+      platformMenuId: 'set-3',
+      platformMenuName: 'Set. 3(피자M 스파게티 훈제치킨 콜라)',
+      matchedBy: 'auto',
+      isConfirmed: 1
+    })
+
+    const fetchedMenus = [
+      {
+        platformMenuId: 'set-3',
+        platformMenuName: 'Set. 3(피자M 스파게티 훈제치킨 콜라)',
+        currentPrice: 40000,
+        platformMenuGroupName: '가성비 최고의 알뜰세트',
+        platformMenuStatus: '판매중',
+        platformMenuPriceSummary: '40,000원'
+      }
+    ]
+    adapter.fetchMenusWithInspection = vi.fn().mockResolvedValue({
+      menus: fetchedMenus,
+      inspection: createInspection()
+    })
+    adapter.fetchOptionGroups = vi.fn().mockResolvedValue([])
+
+    const orchestrator = createOrchestrator()
+    const result = await orchestrator.importPlatform('coupangeats')
+
+    expect(result.summary).toEqual({
+      platformCode: 'coupangeats',
+      fetchedCount: 1,
+      createdMenuCount: 1,
+      linkedMappingCount: 1,
+      verifiedMappingCount: 0
+    })
+    expect(mappingRepository.listForMenu('menu-cola')).toEqual([])
+    expect(menuRepository.list()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          menuId: 'menu-cola',
+          baseName: '콜라'
+        }),
+        expect.objectContaining({
+          baseName: 'Set. 3(피자M 스파게티 훈제치킨 콜라)',
+          basePrice: 40000
+        })
+      ])
+    )
+    expect(mappingRepository.listAll()).toEqual([
+      expect.objectContaining({
+        platformCode: 'coupangeats',
+        platformMenuId: 'set-3',
+        platformMenuName: 'Set. 3(피자M 스파게티 훈제치킨 콜라)',
+        matchedBy: 'auto'
+      })
+    ])
+    expect(mappingRepository.listAll()[0]?.menuId).not.toBe('menu-cola')
+  })
+
+  it('keeps existing auto mappings when names only differ by harmless trailing detail', async () => {
+    menuRepository.upsert({
+      menuId: 'menu-set-1',
+      baseName: 'Set 1',
+      basePrice: 27000,
+      isDirty: 0,
+      isManaged: 1
+    })
+    mappingRepository.upsert({
+      mappingId: 'menu-set-1:coupangeats',
+      menuId: 'menu-set-1',
+      platformCode: 'coupangeats',
+      platformMenuId: 'set-1',
+      platformMenuName: 'Set 1',
+      matchedBy: 'auto',
+      isConfirmed: 1
+    })
+
+    adapter.fetchMenusWithInspection = vi.fn().mockResolvedValue({
+      menus: [
+        {
+          platformMenuId: 'set-1',
+          platformMenuName: 'Set 1 (피자M 스파게티 콜라)',
+          currentPrice: 27000,
+          platformMenuGroupName: '가성비 최고의 알뜰세트',
+          platformMenuStatus: '판매중',
+          platformMenuPriceSummary: '27,000원'
+        }
+      ],
+      inspection: createInspection()
+    })
+    adapter.fetchOptionGroups = vi.fn().mockResolvedValue([])
+
+    const orchestrator = createOrchestrator()
+    const result = await orchestrator.importPlatform('coupangeats')
+
+    expect(result.summary).toEqual({
+      platformCode: 'coupangeats',
+      fetchedCount: 1,
+      createdMenuCount: 0,
+      linkedMappingCount: 0,
+      verifiedMappingCount: 1
+    })
+    expect(mappingRepository.listForMenu('menu-set-1')).toEqual([
+      expect.objectContaining({
+        platformMenuId: 'set-1',
+        platformMenuName: 'Set 1 (피자M 스파게티 콜라)',
+        matchedBy: 'auto'
+      })
+    ])
+  })
+
+  it('does not force no-binding metadata when the platform never provides binding labels', async () => {
+    menuRepository.upsert({
+      menuId: 'menu-dd-1',
+      baseName: '갈릭디핑',
+      basePrice: 500,
+      isDirty: 0,
+      isManaged: 1
+    })
+    mappingRepository.upsert({
+      mappingId: 'menu-dd-1:ddangyo',
+      menuId: 'menu-dd-1',
+      platformCode: 'ddangyo',
+      platformMenuId: '10000042',
+      platformMenuName: '갈릭디핑',
+      platformMenuBindingStatus: '가게 연결 없음',
+      platformMenuBindingSummary: '연결 가게 없음',
+      matchedBy: 'manual',
+      isConfirmed: 1
+    })
+
+    adapter.fetchMenusWithInspection = vi.fn().mockResolvedValue({
+      menus: [
+        {
+          platformMenuId: '10000042',
+          platformMenuName: '갈릭디핑',
+          currentPrice: 500,
+          platformMenuGroupName: '소스추가 6',
+          platformMenuStatus: '대표메뉴 · 품절 · 배달숨김 · 포장숨김 · 매장숨김',
+          platformMenuPriceSummary: '1개 · 배달 500원 · 포장 500원 · 매장식사 500원'
+        }
+      ],
+      inspection: createInspection()
+    })
+    adapter.fetchOptionGroups = vi.fn().mockResolvedValue([])
+
+    const orchestrator = createOrchestrator()
+    await orchestrator.importPlatform('ddangyo')
+
+    expect(platformMenuRepository.listAll()).toEqual([
+      expect.objectContaining({
+        platformCode: 'ddangyo',
+        platformMenuId: '10000042',
+        platformMenuBindingStatus: null,
+        platformMenuBindingSummary: null
+      })
+    ])
+    expect(mappingRepository.listForMenu('menu-dd-1')).toEqual([
+      expect.objectContaining({
+        platformCode: 'ddangyo',
+        platformMenuId: '10000042',
+        platformMenuBindingStatus: null,
+        platformMenuBindingSummary: null
       })
     ])
   })

@@ -19,7 +19,20 @@ describe('PlatformMenuRepository', () => {
         platformCode: 'baemin',
         platformMenuId: 'p-11',
         platformMenuName: '콤비네이션피자',
-        platformMenuStatus: '판매중'
+        platformMenuStatus: '판매중',
+        platformMenuPriceVariants: [
+          {
+            variantLabel: '기본',
+            channels: [
+              {
+                channelCode: 'delivery',
+                channelLabel: '배달',
+                amount: 22900,
+                amountText: '22,900원'
+              }
+            ]
+          }
+        ]
       },
       {
         platformCode: 'baemin',
@@ -42,7 +55,20 @@ describe('PlatformMenuRepository', () => {
         platformCode: 'baemin',
         platformMenuId: 'p-11',
         platformMenuName: '콤비네이션피자',
-        platformMenuStatus: '판매중'
+        platformMenuStatus: '판매중',
+        platformMenuPriceVariants: [
+          {
+            variantLabel: '기본',
+            channels: [
+              {
+                channelCode: 'delivery',
+                channelLabel: '배달',
+                amount: 22900,
+                amountText: '22,900원'
+              }
+            ]
+          }
+        ]
       }
     ])
 
@@ -51,7 +77,20 @@ describe('PlatformMenuRepository', () => {
         platformCode: 'baemin',
         platformMenuId: 'p-11',
         platformMenuName: '콤비네이션피자',
-        platformMenuStatus: '판매중'
+        platformMenuStatus: '판매중',
+        platformMenuPriceVariants: [
+          {
+            variantLabel: '기본',
+            channels: [
+              {
+                channelCode: 'delivery',
+                channelLabel: '배달',
+                amount: 22900,
+                amountText: '22,900원'
+              }
+            ]
+          }
+        ]
       }),
       expect.objectContaining({
         platformCode: 'coupangeats',

@@ -8,7 +8,8 @@ const {
   listImportRuns,
   listImportChanges,
   previewSync,
-  runSync
+  runSync,
+  runSelectedSync
 } = vi.hoisted(() => ({
   listMenus: vi.fn().mockResolvedValue([
     { menuId: 'menu-1', baseName: '콰트로피자 15인치', basePrice: 32900, isDirty: 0, isManaged: 1 },
@@ -34,7 +35,37 @@ const {
       finishedAt: '2026-04-13 13:55',
       status: 'completed',
       menuFetchCompleted: 1,
-      optionFetchCompleted: 1
+      optionFetchCompleted: 1,
+      summaryJson: JSON.stringify({
+        platformCode: 'baemin',
+        fetchedCount: 46,
+        createdMenuCount: 0,
+        linkedMappingCount: 0,
+        verifiedMappingCount: 46
+      }),
+      errorMessage: null
+    },
+    {
+      importRunId: 'run-2',
+      platformCode: 'coupangeats',
+      startedAt: '2026-04-13 13:40',
+      finishedAt: '2026-04-13 13:41',
+      status: 'partial_failed',
+      menuFetchCompleted: 0,
+      optionFetchCompleted: 0,
+      summaryJson: null,
+      errorMessage: 'credential_not_found'
+    },
+    {
+      importRunId: 'run-3',
+      platformCode: 'ddangyo',
+      startedAt: '2026-04-13 13:30',
+      finishedAt: null,
+      status: 'running',
+      menuFetchCompleted: 0,
+      optionFetchCompleted: 0,
+      summaryJson: null,
+      errorMessage: null
     },
     {
       importRunId: 'run-0',
@@ -43,7 +74,8 @@ const {
       finishedAt: '2026-04-12 13:55',
       status: 'completed',
       menuFetchCompleted: 1,
-      optionFetchCompleted: 1
+      optionFetchCompleted: 1,
+      errorMessage: null
     }
   ]),
   previewSync: vi.fn().mockResolvedValue({
@@ -55,6 +87,16 @@ const {
         previousName: '콰트로피자 15\'\'',
         nextName: '콰트로피자 15\'\'',
         nextPrice: 32900
+      },
+      {
+        platformCode: 'coupangeats',
+        menuId: 'menu-2',
+        platformMenuId: 'ce-1',
+        previousName: '메뉴 검토용 피자',
+        previousPrice: 23900,
+        nextName: '메뉴 검토용 피자',
+        nextPrice: 23900,
+        executionMode: 'managed_browser'
       }
     ],
     needsReview: [
@@ -67,6 +109,9 @@ const {
     ]
   }),
   runSync: vi.fn().mockResolvedValue({
+    summary: '배민 1건 반영 완료'
+  }),
+  runSelectedSync: vi.fn().mockResolvedValue({
     summary: '배민 1건 반영 완료'
   }),
   listImportChanges: vi.fn().mockResolvedValue([
@@ -156,7 +201,8 @@ vi.mock('../../../src/renderer/src/lib/api', () => ({
     },
     sync: {
       preview: previewSync,
-      run: runSync
+      run: runSync,
+      runItems: runSelectedSync
     },
     platformMenus: {
       list: vi.fn()
@@ -171,6 +217,7 @@ describe('DashboardPage', () => {
     render(<DashboardPage />)
 
     expect(await screen.findByText('1 / 3')).toBeTruthy()
+    expect(screen.getByText('2')).toBeTruthy()
     expect(screen.getByText('성공 1건, 실패 0건')).toBeTruthy()
     expect(screen.getByRole('button', { name: '반영 미리보기' })).toBeTruthy()
     expect(screen.getByText('연결됨')).toBeTruthy()
@@ -185,6 +232,10 @@ describe('DashboardPage', () => {
     expect(screen.queryByText('새 메뉴 2개')).toBeNull()
     expect(screen.getByText('배민 · 메뉴 검토용 피자')).toBeTruthy()
     expect(screen.queryByText(/menu-2/)).toBeNull()
+    expect(screen.getByText('플랫폼 최근 가져오기')).toBeTruthy()
+    expect(screen.getByText('배민 · 메뉴 46개 확인 · 기존 연결 46개 유지')).toBeTruthy()
+    expect(screen.getByText('쿠팡이츠 · 계정 정보를 다시 확인해 주세요.')).toBeTruthy()
+    expect(screen.getByText('땡겨요 · 가져오기를 진행하고 있습니다.')).toBeTruthy()
   })
 
   it('opens a preview first and only runs sync after confirmation', async () => {

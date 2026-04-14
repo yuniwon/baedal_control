@@ -20,6 +20,7 @@ export const migrate = (db: DatabaseConnection) => {
       platform_menu_name text not null,
       platform_menu_current_price integer,
       platform_menu_price_count integer,
+      platform_menu_price_variants_json text,
       matched_by text not null,
       is_confirmed integer not null default 0,
       last_verified_at text,
@@ -35,6 +36,7 @@ export const migrate = (db: DatabaseConnection) => {
       platform_menu_group_name text,
       platform_menu_status text,
       platform_menu_price_summary text,
+      platform_menu_price_variants_json text,
       platform_menu_binding_summary text,
       platform_menu_binding_status text,
       last_seen_at text not null default current_timestamp,
@@ -62,7 +64,8 @@ export const migrate = (db: DatabaseConnection) => {
       status text not null,
       menu_fetch_completed integer not null default 0,
       option_fetch_completed integer not null default 0,
-      summary_json text
+      summary_json text,
+      error_message text
     );
 
     create table if not exists platform_import_changes (
@@ -76,6 +79,28 @@ export const migrate = (db: DatabaseConnection) => {
       presence_status text,
       before_json text,
       after_json text,
+      created_at text not null default current_timestamp
+    );
+
+    create table if not exists browser_inspection_snapshots (
+      snapshot_id text primary key,
+      platform_code text not null,
+      source text not null,
+      page_url text not null,
+      page_title text not null,
+      page_kind text,
+      capture_mode text,
+      host text not null,
+      captured_at text not null,
+      text_snippet text,
+      menu_names_json text not null,
+      menu_items_json text not null default '[]',
+      option_group_names_json text not null,
+      button_labels_json text not null,
+      input_hints_json text not null,
+      fields_json text not null,
+      api_events_json text not null,
+      screenshot_data_url text,
       created_at text not null default current_timestamp
     );
 
@@ -103,6 +128,7 @@ export const migrate = (db: DatabaseConnection) => {
     ['platform_menu_group_name', 'text'],
     ['platform_menu_status', 'text'],
     ['platform_menu_price_summary', 'text'],
+    ['platform_menu_price_variants_json', 'text'],
     ['platform_menu_binding_summary', 'text'],
     ['platform_menu_binding_status', 'text'],
     ['mapping_status', "text not null default 'active'"]
@@ -137,6 +163,7 @@ export const migrate = (db: DatabaseConnection) => {
   const missingPlatformMenuColumns = [
     ['platform_menu_current_price', 'integer'],
     ['platform_menu_price_count', 'integer'],
+    ['platform_menu_price_variants_json', 'text'],
     ['last_seen_import_id', 'text'],
     ['missing_streak', 'integer not null default 0'],
     ['presence_status', "text not null default 'present'"],
@@ -166,5 +193,41 @@ export const migrate = (db: DatabaseConnection) => {
 
   for (const [name, type] of missingPlatformOptionGroupColumns) {
     db.exec(`alter table platform_option_groups add column ${name} ${type}`)
+  }
+
+  const platformImportRunColumns = new Set(
+    (
+      db.prepare(`
+        select name
+        from pragma_table_info('platform_import_runs')
+      `).all() as Array<{ name: string }>
+    ).map((column) => column.name)
+  )
+
+  const missingPlatformImportRunColumns = [
+    ['error_message', 'text']
+  ].filter(([name]) => !platformImportRunColumns.has(name))
+
+  for (const [name, type] of missingPlatformImportRunColumns) {
+    db.exec(`alter table platform_import_runs add column ${name} ${type}`)
+  }
+
+  const browserInspectionSnapshotColumns = new Set(
+    (
+      db.prepare(`
+        select name
+        from pragma_table_info('browser_inspection_snapshots')
+      `).all() as Array<{ name: string }>
+    ).map((column) => column.name)
+  )
+
+  const missingBrowserInspectionSnapshotColumns = [
+    ['page_kind', 'text'],
+    ['capture_mode', 'text'],
+    ["menu_items_json", "text not null default '[]'"]
+  ].filter(([name]) => !browserInspectionSnapshotColumns.has(name))
+
+  for (const [name, type] of missingBrowserInspectionSnapshotColumns) {
+    db.exec(`alter table browser_inspection_snapshots add column ${name} ${type}`)
   }
 }

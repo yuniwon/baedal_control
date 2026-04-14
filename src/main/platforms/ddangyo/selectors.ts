@@ -1,9 +1,14 @@
 export const ddangyoSelectors = {
-  username: 'input[name="mbrId"]',
-  password: 'input[type="password"]',
-  loginButton: 'button:has-text("로그인")',
-  menuRow: 'tr[data-menu-id]',
-  nameInput: '.menu-name input',
-  priceInput: '.menu-price input',
-  saveButton: 'button:has-text("저장")'
+  username: '#mf_ibx_mbrId',
+  password: '#mf_sct_pwd',
+  loginButton: '#mf_btn_webLogin',
+  groupList: '#mf_wfm_contents_wfm_tabcontents_gen_menuGrp > li',
+  groupLink: '#mf_wfm_contents_wfm_tabcontents_gen_menuGrp > li a',
+  groupListBackButton: '#mf_wfm_contents_wfm_tabcontents_btn_menuGrp',
+  menuList: '#mf_wfm_contents_wfm_tabcontents_gen_menu > li',
+  groupName: '#mf_wfm_contents_wfm_tabcontents_tbx_menuGrpNm',
+  menuId: '[id$="_spa_menuId"]',
+  menuManageButton: '[id$="_btn_mngMenu"]',
+  menuInfoNameInput: '#mf_wfm_contents_wfm_tabcontents_SMWME01T120P40_wframe_ibx_menuNm',
+  menuInfoApplyButton: '#mf_wfm_contents_wfm_tabcontents_SMWME01T120P40_wframe_btn_appl'
 } as const
