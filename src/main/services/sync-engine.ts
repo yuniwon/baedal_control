@@ -2,6 +2,13 @@ import { randomUUID } from 'node:crypto'
 import type { PlatformCode, SyncPreviewItem, SyncRunItemRecord } from '../../shared/contracts'
 import { normalizeSyncFailure } from '../../shared/sync-error-catalog'
 
+const buildAfterValue = (item: SyncPreviewItem) =>
+  JSON.stringify({
+    name: item.nextName,
+    price: item.nextPrice,
+    priceVariants: item.nextPriceVariants ?? null
+  })
+
 interface SyncRunLogger {
   create: (record: {
     syncRunId: string
@@ -54,7 +61,7 @@ export class SyncEngine {
           menuId: item.menuId,
           fieldType: 'menu',
           beforeValue: item.previousName ?? null,
-          afterValue: JSON.stringify({ name: item.nextName, price: item.nextPrice }),
+          afterValue: buildAfterValue(item),
           status: 'success',
           errorCode: null,
           errorMessage: null
@@ -70,7 +77,7 @@ export class SyncEngine {
           menuId: item.menuId,
           fieldType: 'menu',
           beforeValue: item.previousName ?? null,
-          afterValue: JSON.stringify({ name: item.nextName, price: item.nextPrice }),
+          afterValue: buildAfterValue(item),
           status: 'failed',
           errorCode: failure.errorCode,
           errorMessage: failure.errorMessage,

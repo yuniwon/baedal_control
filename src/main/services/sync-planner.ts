@@ -10,6 +10,7 @@ import type {
   SyncPreviewNeedsReview,
   SyncPreviewResult
 } from '../../shared/contracts'
+import { comparePlatformMenuPriceVariants } from '../../shared/platform-menu-price-variants'
 import {
   getRequiredMenuWriteExecutionMode,
   requiresMultiPriceMenuReview
@@ -70,6 +71,11 @@ const hasManagedBrowserMenuTab = (
       )
   )
 
+const hasComparablePriceVariants = (
+  sourceVariants?: SyncPreviewItem['platformMenuPriceVariants'],
+  nextVariants?: MenuRecord['basePriceVariants']
+) => (sourceVariants?.length ?? 0) > 0 && (nextVariants?.length ?? 0) > 0
+
 export const buildSyncPreview = ({
   menus,
   mappings,
@@ -104,11 +110,23 @@ export const buildSyncPreview = ({
         `${mapping.platformCode}:${mapping.platformMenuId}`
       )
       const sourcePresenceStatus = sourcePlatformMenu?.presenceStatus
+      const sourcePriceVariants =
+        sourcePlatformMenu?.platformMenuPriceVariants ?? mapping.platformMenuPriceVariants ?? null
+      const nextPriceVariants = menu.basePriceVariants ?? null
       const nameChanged = mapping.platformMenuName !== menu.baseName
-      const priceChanged =
+      const scalarPriceChanged =
         typeof mapping.platformMenuCurrentPrice === 'number'
           ? mapping.platformMenuCurrentPrice !== menu.basePrice
           : true
+      const variantComparison = hasComparablePriceVariants(sourcePriceVariants, nextPriceVariants)
+        ? comparePlatformMenuPriceVariants(sourcePriceVariants, nextPriceVariants)
+        : {
+            hasVariantData: false,
+            structureMatches: true,
+            amountChanged: false,
+            changed: false
+          }
+      const priceChanged = scalarPriceChanged || variantComparison.changed
 
       if (!nameChanged && !priceChanged) {
         continue
@@ -166,14 +184,24 @@ export const buildSyncPreview = ({
           priceChanged
         })
       ) {
-        needsReview.push({
-          menuId: menu.menuId,
-          platformCode: mapping.platformCode,
-          platformMenuId: mapping.platformMenuId,
-          reason: 'price_variant_review',
-          detail: '다중 가격 메뉴'
-        })
-        continue
+        const supportsStructuredVariantWrite =
+          mapping.platformCode === 'ddangyo'
+          && priceChanged
+          && variantComparison.hasVariantData
+          && variantComparison.structureMatches
+
+        if (supportsStructuredVariantWrite) {
+          // continue to executable item
+        } else {
+          needsReview.push({
+            menuId: menu.menuId,
+            platformCode: mapping.platformCode,
+            platformMenuId: mapping.platformMenuId,
+            reason: 'price_variant_review',
+            detail: '다중 가격 메뉴'
+          })
+          continue
+        }
       }
 
       const requiredExecutionMode = getRequiredMenuWriteExecutionMode(mapping.platformCode)
@@ -208,12 +236,15 @@ export const buildSyncPreview = ({
         platformMenuId: mapping.platformMenuId,
         previousName: mapping.platformMenuName,
         previousPrice: mapping.platformMenuCurrentPrice ?? null,
+        previousPriceVariants: sourcePriceVariants,
         nextName: menu.baseName,
         nextPrice: menu.basePrice,
+        nextPriceVariants,
         executionMode: requiredExecutionMode === 'managed_browser' ? 'managed_browser' : undefined,
         platformMenuPriceCount: mapping.platformMenuPriceCount ?? null,
         platformMenuGroupName: mapping.platformMenuGroupName ?? null,
         platformMenuPriceSummary: mapping.platformMenuPriceSummary ?? null,
+        platformMenuPriceVariants: sourcePriceVariants,
         platformMenuBindingSummary: mapping.platformMenuBindingSummary ?? null
       })
     }

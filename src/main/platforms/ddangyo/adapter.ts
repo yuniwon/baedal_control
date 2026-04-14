@@ -2,8 +2,10 @@ import type { Page } from 'playwright'
 import type {
   PlatformInspectionReport,
   PlatformInspectionStep,
+  PlatformMenuPriceChannelCode,
   SyncPreviewItem
 } from '../../../shared/contracts'
+import { comparePlatformMenuPriceVariants } from '../../../shared/platform-menu-price-variants'
 import type {
   PlatformAdapter,
   PlatformMenuFetchResult,
@@ -18,6 +20,12 @@ export class DdangyoAdapter implements PlatformAdapter {
   readonly platformCode = 'ddangyo' as const
   private readonly updateSuccessMessage = '적용 완료되었습니다.'
   private readonly menuInfoFramePrefix = 'mf_wfm_contents_wfm_tabcontents_SMWME01T120P40_wframe'
+  private readonly priceInputIdPattern = /_gen_menuPrc_(\d+)_ibx_menuPrc(\d+)$/
+  private readonly priceChannelByInputIndex: Record<number, PlatformMenuPriceChannelCode> = {
+    1: 'delivery',
+    2: 'pickup',
+    3: 'dine_in'
+  }
 
   constructor(
     private readonly credentials: { username: string; password: string },
@@ -49,8 +57,17 @@ export class DdangyoAdapter implements PlatformAdapter {
 
   async applyMenuUpdate(item: SyncPreviewItem) {
     const nameChanged = item.previousName !== item.nextName
-    const priceChanged =
+    const scalarPriceChanged =
       typeof item.previousPrice === 'number' ? item.previousPrice !== item.nextPrice : true
+    const variantComparison = this.hasComparablePriceVariants(item)
+      ? comparePlatformMenuPriceVariants(item.previousPriceVariants, item.nextPriceVariants)
+      : {
+          hasVariantData: false,
+          structureMatches: true,
+          amountChanged: false,
+          changed: false
+        }
+    const priceChanged = scalarPriceChanged || variantComparison.changed
 
     if (!nameChanged && !priceChanged) {
       return
@@ -63,6 +80,7 @@ export class DdangyoAdapter implements PlatformAdapter {
         nameChanged,
         priceChanged
       })
+      && !(priceChanged && variantComparison.hasVariantData && variantComparison.structureMatches)
     ) {
       throw new Error('ddangyo_multi_price_menu_requires_review')
     }
@@ -234,13 +252,14 @@ export class DdangyoAdapter implements PlatformAdapter {
     options: { priceChanged: boolean }
   ) {
     const priceInputIds = await this.findVisibleInputIds(page, /_ibx_menuPrc\d+$/)
+    const priceUpdates = options.priceChanged ? this.buildPriceUpdates(item, priceInputIds) : []
 
     if (options.priceChanged && priceInputIds.length === 0) {
       throw new Error('ddangyo_menu_price_input_not_found')
     }
 
     const updateState = await page.evaluate(
-      ({ framePrefix, nextName, nextPrice, priceInputIds, applyPriceChange }) => {
+      ({ framePrefix, nextName, nextPrice, priceUpdates, applyPriceChange }) => {
         const scopeName = `${framePrefix}_scwin`
         const dataName = `${framePrefix}_dma_para`
         const priceDataName = `${framePrefix}_dlt_menuPrc`
@@ -269,6 +288,8 @@ export class DdangyoAdapter implements PlatformAdapter {
           throw new Error('ddangyo_menu_name_handler_not_found')
         }
 
+        void nextPrice
+
         if (applyPriceChange && typeof priceKeyupHandler !== 'function') {
           throw new Error('ddangyo_menu_price_handler_not_found')
         }
@@ -290,16 +311,16 @@ export class DdangyoAdapter implements PlatformAdapter {
             event: { keyCode: number }
           ) => void
 
-          for (const priceInputId of priceInputIds) {
-            const priceComponent = getComponentById(priceInputId) as
+          for (const priceUpdate of priceUpdates) {
+            const priceComponent = getComponentById(priceUpdate.inputId) as
               | { setValue?: (value: string) => void }
               | undefined
 
             if (!priceComponent || typeof priceComponent.setValue !== 'function') {
-              continue
+              throw new Error('ddangyo_menu_price_component_not_found')
             }
 
-            priceComponent.setValue(String(nextPrice))
+            priceComponent.setValue(String(priceUpdate.value))
             assuredPriceKeyupHandler.call(priceComponent, { keyCode: 65 })
           }
         }
@@ -313,7 +334,7 @@ export class DdangyoAdapter implements PlatformAdapter {
         framePrefix: this.menuInfoFramePrefix,
         nextName: item.nextName,
         nextPrice: item.nextPrice,
-        priceInputIds,
+        priceUpdates,
         applyPriceChange: options.priceChanged
       }
     )
@@ -401,6 +422,48 @@ export class DdangyoAdapter implements PlatformAdapter {
         })
         .map((element) => (element as HTMLInputElement).id)
     }, idPattern.source)
+  }
+
+  private hasComparablePriceVariants(item: SyncPreviewItem) {
+    return (item.previousPriceVariants?.length ?? 0) > 0 && (item.nextPriceVariants?.length ?? 0) > 0
+  }
+
+  private buildPriceUpdates(item: SyncPreviewItem, priceInputIds: string[]) {
+    if (this.hasComparablePriceVariants(item)) {
+      const comparison = comparePlatformMenuPriceVariants(
+        item.previousPriceVariants,
+        item.nextPriceVariants
+      )
+
+      if (comparison.hasVariantData && comparison.structureMatches) {
+        return priceInputIds.map((inputId) => {
+          const matchedIds = inputId.match(this.priceInputIdPattern)
+          if (!matchedIds) {
+            throw new Error('ddangyo_menu_price_input_shape_mismatch')
+          }
+
+          const variantIndex = Number(matchedIds[1])
+          const inputChannelIndex = Number(matchedIds[2])
+          const channelCode = this.priceChannelByInputIndex[inputChannelIndex]
+          const variant = item.nextPriceVariants?.[variantIndex]
+          const channel = variant?.channels.find((entry) => entry.channelCode === channelCode)
+
+          if (!channelCode || !variant || typeof channel?.amount !== 'number') {
+            throw new Error('ddangyo_menu_price_variant_input_mismatch')
+          }
+
+          return {
+            inputId,
+            value: channel.amount
+          }
+        })
+      }
+    }
+
+    return priceInputIds.map((inputId) => ({
+      inputId,
+      value: item.nextPrice
+    }))
   }
 
   private async readCurrentGroupName(page: Page) {

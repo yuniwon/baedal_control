@@ -19,11 +19,17 @@
 
 ## 2. 이번 커밋 직전 검증 결과
 
-- `npx vitest run tests/unit/main/baemin-adapter.test.ts tests/unit/main/catalog-import-orchestrator.test.ts --reporter=verbose`
-  - 17/17 통과
+- `npm test`
+  - 55개 파일, 217개 테스트 통과
+- `npm run lint:types`
+  - 통과
+- `npm run build`
+  - 통과
 - 이번 정리에서 수정한 핵심
-  - 배민 어댑터 테스트가 새 가격 variant 구조와 inspection step 확장을 따라가도록 기대값 보정
-  - 바인딩 정보를 제공하지 않는 플랫폼에서는 오래된 매핑 바인딩 메타데이터를 유지하지 않고 `null`로 비우도록 정리
+  - 공용 `platform-menu-price-variants` 비교 유틸 추가
+  - planner가 다중 가격 variant 내부 금액 차이까지 감지하도록 보강
+  - 땡겨요 어댑터가 다중 가격 메뉴를 row/channel별 입력으로 안전하게 쓰도록 보강
+  - sync preview 선택 키와 실행 기록 payload가 variant 구조를 함께 보존하도록 보강
 
 ## 3. 실행 방법
 
@@ -76,23 +82,25 @@ C:\Users\WON2\AppData\Roaming\delivery-menu-sync\credentials.json
 
 - 메뉴 import 가능
 - 단일 가격 메뉴의 이름/가격 변경은 실운영 왕복 검증 완료
-- 다중 가격 메뉴는 `이름만 변경`하는 경우 반영 가능
-- 다중 가격 메뉴의 `가격 변경`은 아직 안전하지 않아서 `price_variant_review`로 차단 중
-- 이유: WebSquare 저장 payload가 가격 행 편집까지 들어가면 다른 용량 가격이 평탄화될 수 있음
+- 다중 가격 메뉴도 `variant 구조가 현재 플랫폼과 같을 때`는 가격 변경까지 실행 가능
+- planner와 adapter가 `previousPriceVariants / nextPriceVariants`를 사용해 구조를 비교한다.
+- WebSquare 입력 ID `gen_menuPrc_{row}_ibx_menuPrc{channel}` 기준으로 행/채널별 금액을 개별 입력한다.
+- 구조가 다르거나 variant 정보가 비어 있으면 계속 `price_variant_review`로 차단한다.
 
 ## 5. 절대 건드리면 안 되는 것
 
 - 운영 중인 실제 판매 메뉴를 테스트용으로 수정/삭제하면 안 된다.
 - 테스트가 필요하면 숨김 메뉴 또는 생성 후 즉시 숨김/삭제 가능한 안전 대상만 사용한다.
 - 쿠팡이츠는 Playwright 로그인 우회 시도를 계속 붙이기보다, 현재는 전용 크롬 세션 재사용 경로를 기준으로 개선한다.
-- 땡겨요 다중 가격 메뉴는 editor/write model이 준비되기 전까지 실행 대상으로 올리지 않는다.
+- 땡겨요 다중 가격 메뉴는 `variant 구조 일치`가 확인된 경우에만 실행한다.
 - 로컬 DB나 자격 증명 파일 자체를 저장소에 커밋하면 안 된다.
 
 ## 6. 다음 우선순위
 
-1. 땡겨요 다중 가격 메뉴 편집 모델 설계
-   - 로컬 `basePriceVariants`를 실제 반영 payload로 연결
-   - variant 행 / 채널별 부분 수정 payload 설계
+1. 땡겨요 다중 가격 실운영 왕복 검증
+   - 숨김 안전 메뉴 기준으로 variant 가격 변경 저장
+   - 재수집 후 플랫폼 카탈로그/매핑/실행 기록 확인
+   - 원복까지 포함한 검증 로그 문서화
 2. 배민 안전한 실저장 테스트 전략 확정
    - 숨김 테스트 메뉴 확보 또는 생성 후 비노출 정리 루틴 설계
 3. 옵션 편집/반영 모델 설계

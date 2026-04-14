@@ -239,8 +239,10 @@ export interface SyncPreviewItem {
   platformMenuId: string
   previousName: string
   previousPrice?: number | null
+  previousPriceVariants?: PlatformMenuPriceVariantRecord[] | null
   nextName: string
   nextPrice: number
+  nextPriceVariants?: PlatformMenuPriceVariantRecord[] | null
   executionMode?: 'managed_browser'
   platformMenuPriceCount?: number | null
   platformMenuGroupName?: string | null

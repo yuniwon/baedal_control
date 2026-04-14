@@ -250,6 +250,153 @@ describe('buildSyncPreview', () => {
     ])
   })
 
+  it('schedules ddangyo multi-price menus when the variant structure matches and only a secondary variant price changed', () => {
+    const preview = buildSyncPreview({
+      menus: [
+        {
+          menuId: 'm6d',
+          baseName: '칠성사이다',
+          basePrice: 1800,
+          basePriceVariants: [
+            {
+              variantLabel: '500ml',
+              channels: [
+                {
+                  channelCode: 'delivery',
+                  channelLabel: '배달',
+                  amount: 1800,
+                  amountText: '1,800원'
+                },
+                {
+                  channelCode: 'pickup',
+                  channelLabel: '포장',
+                  amount: 1800,
+                  amountText: '1,800원'
+                },
+                {
+                  channelCode: 'dine_in',
+                  channelLabel: '매장식사',
+                  amount: 1800,
+                  amountText: '1,800원'
+                }
+              ]
+            },
+            {
+              variantLabel: '1.25L',
+              channels: [
+                {
+                  channelCode: 'delivery',
+                  channelLabel: '배달',
+                  amount: 2900,
+                  amountText: '2,900원'
+                },
+                {
+                  channelCode: 'pickup',
+                  channelLabel: '포장',
+                  amount: 2900,
+                  amountText: '2,900원'
+                },
+                {
+                  channelCode: 'dine_in',
+                  channelLabel: '매장식사',
+                  amount: 2900,
+                  amountText: '2,900원'
+                }
+              ]
+            }
+          ],
+          isDirty: 1,
+          isManaged: 1
+        }
+      ],
+      platformMenus: [],
+      mappings: [
+        {
+          mappingId: 'map-6d',
+          menuId: 'm6d',
+          platformCode: 'ddangyo',
+          platformMenuId: '10000039',
+          platformMenuName: '칠성사이다',
+          platformMenuCurrentPrice: 1800,
+          platformMenuPriceCount: 2,
+          platformMenuPriceSummary:
+            '500ml · 배달 1,800원 · 포장 1,800원 · 매장식사 1,800원 / 1.25L · 배달 2,800원 · 포장 2,800원 · 매장식사 2,800원',
+          platformMenuPriceVariants: [
+            {
+              variantLabel: '500ml',
+              channels: [
+                {
+                  channelCode: 'delivery',
+                  channelLabel: '배달',
+                  amount: 1800,
+                  amountText: '1,800원'
+                },
+                {
+                  channelCode: 'pickup',
+                  channelLabel: '포장',
+                  amount: 1800,
+                  amountText: '1,800원'
+                },
+                {
+                  channelCode: 'dine_in',
+                  channelLabel: '매장식사',
+                  amount: 1800,
+                  amountText: '1,800원'
+                }
+              ]
+            },
+            {
+              variantLabel: '1.25L',
+              channels: [
+                {
+                  channelCode: 'delivery',
+                  channelLabel: '배달',
+                  amount: 2800,
+                  amountText: '2,800원'
+                },
+                {
+                  channelCode: 'pickup',
+                  channelLabel: '포장',
+                  amount: 2800,
+                  amountText: '2,800원'
+                },
+                {
+                  channelCode: 'dine_in',
+                  channelLabel: '매장식사',
+                  amount: 2800,
+                  amountText: '2,800원'
+                }
+              ]
+            }
+          ],
+          matchedBy: 'manual',
+          isConfirmed: 1
+        }
+      ]
+    })
+
+    expect(preview.needsReview).toEqual([])
+    expect(preview.items).toEqual([
+      expect.objectContaining({
+        menuId: 'm6d',
+        platformCode: 'ddangyo',
+        platformMenuId: '10000039',
+        previousName: '칠성사이다',
+        previousPrice: 1800,
+        nextName: '칠성사이다',
+        nextPrice: 1800,
+        previousPriceVariants: [
+          expect.objectContaining({ variantLabel: '500ml' }),
+          expect.objectContaining({ variantLabel: '1.25L' })
+        ],
+        nextPriceVariants: [
+          expect.objectContaining({ variantLabel: '500ml' }),
+          expect.objectContaining({ variantLabel: '1.25L' })
+        ]
+      })
+    ])
+  })
+
   it('marks source-absent mappings and missing source platform menus as needsReview', () => {
     const preview = buildSyncPreview({
       menus: [{ menuId: 'm7', baseName: '한정피자', basePrice: 25900, isDirty: 1, isManaged: 1 }],

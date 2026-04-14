@@ -19,6 +19,7 @@ import type {
   SyncRunItemRecord,
   SyncRunRecord
 } from '../../shared/contracts'
+import { serializePlatformMenuPriceVariants } from '../../shared/platform-menu-price-variants'
 import { buildSyncPreview } from '../services/sync-planner'
 
 interface HandlerDependencies {
@@ -126,8 +127,10 @@ export const registerHandlers = ({
       platformMenuId: item.platformMenuId,
       previousName: item.previousName,
       previousPrice: item.previousPrice ?? null,
+      previousPriceVariants: serializePlatformMenuPriceVariants(item.previousPriceVariants),
       nextName: item.nextName,
       nextPrice: item.nextPrice,
+      nextPriceVariants: serializePlatformMenuPriceVariants(item.nextPriceVariants),
       executionMode: item.executionMode ?? null
     })
 
