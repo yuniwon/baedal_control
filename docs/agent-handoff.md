@@ -20,17 +20,25 @@
 ## 2. 이번 커밋 직전 검증 결과
 
 - `npm test`
-  - 58개 파일, 231개 테스트 통과
+  - 59개 파일, 237개 테스트 통과
 - `npm run lint:types`
   - 통과
 - `npm run build`
   - 통과
+- `npx electron out/main/index.js --task=inspect-create-menu-flow --platformCode=baemin`
+  - 통과
+  - 저장된 배민 계정으로 로그인 후 메뉴 목록과 `메뉴 추가` 버튼 존재까지는 확인
+  - 하지만 자동화 클릭 후에도 생성 1단계가 열리지 않아 `baemin_create_wizard_not_opened`로 종료
 - 이번 정리에서 수정한 핵심
   - `platform_menus`에 한 번도 저장되지 않은 legacy active 매핑도 import 결측 추적 대상에 포함되도록 보강
   - 첫 import에서 `missing_suspected`, 두 번째 import에서 `absent_confirmed + source_absent`로 승격되도록 테스트 추가
   - 배민 쓰기 실패 시 어댑터가 현재 페이지 스냅샷(`platform_page_snapshot`)을 에러에 부착하고, sync 엔진이 이를 실행 기록의 `failure_context_json`으로 저장하도록 보강
     - 현재 화면 종류뿐 아니라 `operationStage`도 함께 남김
   - 실행 기록 UI가 배민 실패 당시 본문 텍스트 일부까지 보여주도록 보강
+  - 배민 생성 마법사 읽기 전용 CLI 점검 경로 추가
+    - `inspect-create-menu-flow`
+    - 메뉴 목록 단계에서는 `메뉴 추가` 같은 핵심 컨트롤을 먼저 노출
+    - 생성 1단계가 안 열리면 raw timeout 대신 `baemin_create_wizard_not_opened:{page summary}`로 명확히 실패 기록
   - 실제 운영 DB 기준으로 배민 import 2회 연속 실행 검증 완료
     - 결과: 오래된 숨김 배민 매핑들이 `source_absent`로 정리되고 해당 로컬 메뉴도 `is_managed = 0` 처리됨
   - 실제 운영 DB 기준으로 배민 `통마늘바베큐피자(59707584)` 실패 재현 검증 완료
@@ -77,7 +85,8 @@ C:\Users\WON2\AppData\Roaming\delivery-menu-sync\credentials.json
 - 금칙어가 설명/구성에 남아 있으면 저장 전에 차단
 - legacy active 매핑이 `platform_menus`에 없더라도 import 2회로 `source_absent`까지 자동 정리됨
 - 쓰기 실패 시 현재 배민 화면 제목 / 화면 종류 / 실패 단계 / 본문 텍스트 일부를 `failure_context_json`으로 남긴다.
-- 새 메뉴 생성 마법사 구조는 읽어뒀지만, 안전한 숨김 테스트 메뉴 전략은 아직 확정되지 않음
+- 생성 마법사 구조는 사용자 수동 캡처 기준으로 파악했지만, 현재 자동화 경로에서는 `메뉴 추가` 클릭 후 1단계가 열리지 않는다.
+- 즉, 배민 새 테스트 메뉴 생성 자동화는 아직 미완료이며 안전한 실저장 검증은 기존 숨김/품절 메뉴 중심으로 이어가야 한다.
 
 ### 쿠팡이츠
 
@@ -112,7 +121,7 @@ C:\Users\WON2\AppData\Roaming\delivery-menu-sync\credentials.json
 
 1. 배민 안전한 실저장 테스트 전략 확정
    - legacy 숨김 매핑 정리는 끝났고, 이제 실제로 저장을 왕복 검증할 안전 대상만 남음
-   - 숨김 테스트 메뉴 확보 또는 생성 후 비노출 정리 루틴 설계
+   - 현재 생성 마법사 자동화는 `baemin_create_wizard_not_opened`에서 막히므로, 우선은 기존 숨김/품절 메뉴 기반 검증을 계속하고 별도로 새 메뉴 진입 조건을 조사
 2. 배민 저장 성공 후 후속 단계 진단 보강
    - 실패 직전 화면 기록은 붙었음
    - 다음은 저장 성공 직후 토스트/잔존 모달/재진입 지연 같은 후속 단계 로그를 더 선명하게 남기는 것

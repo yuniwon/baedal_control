@@ -178,6 +178,16 @@ app.whenReady().then(async () => {
     getSyncPreview,
     syncEngine,
     platformMenuImporter: catalogImportOrchestrator,
+    platformFlowInspector: {
+      inspectCreateMenuFlow: async (platformCode) => {
+        const adapter = adapterRegistry.get(platformCode)
+        if (!adapter.inspectCreateMenuFlow) {
+          throw new Error(`platform_create_menu_flow_inspection_unavailable:${platformCode}`)
+        }
+
+        return adapter.inspectCreateMenuFlow()
+      }
+    },
     hasCredential: (platformCode) => Boolean(credentialVault.get(platformCode))
   })
   const cliTaskResult = await cliTaskRunner.run(process.argv.slice(2))

@@ -1,6 +1,7 @@
 import type {
   PlatformCode,
   PlatformImportSummary,
+  PlatformInspectionReport,
   SyncPreviewItem,
   SyncPreviewNeedsReview,
   SyncPreviewResult
@@ -13,6 +14,11 @@ interface CliTaskRunnerDependencies {
   }
   platformMenuImporter?: {
     importPlatform: (platformCode: PlatformCode) => Promise<{ summary: PlatformImportSummary }>
+  }
+  platformFlowInspector?: {
+    inspectCreateMenuFlow: (
+      platformCode: PlatformCode
+    ) => Promise<PlatformInspectionReport> | PlatformInspectionReport
   }
   hasCredential?: (platformCode: PlatformCode) => boolean
 }
@@ -192,6 +198,42 @@ export class CliTaskRunner {
           task: parsed.task,
           platformCode: parsed.platformCode,
           summary: result.summary
+        }
+      }
+    }
+
+    if (parsed.task === 'inspect-create-menu-flow') {
+      if (!parsed.platformCode) {
+        return {
+          exitCode: 1,
+          payload: { task: parsed.task, error: 'platform_code_required' }
+        }
+      }
+
+      if (!this.dependencies.platformFlowInspector) {
+        return {
+          exitCode: 1,
+          payload: { task: parsed.task, error: 'platform_flow_inspector_unavailable' }
+        }
+      }
+
+      if (this.dependencies.hasCredential && !this.dependencies.hasCredential(parsed.platformCode)) {
+        return {
+          exitCode: 1,
+          payload: { task: parsed.task, error: 'credential_not_found' }
+        }
+      }
+
+      const inspection = await this.dependencies.platformFlowInspector.inspectCreateMenuFlow(
+        parsed.platformCode
+      )
+
+      return {
+        exitCode: 0,
+        payload: {
+          task: parsed.task,
+          platformCode: parsed.platformCode,
+          inspection
         }
       }
     }

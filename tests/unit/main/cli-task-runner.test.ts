@@ -142,4 +142,44 @@ describe('CliTaskRunner', () => {
       }
     })
   })
+
+  it('returns a read-only create-menu inspection report for the requested platform', async () => {
+    const inspectCreateMenuFlow = vi.fn().mockResolvedValue({
+      platformCode: 'baemin',
+      steps: [
+        {
+          kind: 'navigation',
+          title: '새 메뉴 추가 1단계',
+          recordedAt: '2026-04-14T06:00:00.000Z'
+        }
+      ]
+    })
+
+    const runner = new CliTaskRunner({
+      getSyncPreview: vi.fn(),
+      platformFlowInspector: {
+        inspectCreateMenuFlow
+      }
+    })
+
+    await expect(
+      runner.run(['--task=inspect-create-menu-flow', '--platformCode=baemin'])
+    ).resolves.toEqual({
+      exitCode: 0,
+      payload: {
+        task: 'inspect-create-menu-flow',
+        platformCode: 'baemin',
+        inspection: {
+          platformCode: 'baemin',
+          steps: [
+            expect.objectContaining({
+              title: '새 메뉴 추가 1단계'
+            })
+          ]
+        }
+      }
+    })
+
+    expect(inspectCreateMenuFlow).toHaveBeenCalledWith('baemin')
+  })
 })

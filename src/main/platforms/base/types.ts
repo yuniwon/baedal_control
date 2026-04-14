@@ -51,6 +51,7 @@ export interface PlatformAdapter {
   capabilities?: PlatformAdapterCapabilities
   fetchMenus(): Promise<PlatformMenuSnapshot[]>
   fetchMenusWithInspection?(): Promise<PlatformMenuFetchResult>
+  inspectCreateMenuFlow?(): Promise<PlatformInspectionReport>
   fetchOptionGroups?(): Promise<PlatformOptionGroupSnapshot[]>
   applyMenuUpdate(item: SyncPreviewItem): Promise<void>
 }

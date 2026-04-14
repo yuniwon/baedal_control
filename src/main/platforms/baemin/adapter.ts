@@ -12,6 +12,11 @@ import {
   parseBaeminOptionGroupPageResponse
 } from './option-parser'
 import {
+  pickBaeminCreateWizardAdvanceButtonLabel,
+  pickBaeminCreateWizardGroupOptionValue,
+  prioritizeBaeminCreateWizardVisibleControlLabels
+} from './create-wizard'
+import {
   extractBaeminMenuRequestContext,
   parseBaeminMenuPageResponse
 } from './parser'
@@ -60,6 +65,96 @@ export class BaeminAdapter implements PlatformAdapter {
 
       const menus = await this.fetchMenusFromApi(page, inspection)
       return { menus, inspection }
+    } finally {
+      await browser.close()
+    }
+  }
+
+  async inspectCreateMenuFlow() {
+    const inspection = this.createInspectionReport()
+    const { browser, page } = await this.createAuthenticatedSession(inspection)
+
+    try {
+      await this.openMenuPage(page)
+      await this.captureCreateWizardStep(inspection, page, '메뉴 목록', '새 메뉴 추가 전 상태입니다.')
+
+      await page.getByRole('button', { name: '메뉴 추가' }).first().click({ timeout: 10000 })
+      await this.waitForCreateWizardNameInput(page)
+      await this.captureCreateWizardStep(
+        inspection,
+        page,
+        '새 메뉴 추가 1단계',
+        '메뉴명 검사 화면입니다.'
+      )
+
+      const nameInput = page.getByPlaceholder('예) 국물떡볶이')
+      const confirmButton = page.getByRole('button', { name: '확인' })
+      const applyButton = page.getByRole('button', { name: '적용하기' })
+      await nameInput.fill('갈릭소스추가')
+      await confirmButton.click()
+      await this.waitForNameApplyReady(page, applyButton, {
+        accepted: null,
+        message: null
+      })
+      await this.captureCreateWizardStep(
+        inspection,
+        page,
+        '새 메뉴 추가 1단계 검사 완료',
+        '사용 가능한 메뉴명으로 다음 단계 진입 직전 상태입니다.'
+      )
+
+      await applyButton.click()
+      const groupSelect = await this.findCreateWizardGroupSelect(page)
+      await groupSelect.waitFor({ timeout: 10000 })
+      await this.captureCreateWizardStep(
+        inspection,
+        page,
+        '새 메뉴 추가 2단계',
+        '메뉴 그룹 선택 화면입니다.'
+      )
+
+      const groupOptions = await this.readCreateWizardGroupOptions(groupSelect)
+      const selectedGroupValue = pickBaeminCreateWizardGroupOptionValue(groupOptions)
+      if (!selectedGroupValue) {
+        throw new Error('baemin_create_wizard_group_option_not_found')
+      }
+
+      await groupSelect.selectOption(selectedGroupValue)
+      await this.clickCreateWizardAdvanceButton(page)
+
+      const priceInput = await this.findCreateWizardPriceInput(page)
+      await priceInput.fill('100')
+      await this.captureCreateWizardStep(
+        inspection,
+        page,
+        '새 메뉴 추가 3단계',
+        '가격 입력 화면입니다. 실제 저장은 수행하지 않습니다.'
+      )
+
+      await this.clickCreateWizardAdvanceButton(page)
+      await page.waitForTimeout(500)
+      await this.captureCreateWizardStep(
+        inspection,
+        page,
+        '새 메뉴 추가 4단계',
+        '부가정보 화면입니다. 최종 저장 전에서 중단합니다.'
+      )
+
+      this.pushInspectionStep(inspection, {
+        kind: 'result',
+        title: '생성 마법사 읽기 전용 점검 완료',
+        detail: '최종 저장은 수행하지 않았습니다.'
+      })
+
+      return inspection
+    } catch (error) {
+      this.pushInspectionStep(inspection, {
+        kind: 'result',
+        title: '생성 마법사 읽기 전용 점검 중단',
+        detail: error instanceof Error ? error.message : 'baemin_create_wizard_inspection_failed'
+      })
+
+      return inspection
     } finally {
       await browser.close()
     }
@@ -925,6 +1020,176 @@ export class BaeminAdapter implements PlatformAdapter {
         continue
       }
     }
+  }
+
+  private async captureCreateWizardStep(
+    inspection: PlatformInspectionReport,
+    page: Page,
+    title: string,
+    detail: string
+  ) {
+    await this.capturePageStep(inspection, page, {
+      kind: 'navigation',
+      title,
+      detail,
+      fields: await this.readCreateWizardSurfaceFields(page)
+    })
+  }
+
+  private async readCreateWizardSurfaceFields(page: Page): Promise<PlatformInspectionField[]> {
+    return await page.evaluate(() => {
+      const isVisible = (element: Element) => {
+        if (!(element instanceof HTMLElement)) {
+          return false
+        }
+
+        const style = window.getComputedStyle(element)
+        const rect = element.getBoundingClientRect()
+        return !element.hidden && style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+      }
+
+      const fields: Array<{ name: string; value: string; usage: 'control' }> = []
+      const buttons = Array.from(document.querySelectorAll('button'))
+        .filter(isVisible)
+        .map((button) => button.textContent?.replace(/\s+/g, ' ').trim() ?? '')
+        .filter((value) => value.length > 0)
+
+      return {
+        fields,
+        buttons,
+        inputs: Array.from(document.querySelectorAll('input'))
+          .filter(isVisible)
+          .map((input) => {
+            const current = input as HTMLInputElement
+            return {
+              placeholder: current.placeholder?.trim() ?? '',
+              value: current.value?.trim() ?? '',
+              type: current.type
+            }
+          }),
+        selects: Array.from(document.querySelectorAll('select'))
+          .filter(isVisible)
+          .map((select) => {
+            const current = select as HTMLSelectElement
+            const options = Array.from(current.options)
+              .map((option) => option.textContent?.replace(/\s+/g, ' ').trim() ?? '')
+              .filter((value) => value.length > 0)
+              .slice(0, 8)
+            return options.join(' / ')
+          })
+      }
+    }).then(({ buttons, inputs, selects }) => {
+      const fields: PlatformInspectionField[] = []
+
+      prioritizeBaeminCreateWizardVisibleControlLabels(buttons).forEach((label, index) => {
+        fields.push({ name: `button[${index}]`, value: label, usage: 'control' })
+      })
+
+      inputs.slice(0, 10).forEach((input, index) => {
+        const parts = [input.placeholder || '(placeholder 없음)', input.value || '(값 없음)', input.type]
+        fields.push({ name: `input[${index}]`, value: parts.join(' | '), usage: 'control' })
+      })
+
+      selects.slice(0, 5).forEach((value, index) => {
+        fields.push({ name: `select[${index}]`, value, usage: 'control' })
+      })
+
+      return fields
+    })
+  }
+
+  private async waitForCreateWizardNameInput(page: Page) {
+    const nameInput = page.getByPlaceholder('예) 국물떡볶이')
+
+    try {
+      await nameInput.waitFor({ timeout: 10000 })
+      return nameInput
+    } catch {
+      throw new Error(`baemin_create_wizard_not_opened:${await this.describePage(page)}`)
+    }
+  }
+
+  private async findCreateWizardGroupSelect(page: Page) {
+    const selectLocator = page.locator('select').first()
+    await selectLocator.waitFor({ timeout: 10000 })
+    return selectLocator
+  }
+
+  private async readCreateWizardGroupOptions(selectLocator: Locator) {
+    return await selectLocator.evaluate((element) =>
+      Array.from((element as HTMLSelectElement).options).map((option) => ({
+        value: option.value ?? '',
+        label: option.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+      }))
+    )
+  }
+
+  private async clickCreateWizardAdvanceButton(page: Page) {
+    const visibleLabels = await page.evaluate(() => {
+      const isVisible = (element: Element) => {
+        if (!(element instanceof HTMLElement)) {
+          return false
+        }
+
+        const style = window.getComputedStyle(element)
+        const rect = element.getBoundingClientRect()
+        return !element.hidden && style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+      }
+
+      return Array.from(document.querySelectorAll('button'))
+        .filter(isVisible)
+        .map((button) => button.textContent?.replace(/\s+/g, ' ').trim() ?? '')
+        .filter((value) => value.length > 0)
+    })
+
+    const nextLabel = pickBaeminCreateWizardAdvanceButtonLabel(visibleLabels)
+    if (!nextLabel) {
+      throw new Error('baemin_create_wizard_advance_button_not_found')
+    }
+
+    await page.getByRole('button', { name: nextLabel }).first().click()
+  }
+
+  private async findCreateWizardPriceInput(page: Page) {
+    const indexedInputs = await page.evaluate(() => {
+      const isVisible = (element: Element) => {
+        if (!(element instanceof HTMLElement)) {
+          return false
+        }
+
+        const style = window.getComputedStyle(element)
+        const rect = element.getBoundingClientRect()
+        return !element.hidden && style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+      }
+
+      return Array.from(document.querySelectorAll('input'))
+        .map((input, index) => {
+          const current = input as HTMLInputElement
+          return {
+            index,
+            placeholder: current.placeholder?.trim() ?? '',
+            value: current.value?.trim() ?? '',
+            type: current.type
+          }
+        })
+        .filter((input) => {
+          if (!isVisible(document.querySelectorAll('input')[input.index])) {
+            return false
+          }
+
+          return input.placeholder !== '예) 국물떡볶이'
+        })
+    })
+
+    const target = indexedInputs.find((input) => input.value === '0')
+      ?? indexedInputs.find((input) => input.type === 'number')
+      ?? indexedInputs[0]
+
+    if (!target) {
+      throw new Error('baemin_create_wizard_price_input_not_found')
+    }
+
+    return page.locator('input').nth(target.index)
   }
 
   private createInspectionReport(): PlatformInspectionReport {

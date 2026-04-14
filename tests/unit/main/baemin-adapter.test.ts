@@ -245,6 +245,58 @@ describe('BaeminAdapter', () => {
     expect(close).toHaveBeenCalledTimes(1)
   })
 
+  it('returns a create-wizard specific failure when 메뉴 추가 does not open the first step', async () => {
+    const adapter = new BaeminAdapter({
+      username: 'owner-id',
+      password: 'secret'
+    }) as any
+
+    const close = vi.fn().mockResolvedValue(undefined)
+    const menuAddButton = {
+      first: vi.fn().mockReturnThis(),
+      click: vi.fn().mockResolvedValue(undefined)
+    }
+    const nameInput = {
+      waitFor: vi.fn().mockRejectedValue(new Error('locator.waitFor timeout'))
+    }
+    const fakePage = {
+      getByRole: vi.fn().mockImplementation((_role: string, options?: { name?: string }) => {
+        if (options?.name === '메뉴 추가') {
+          return menuAddButton
+        }
+
+        throw new Error('unexpected_role_lookup')
+      }),
+      getByPlaceholder: vi.fn().mockReturnValue(nameInput),
+      title: vi.fn().mockResolvedValue('배민 메뉴 관리'),
+      url: vi.fn().mockReturnValue('https://self.baemin.com/menu'),
+      locator: vi.fn().mockReturnValue({
+        innerText: vi.fn().mockResolvedValue('메뉴 옵션 판매상태 전체 숨김 메뉴 추가')
+      })
+    }
+
+    adapter.createAuthenticatedSession = vi.fn().mockResolvedValue({
+      browser: { close },
+      page: fakePage
+    })
+    adapter.openMenuPage = vi.fn().mockResolvedValue({})
+    adapter.captureCreateWizardStep = vi.fn().mockResolvedValue(undefined)
+
+    await expect(adapter.inspectCreateMenuFlow()).resolves.toEqual(
+      expect.objectContaining({
+        steps: expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'result',
+            title: '생성 마법사 읽기 전용 점검 중단',
+            detail: expect.stringContaining('baemin_create_wizard_not_opened')
+          })
+        ])
+      })
+    )
+
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
   it('collects baemin menu pages from the live screen responses while scrolling', async () => {
     const responseListeners = new Set<(response: ReturnType<typeof createMenuResponse>) => void>()
     const queuedPages = [
