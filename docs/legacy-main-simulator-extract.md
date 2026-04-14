@@ -264,8 +264,9 @@ Python 시뮬레이터는 실제 포털 대신 JSON 상태를 써서 커넥터 �
 기존 `origin/main`은 Python 시뮬레이터 보관용 브랜치로 아카이브한 뒤, 현재 Electron 앱 브랜치를 새 `main`으로 승격하는 것이 맞다.  
 브랜치 교체 후에도 아래 정보는 문서로 남긴다.
 
+- 아카이브 브랜치: `archive/python-simulator-main-2026-04-14`
 - Python 시뮬레이터 최종 SHA
-- 아카이브 브랜치명
+- `9414f8716879d7c506bfaeb5d4e871777c7083fb`
 - 이 문서 경로
 
 ## 결론
