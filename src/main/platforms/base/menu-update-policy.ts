@@ -6,6 +6,7 @@ export type MultiPriceMenuUpdatePolicy =
 
 interface PlatformMenuUpdatePolicy {
   multiPriceMenuUpdatePolicy: MultiPriceMenuUpdatePolicy
+  requiredExecutionMode?: 'managed_browser'
 }
 
 const platformMenuUpdatePolicies: Record<PlatformCode, PlatformMenuUpdatePolicy> = {
@@ -13,7 +14,8 @@ const platformMenuUpdatePolicies: Record<PlatformCode, PlatformMenuUpdatePolicy>
     multiPriceMenuUpdatePolicy: 'price_change_requires_review'
   },
   coupangeats: {
-    multiPriceMenuUpdatePolicy: 'price_change_requires_review'
+    multiPriceMenuUpdatePolicy: 'price_change_requires_review',
+    requiredExecutionMode: 'managed_browser'
   },
   ddangyo: {
     multiPriceMenuUpdatePolicy: 'all_changes_require_review'
@@ -22,6 +24,9 @@ const platformMenuUpdatePolicies: Record<PlatformCode, PlatformMenuUpdatePolicy>
 
 export const getPlatformMenuUpdatePolicy = (platformCode: PlatformCode) =>
   platformMenuUpdatePolicies[platformCode]
+
+export const getRequiredMenuWriteExecutionMode = (platformCode: PlatformCode) =>
+  getPlatformMenuUpdatePolicy(platformCode).requiredExecutionMode ?? null
 
 export const requiresMultiPriceMenuReview = ({
   platformCode,

@@ -1,5 +1,6 @@
 import type {
   MenuRecord,
+  ManagedChromeSessionStatus,
   PlatformCode,
   PlatformImportFetchMode,
   PlatformImportRunRecord,
@@ -9,13 +10,17 @@ import type {
   SyncPreviewNeedsReview,
   SyncPreviewResult
 } from '../../shared/contracts'
-import { requiresMultiPriceMenuReview } from '../platforms/base/menu-update-policy'
+import {
+  getRequiredMenuWriteExecutionMode,
+  requiresMultiPriceMenuReview
+} from '../platforms/base/menu-update-policy'
 
 interface BuildSyncPreviewInput {
   menus: MenuRecord[]
   mappings: PlatformMenuMappingRecord[]
   platformMenus: PlatformMenuCatalogRecord[]
   platformImportRuns?: PlatformImportRunRecord[]
+  managedChromeSession?: ManagedChromeSessionStatus | null
 }
 
 const parseImportFetchMode = (summaryJson?: string | null): PlatformImportFetchMode | null => {
@@ -54,11 +59,23 @@ const buildImportedPlatformSet = (platformImportRuns: PlatformImportRunRecord[] 
 const buildCatalogPlatformSet = (platformMenus: PlatformMenuCatalogRecord[] = []) =>
   new Set(platformMenus.map((menu) => menu.platformCode))
 
+const hasManagedBrowserMenuTab = (
+  platformCode: PlatformCode,
+  managedChromeSession?: ManagedChromeSessionStatus | null
+) =>
+  Boolean(
+    managedChromeSession?.connected &&
+      managedChromeSession.tabs.some(
+        (tab) => tab.platformCode === platformCode && tab.pageKind === 'menu_list'
+      )
+  )
+
 export const buildSyncPreview = ({
   menus,
   mappings,
   platformMenus,
-  platformImportRuns
+  platformImportRuns,
+  managedChromeSession
 }: BuildSyncPreviewInput): SyncPreviewResult => {
   const items: SyncPreviewItem[] = []
   const needsReview: SyncPreviewNeedsReview[] = []
@@ -159,6 +176,32 @@ export const buildSyncPreview = ({
         continue
       }
 
+      const requiredExecutionMode = getRequiredMenuWriteExecutionMode(mapping.platformCode)
+      if (requiredExecutionMode === 'managed_browser') {
+        const fetchMode = platformFetchModes.get(mapping.platformCode)
+        if (fetchMode !== 'managed_browser') {
+          needsReview.push({
+            menuId: menu.menuId,
+            platformCode: mapping.platformCode,
+            platformMenuId: mapping.platformMenuId,
+            reason: 'managed_session_write_review',
+            detail: '현재 세션으로 다시 가져오기 필요'
+          })
+          continue
+        }
+
+        if (!hasManagedBrowserMenuTab(mapping.platformCode, managedChromeSession)) {
+          needsReview.push({
+            menuId: menu.menuId,
+            platformCode: mapping.platformCode,
+            platformMenuId: mapping.platformMenuId,
+            reason: 'managed_session_write_review',
+            detail: managedChromeSession?.connected ? '전용 크롬 메뉴 탭 없음' : '전용 크롬 세션 연결 안 됨'
+          })
+          continue
+        }
+      }
+
       items.push({
         platformCode: mapping.platformCode,
         menuId: menu.menuId,
@@ -167,10 +210,7 @@ export const buildSyncPreview = ({
         previousPrice: mapping.platformMenuCurrentPrice ?? null,
         nextName: menu.baseName,
         nextPrice: menu.basePrice,
-        executionMode:
-          platformFetchModes.get(mapping.platformCode) === 'managed_browser'
-            ? 'managed_browser'
-            : undefined,
+        executionMode: requiredExecutionMode === 'managed_browser' ? 'managed_browser' : undefined,
         platformMenuPriceCount: mapping.platformMenuPriceCount ?? null,
         platformMenuGroupName: mapping.platformMenuGroupName ?? null,
         platformMenuPriceSummary: mapping.platformMenuPriceSummary ?? null,

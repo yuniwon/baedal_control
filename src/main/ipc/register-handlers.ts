@@ -158,12 +158,13 @@ export const registerHandlers = ({
     ...(browserInspectorBridge?.getStatus() ?? {})
   })
 
-  const getSyncPreview = () =>
+  const getSyncPreview = async () =>
     buildSyncPreview({
       menus: menuRepository.list(),
       mappings: mappingRepository.listAll(),
       platformMenus: platformMenuRepository.listAll(),
-      platformImportRuns: platformImportRunRepository?.listLatest(50) ?? []
+      platformImportRuns: platformImportRunRepository?.listLatest(50) ?? [],
+      managedChromeSession: (await managedChromeSessionProbe?.inspect()) ?? null
     })
 
   register('menus:list', async () => menuRepository.list())
@@ -358,14 +359,14 @@ export const registerHandlers = ({
   register('sync:preview', async () => getSyncPreview())
 
   register('sync:run', async () => {
-    const preview = getSyncPreview()
+    const preview = await getSyncPreview()
 
     return syncEngine?.run(preview.items) ?? { syncRunId: null, summary: '0 succeeded, 0 failed' }
   })
 
   register('sync:run-items', async (_event, payload) => {
     const requestedItems = Array.isArray(payload) ? (payload as SyncPreviewItem[]) : []
-    const preview = getSyncPreview()
+    const preview = await getSyncPreview()
     const executableItemKeys = new Set(preview.items.map(getSyncPreviewItemKey))
     const executableItems = requestedItems.filter((item) =>
       executableItemKeys.has(getSyncPreviewItemKey(item))

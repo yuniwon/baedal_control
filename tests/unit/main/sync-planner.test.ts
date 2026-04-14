@@ -462,7 +462,23 @@ describe('buildSyncPreview', () => {
             verifiedMappingCount: 0
           })
         }
-      ]
+      ],
+      managedChromeSession: {
+        endpointUrl: 'http://127.0.0.1:39482',
+        connected: true,
+        error: null,
+        tabs: [
+          {
+            tabId: 'tab-1',
+            title: '쿠팡이츠 메뉴 관리',
+            url: 'https://store.coupangeats.com/merchant/management/menu/109935',
+            type: 'page',
+            host: 'store.coupangeats.com',
+            platformCode: 'coupangeats',
+            pageKind: 'menu_list'
+          }
+        ]
+      }
     } as never)
 
     expect(preview.items).toEqual([
@@ -479,5 +495,112 @@ describe('buildSyncPreview', () => {
       })
     ])
     expect(preview.needsReview).toEqual([])
+  })
+
+  it('marks coupangeats menus as needsReview when the latest import is not a managed-browser session', () => {
+    const preview = buildSyncPreview({
+      menus: [
+        { menuId: 'm11', baseName: '왕새우갈비 새이름', basePrice: 23900, isDirty: 1, isManaged: 1 }
+      ],
+      platformMenus: [],
+      mappings: [
+        {
+          mappingId: 'map-11',
+          menuId: 'm11',
+          platformCode: 'coupangeats',
+          platformMenuId: 'ce-11',
+          platformMenuName: '왕새우갈비',
+          platformMenuCurrentPrice: 23900,
+          platformMenuGroupName: '추천메뉴',
+          matchedBy: 'manual',
+          isConfirmed: 1
+        }
+      ],
+      platformImportRuns: [
+        {
+          importRunId: 'import-11',
+          platformCode: 'coupangeats',
+          startedAt: '2026-04-14T02:00:00.000Z',
+          finishedAt: '2026-04-14T02:01:00.000Z',
+          status: 'completed',
+          menuFetchCompleted: 1,
+          optionFetchCompleted: 0,
+          summaryJson: JSON.stringify({
+            platformCode: 'coupangeats',
+            fetchedCount: 35,
+            createdMenuCount: 0,
+            linkedMappingCount: 0,
+            verifiedMappingCount: 35
+          })
+        }
+      ]
+    } as never)
+
+    expect(preview.items).toEqual([])
+    expect(preview.needsReview).toEqual([
+      expect.objectContaining({
+        menuId: 'm11',
+        platformCode: 'coupangeats',
+        platformMenuId: 'ce-11',
+        reason: 'managed_session_write_review'
+      })
+    ])
+  })
+
+  it('marks coupangeats menus as needsReview when the managed-browser menu tab is unavailable', () => {
+    const preview = buildSyncPreview({
+      menus: [
+        { menuId: 'm12', baseName: '왕새우갈비 새이름', basePrice: 23900, isDirty: 1, isManaged: 1 }
+      ],
+      platformMenus: [],
+      mappings: [
+        {
+          mappingId: 'map-12',
+          menuId: 'm12',
+          platformCode: 'coupangeats',
+          platformMenuId: 'ce-12',
+          platformMenuName: '왕새우갈비',
+          platformMenuCurrentPrice: 23900,
+          platformMenuGroupName: '추천메뉴',
+          matchedBy: 'manual',
+          isConfirmed: 1
+        }
+      ],
+      platformImportRuns: [
+        {
+          importRunId: 'import-12',
+          platformCode: 'coupangeats',
+          startedAt: '2026-04-14T03:00:00.000Z',
+          finishedAt: '2026-04-14T03:01:00.000Z',
+          status: 'completed',
+          menuFetchCompleted: 1,
+          optionFetchCompleted: 1,
+          summaryJson: JSON.stringify({
+            platformCode: 'coupangeats',
+            fetchedCount: 35,
+            fetchMode: 'managed_browser',
+            createdMenuCount: 0,
+            linkedMappingCount: 0,
+            verifiedMappingCount: 35
+          })
+        }
+      ],
+      managedChromeSession: {
+        endpointUrl: 'http://127.0.0.1:39482',
+        connected: false,
+        error: 'connection_refused',
+        tabs: []
+      }
+    } as never)
+
+    expect(preview.items).toEqual([])
+    expect(preview.needsReview).toEqual([
+      expect.objectContaining({
+        menuId: 'm12',
+        platformCode: 'coupangeats',
+        platformMenuId: 'ce-12',
+        reason: 'managed_session_write_review'
+      })
+    ])
   })
 })
