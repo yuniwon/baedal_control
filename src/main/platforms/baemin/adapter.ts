@@ -36,6 +36,28 @@ import { pickBaeminSearchResult } from './update-flow'
 import { pickBaeminRenderedSearchResult } from './update-flow'
 import { launchPlaywrightChromium } from '../../services/playwright-runtime'
 
+type BaeminCreateWizardEntryState = {
+  buttonFound: boolean
+  buttonCount: number
+  buttonText: string | null
+  ariaDisabled: string | null
+  disabledAttribute: string | null
+  dataDisabled: string | null
+  hasDisabledLikeClass: boolean
+  buttonHtmlSnippet: string | null
+  buttonRect: { x: number; y: number; width: number; height: number } | null
+  centerHitTag: string | null
+  centerHitText: string | null
+  centerHitClassName: string | null
+  centerHitHtmlSnippet: string | null
+  centerHitOwnsButton: boolean | null
+  hasReactFiber: boolean
+  reactLimitBranchDetected: boolean
+  bodyLimitMessage: string | null
+  visibleButtons: string[]
+  visibleInputs: string[]
+}
+
 export class BaeminAdapter implements PlatformAdapter {
   readonly platformCode = 'baemin' as const
 
@@ -85,8 +107,9 @@ export class BaeminAdapter implements PlatformAdapter {
       await this.openMenuPage(page)
       await this.captureCreateWizardStep(inspection, page, '메뉴 목록', '새 메뉴 추가 전 상태입니다.')
 
+      const preClickCreateWizardEntryState = await this.inspectCreateWizardEntryState(page)
       await page.getByRole('button', { name: '메뉴 추가' }).first().click({ timeout: 10000 })
-      await this.waitForCreateWizardNameInput(page)
+      await this.waitForCreateWizardNameInput(page, preClickCreateWizardEntryState)
       await this.captureCreateWizardStep(
         inspection,
         page,
@@ -642,7 +665,7 @@ export class BaeminAdapter implements PlatformAdapter {
     }
   }
 
-  private async describePage(page: Page) {
+  private async describePage(page: Page, extra?: Record<string, unknown> | null) {
     const [title, text] = await Promise.all([
       page.title().catch(() => ''),
       page.locator('body').innerText().catch(() => '')
@@ -651,7 +674,8 @@ export class BaeminAdapter implements PlatformAdapter {
     return JSON.stringify({
       url: page.url(),
       title,
-      text: text.replace(/\s+/g, ' ').trim().slice(0, 240)
+      text: text.replace(/\s+/g, ' ').trim().slice(0, 240),
+      ...(extra ?? {})
     })
   }
 
@@ -1297,15 +1321,204 @@ export class BaeminAdapter implements PlatformAdapter {
     })
   }
 
-  private async waitForCreateWizardNameInput(page: Page) {
+  private async waitForCreateWizardNameInput(
+    page: Page,
+    preClickCreateWizardEntryState?: BaeminCreateWizardEntryState | null
+  ) {
     const nameInput = page.getByPlaceholder('예) 국물떡볶이')
 
     try {
       await nameInput.waitFor({ timeout: 10000 })
       return nameInput
     } catch {
-      throw new Error(`baemin_create_wizard_not_opened:${await this.describePage(page)}`)
+      const createWizardBlockReason = await this.detectCreateWizardBlockReason(
+        page,
+        preClickCreateWizardEntryState
+      )
+      if (createWizardBlockReason) {
+        throw new Error(createWizardBlockReason)
+      }
+
+      const postClickCreateWizardEntryState = await this.inspectCreateWizardEntryState(page)
+      throw new Error(
+        `baemin_create_wizard_not_opened:${await this.describePage(page, {
+          createWizardEntryState: {
+            beforeClick: preClickCreateWizardEntryState ?? null,
+            afterClick: postClickCreateWizardEntryState
+          }
+        })}`
+      )
     }
+  }
+
+  private extractCreateWizardLimitMessage(visibleText: string) {
+    const normalizedText = visibleText.replace(/\s+/g, ' ').trim()
+    const directMatch = normalizedText.match(/메뉴는 .*?개 까지 추가할 수 있어요\.?/u)
+    if (directMatch) {
+      return directMatch[0]
+    }
+
+    return null
+  }
+
+  private async detectCreateWizardBlockReason(
+    page: Page,
+    preClickCreateWizardEntryState?: BaeminCreateWizardEntryState | null
+  ) {
+    const visibleText = await page.locator('body').innerText().catch(() => '')
+    const directLimitMessage = this.extractCreateWizardLimitMessage(visibleText)
+    if (directLimitMessage) {
+      return `baemin_create_wizard_limit_reached:${directLimitMessage}`
+    }
+
+    const entryState = preClickCreateWizardEntryState ?? (await this.inspectCreateWizardEntryState(page))
+
+    if (entryState?.bodyLimitMessage) {
+      return `baemin_create_wizard_limit_reached:${entryState.bodyLimitMessage}`
+    }
+
+    if (entryState?.reactLimitBranchDetected) {
+      return 'baemin_create_wizard_limit_reached:react_handler_menu_limit_detected'
+    }
+
+    if (
+      entryState?.buttonFound &&
+      (
+        entryState.disabledAttribute !== null ||
+        entryState.ariaDisabled === 'true' ||
+        entryState.dataDisabled === 'true' ||
+        entryState.hasDisabledLikeClass
+      )
+    ) {
+      return `baemin_create_wizard_button_disabled:${JSON.stringify(entryState)}`
+    }
+
+    return null
+  }
+
+  private async inspectCreateWizardEntryState(page: Page): Promise<BaeminCreateWizardEntryState | null> {
+    return await page
+      .evaluate(() => {
+        const normalize = (value: string | null | undefined) =>
+          value?.replace(/\s+/g, ' ').trim() ?? ''
+        const isVisible = (element: Element) => {
+          if (!(element instanceof HTMLElement)) {
+            return false
+          }
+
+          const style = window.getComputedStyle(element)
+          const rect = element.getBoundingClientRect()
+          return (
+            !element.hidden &&
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            rect.width > 0 &&
+            rect.height > 0
+          )
+        }
+
+        const visibleButtons = Array.from(document.querySelectorAll('button'))
+          .filter(isVisible)
+          .map((button) => normalize(button.textContent))
+          .filter((value) => value.length > 0)
+          .slice(0, 10)
+
+        const visibleInputs = Array.from(document.querySelectorAll('input'))
+          .filter(isVisible)
+          .map((input) => {
+            const current = input as HTMLInputElement
+            const placeholder = normalize(current.placeholder)
+            const value = normalize(current.value)
+            return [placeholder || '(placeholder 없음)', value || '(값 없음)', current.type].join(' | ')
+          })
+          .slice(0, 8)
+
+        const menuAddButtons = Array.from(document.querySelectorAll('button')).filter((button) =>
+          normalize(button.textContent).includes('메뉴 추가')
+        )
+        const menuAddButton = menuAddButtons[0] as unknown as
+          | (HTMLElement & Record<string, unknown>)
+          | undefined
+
+        let hasReactFiber = false
+        let reactLimitBranchDetected = false
+        const buttonRect = menuAddButton
+          ? (() => {
+              const rect = menuAddButton.getBoundingClientRect()
+              return {
+                x: Math.round(rect.x),
+                y: Math.round(rect.y),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height)
+              }
+            })()
+          : null
+        const centerHitElement =
+          menuAddButton && buttonRect
+            ? document.elementFromPoint(
+                buttonRect.x + Math.max(1, Math.round(buttonRect.width / 2)),
+                buttonRect.y + Math.max(1, Math.round(buttonRect.height / 2))
+              )
+            : null
+        if (menuAddButton) {
+          const fiberKey = Object.keys(menuAddButton).find((key) => key.startsWith('__reactFiber$'))
+          hasReactFiber = Boolean(fiberKey)
+          let fiber = fiberKey ? (menuAddButton[fiberKey] as Record<string, unknown> | null) : null
+
+          for (let depth = 0; depth < 12 && fiber; depth += 1) {
+            const memoizedProps =
+              typeof fiber.memoizedProps === 'object' && fiber.memoizedProps
+                ? (fiber.memoizedProps as Record<string, unknown>)
+                : null
+            const onClickSource =
+              typeof memoizedProps?.onClick === 'function'
+                ? normalize(String(memoizedProps.onClick))
+                : ''
+            if (onClickSource.includes('메뉴는') && onClickSource.includes('추가할 수 있어요')) {
+              reactLimitBranchDetected = true
+              break
+            }
+
+            fiber =
+              typeof fiber.return === 'object' && fiber.return
+                ? (fiber.return as Record<string, unknown>)
+                : null
+          }
+        }
+
+        const bodyLimitMessage =
+          normalize(document.body?.innerText ?? '').match(/메뉴는 .*?개 까지 추가할 수 있어요\.?/u)?.[0] ??
+          null
+
+        return {
+          buttonFound: Boolean(menuAddButton),
+          buttonCount: menuAddButtons.length,
+          buttonText: normalize(menuAddButton?.textContent),
+          ariaDisabled: menuAddButton?.getAttribute('aria-disabled') ?? null,
+          disabledAttribute: menuAddButton?.getAttribute('disabled') ?? null,
+          dataDisabled: menuAddButton?.getAttribute('data-disabled') ?? null,
+          hasDisabledLikeClass: /disabled/i.test(normalize(menuAddButton?.className ? String(menuAddButton.className) : '')),
+          buttonHtmlSnippet: menuAddButton ? normalize(menuAddButton.outerHTML).slice(0, 240) : null,
+          buttonRect,
+          centerHitTag: centerHitElement?.tagName?.toLowerCase() ?? null,
+          centerHitText: normalize(centerHitElement?.textContent).slice(0, 120) || null,
+          centerHitClassName: normalize(
+            centerHitElement instanceof HTMLElement ? centerHitElement.className : ''
+          ) || null,
+          centerHitHtmlSnippet: centerHitElement instanceof HTMLElement
+            ? normalize(centerHitElement.outerHTML).slice(0, 240)
+            : null,
+          centerHitOwnsButton: menuAddButton && centerHitElement
+            ? centerHitElement === menuAddButton || menuAddButton.contains(centerHitElement)
+            : null,
+          hasReactFiber,
+          reactLimitBranchDetected,
+          bodyLimitMessage,
+          visibleButtons,
+          visibleInputs
+        }
+      })
+      .catch(() => null)
   }
 
   private async findCreateWizardGroupSelect(page: Page) {

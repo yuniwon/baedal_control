@@ -477,8 +477,14 @@
     - 저장된 배민 계정으로 `biz-member.baemin.com/login -> self.baemin.com/menu` 자동 로그인 후 메뉴 목록과 `메뉴 추가` 버튼 존재까지는 확인
     - 하지만 headful Playwright 실제 클릭, 전용 크롬 DOM 클릭, 전용 크롬 DevTools 마우스 클릭 모두 `새 메뉴 추가` 1단계를 열지 못함
     - 현재 자동화 경로에서는 `baemin_create_wizard_not_opened`로 종료하고, 실행 결과에 페이지 요약과 우선순위 컨트롤(`메뉴 추가`, `확인`, `적용하기`, `다음`)을 함께 남김
-    - 전용 크롬 live DOM 조사에서 `메뉴 추가` 버튼 자체는 활성 상태였고, 프런트 `onClick` 소스는 `메뉴는 N개까지 추가할 수 있어요` 토스트 분기를 포함하고 있어 **현재는 메뉴 개수 상한에 걸렸을 가능성이 높다**
-    - 다만 자동화/브라우저 본문 캡처에서는 해당 토스트 문자열이 직접 잡히지 않아, 이 부분은 **live DOM 기준 강한 추정**으로 기록
+    - 2026-04-14 16:25 KST 진단 보강 후 `createWizardEntryState(beforeClick/afterClick)`를 같이 기록
+      - 클릭 전: `메뉴 추가` 버튼은 `aria-disabled=false`, `data-disabled=false`, `React fiber 있음`
+      - 클릭 전 중심 hit target: 버튼 내부 `span`, 텍스트 `메뉴 추가`
+      - 클릭 후 중심 hit target: 버튼이 아니라 `div[data-testid="backdrop"]`
+      - 클릭 후 hit target class: `Dropdown_b_s4m8_jr2uxl4 ...`
+      - `reactLimitBranchDetected=false`, 본문 limit 문구 없음
+    - 즉, **현재 fresh Playwright 세션 기준으로는 메뉴 개수 상한 토스트보다, 클릭 뒤 드롭다운 backdrop만 생기고 생성 1단계가 열리지 않는 현상**이 직접 관측된 상태다
+    - 예전에 managed Chrome live DOM에서 `메뉴는 N개까지 추가할 수 있어요` 분기 흔적을 본 적은 있지만, 이건 현재 fresh 세션에서 재현된 확정 원인으로 보지 않고 보조 단서로만 유지한다
   - 따라서 **배민에서 새 테스트 메뉴를 자동으로 만들고 곧바로 숨김/삭제까지 정리하는 경로는 아직 확보되지 않았다**
     - 현재 실저장 검증은 기존 숨김/품절 메뉴를 안전하게 왕복 수정하는 방식이 우선
     - 새 메뉴 생성 자동화는 배민 페이지의 추가 조건 또는 별도 진입 경로를 더 조사한 뒤 재개해야 함

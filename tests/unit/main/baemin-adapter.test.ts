@@ -581,6 +581,93 @@ describe('BaeminAdapter', () => {
       getByPlaceholder: vi.fn().mockReturnValue(nameInput),
       title: vi.fn().mockResolvedValue('배민 메뉴 관리'),
       url: vi.fn().mockReturnValue('https://self.baemin.com/menu'),
+      evaluate: vi.fn().mockResolvedValue({
+        buttonFound: true,
+        buttonCount: 1,
+        buttonText: '메뉴 추가',
+        ariaDisabled: null,
+        disabledAttribute: null,
+        dataDisabled: null,
+        hasDisabledLikeClass: false,
+        buttonHtmlSnippet: '<button>메뉴 추가</button>',
+        hasReactFiber: false,
+        reactLimitBranchDetected: false,
+        bodyLimitMessage: null,
+        visibleButtons: ['메뉴 추가', '옵션'],
+        visibleInputs: []
+      }),
+      locator: vi.fn().mockReturnValue({
+        innerText: vi.fn().mockResolvedValue('메뉴 옵션 판매상태 전체 숨김 메뉴 추가')
+      })
+    }
+
+    adapter.createAuthenticatedSession = vi.fn().mockResolvedValue({
+      browser: { close },
+      page: fakePage
+    })
+    adapter.openMenuPage = vi.fn().mockResolvedValue({})
+    adapter.captureCreateWizardStep = vi.fn().mockResolvedValue(undefined)
+
+    const inspection = await adapter.inspectCreateMenuFlow()
+
+    expect(inspection).toEqual(
+      expect.objectContaining({
+        steps: expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'result',
+            title: '생성 마법사 읽기 전용 점검 중단',
+            detail: expect.stringContaining('baemin_create_wizard_not_opened')
+          })
+        ])
+      })
+    )
+
+    expect(
+      JSON.stringify(inspection.steps.find((step: { kind?: string }) => step.kind === 'result'))
+    ).toContain('createWizardEntryState')
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  it('surfaces a menu-limit specific failure when 메뉴 추가 is blocked by the menu cap', async () => {
+    const adapter = new BaeminAdapter({
+      username: 'owner-id',
+      password: 'secret'
+    }) as any
+
+    const close = vi.fn().mockResolvedValue(undefined)
+    const menuAddButton = {
+      first: vi.fn().mockReturnThis(),
+      click: vi.fn().mockResolvedValue(undefined)
+    }
+    const nameInput = {
+      waitFor: vi.fn().mockRejectedValue(new Error('locator.waitFor timeout'))
+    }
+    const fakePage = {
+      getByRole: vi.fn().mockImplementation((_role: string, options?: { name?: string }) => {
+        if (options?.name === '메뉴 추가') {
+          return menuAddButton
+        }
+
+        throw new Error('unexpected_role_lookup')
+      }),
+      getByPlaceholder: vi.fn().mockReturnValue(nameInput),
+      title: vi.fn().mockResolvedValue('배민 메뉴 관리'),
+      url: vi.fn().mockReturnValue('https://self.baemin.com/menu'),
+      evaluate: vi.fn().mockResolvedValue({
+        buttonFound: true,
+        buttonCount: 1,
+        buttonText: '메뉴 추가',
+        ariaDisabled: null,
+        disabledAttribute: null,
+        dataDisabled: null,
+        hasDisabledLikeClass: false,
+        buttonHtmlSnippet: '<button>메뉴 추가</button>',
+        hasReactFiber: true,
+        reactLimitBranchDetected: true,
+        bodyLimitMessage: null,
+        visibleButtons: ['메뉴 추가', '옵션'],
+        visibleInputs: []
+      }),
       locator: vi.fn().mockReturnValue({
         innerText: vi.fn().mockResolvedValue('메뉴 옵션 판매상태 전체 숨김 메뉴 추가')
       })
@@ -599,7 +686,74 @@ describe('BaeminAdapter', () => {
           expect.objectContaining({
             kind: 'result',
             title: '생성 마법사 읽기 전용 점검 중단',
-            detail: expect.stringContaining('baemin_create_wizard_not_opened')
+            detail: expect.stringContaining('baemin_create_wizard_limit_reached')
+          })
+        ])
+      })
+    )
+
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  it('surfaces a disabled-button specific failure when 메뉴 추가 is not actually actionable', async () => {
+    const adapter = new BaeminAdapter({
+      username: 'owner-id',
+      password: 'secret'
+    }) as any
+
+    const close = vi.fn().mockResolvedValue(undefined)
+    const menuAddButton = {
+      first: vi.fn().mockReturnThis(),
+      click: vi.fn().mockResolvedValue(undefined)
+    }
+    const nameInput = {
+      waitFor: vi.fn().mockRejectedValue(new Error('locator.waitFor timeout'))
+    }
+    const fakePage = {
+      getByRole: vi.fn().mockImplementation((_role: string, options?: { name?: string }) => {
+        if (options?.name === '메뉴 추가') {
+          return menuAddButton
+        }
+
+        throw new Error('unexpected_role_lookup')
+      }),
+      getByPlaceholder: vi.fn().mockReturnValue(nameInput),
+      title: vi.fn().mockResolvedValue('배민 메뉴 관리'),
+      url: vi.fn().mockReturnValue('https://self.baemin.com/menu'),
+      evaluate: vi.fn().mockResolvedValue({
+        buttonFound: true,
+        buttonCount: 1,
+        buttonText: '메뉴 추가',
+        ariaDisabled: 'true',
+        disabledAttribute: null,
+        dataDisabled: null,
+        hasDisabledLikeClass: false,
+        buttonHtmlSnippet: '<button aria-disabled=\"true\">메뉴 추가</button>',
+        hasReactFiber: false,
+        reactLimitBranchDetected: false,
+        bodyLimitMessage: null,
+        visibleButtons: ['메뉴 추가', '옵션'],
+        visibleInputs: []
+      }),
+      locator: vi.fn().mockReturnValue({
+        innerText: vi.fn().mockResolvedValue('메뉴 옵션 판매상태 전체 숨김 메뉴 추가')
+      })
+    }
+
+    adapter.createAuthenticatedSession = vi.fn().mockResolvedValue({
+      browser: { close },
+      page: fakePage
+    })
+    adapter.openMenuPage = vi.fn().mockResolvedValue({})
+    adapter.captureCreateWizardStep = vi.fn().mockResolvedValue(undefined)
+
+    await expect(adapter.inspectCreateMenuFlow()).resolves.toEqual(
+      expect.objectContaining({
+        steps: expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'result',
+            title: '생성 마법사 읽기 전용 점검 중단',
+            detail: expect.stringContaining('baemin_create_wizard_button_disabled')
           })
         ])
       })
