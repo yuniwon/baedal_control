@@ -85,6 +85,7 @@ export const SettingsPage = () => {
   const [messages, setMessages] = useState<Record<string, string>>({})
   const [inspections, setInspections] = useState<Record<string, PlatformInspectionReport | undefined>>({})
   const [expandedInspections, setExpandedInspections] = useState<Record<string, boolean>>({})
+  const [expandedImportSummaries, setExpandedImportSummaries] = useState<Record<string, boolean>>({})
   const [latestImports, setLatestImports] = useState<LatestImportState>({})
   const [browserInspectionStatus, setBrowserInspectionStatus] = useState<BrowserInspectorStatus | null>(
     null
@@ -404,11 +405,27 @@ export const SettingsPage = () => {
                 <div className="credential-import-summary">
                   <div className="credential-import-summary-head">
                     <strong>{buildPlatformImportRunTitle(latestImports[platform])}</strong>
-                    <span className={`status-pill ${getPlatformImportTone(latestImports[platform])}`}>
-                      {getPlatformImportStatusLabel(latestImports[platform])}
-                    </span>
+                    <div className="credential-import-summary-actions">
+                      <span className={`status-pill ${getPlatformImportTone(latestImports[platform])}`}>
+                        {getPlatformImportStatusLabel(latestImports[platform])}
+                      </span>
+                      <button
+                        className="secondary-button table-button"
+                        onClick={() =>
+                          setExpandedImportSummaries((current) => ({
+                            ...current,
+                            [platform]: !current[platform]
+                          }))
+                        }
+                        type="button"
+                      >
+                        {expandedImportSummaries[platform] ? '최근 가져오기 접기' : '최근 가져오기 보기'}
+                      </button>
+                    </div>
                   </div>
-                  <p>{buildPlatformImportRunDescription(latestImports[platform])}</p>
+                  {expandedImportSummaries[platform] ? (
+                    <p>{buildPlatformImportRunDescription(latestImports[platform])}</p>
+                  ) : null}
                 </div>
               ) : null}
               {messages[platform] ? <p className="credential-message">{messages[platform]}</p> : null}

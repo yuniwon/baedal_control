@@ -157,22 +157,28 @@ vi.mock('../../../src/renderer/src/lib/api', () => ({
 import { OptionPage } from '../../../src/renderer/src/pages/OptionPage'
 
 describe('OptionPage', () => {
-  it('renders logical option bundles without exposing raw option-group IDs', async () => {
+  it('keeps raw source-link details collapsed until the operator opens them', async () => {
     render(<OptionPage />)
 
-    expect(await screen.findByRole('heading', { name: '옵션 관리' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: '옵션' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: '사이즈 선택' })).toBeTruthy()
     expect(screen.getByText('통합 가능')).toBeTruthy()
-    expect(screen.getByText(/불고기피자/)).toBeTruthy()
-    expect(screen.getByText(/새우피자/)).toBeTruthy()
     expect(
       screen.getByText((_, element) => element?.textContent?.replace(/\s+/g, '') === 'L+3,000원')
     ).toBeTruthy()
     expect(
       screen.getByText((_, element) => element?.textContent?.replace(/\s+/g, '') === 'M무료')
     ).toBeTruthy()
-    expect(screen.getByText('콤비네이션, 포테이토, 불고기 외 1개')).toBeTruthy()
+    expect(screen.queryByText(/불고기피자/)).toBeNull()
+    expect(screen.queryByText(/새우피자/)).toBeNull()
+    expect(screen.queryByText('콤비네이션, 포테이토, 불고기 외 1개')).toBeNull()
     expect(screen.queryByText(/^g-1$/)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '원본 연결 보기' }))
+
+    expect(screen.getByText(/불고기피자/)).toBeTruthy()
+    expect(screen.getByText(/새우피자/)).toBeTruthy()
+    expect(screen.getByText('콤비네이션, 포테이토, 불고기 외 1개')).toBeTruthy()
   })
 
   it('filters option bundles by status', async () => {

@@ -264,6 +264,10 @@ describe('SettingsPage', () => {
     render(<SettingsPage />)
 
     expect(await screen.findByText('마지막 가져오기 2026. 04. 13. 09:31')).toBeTruthy()
+    expect(screen.queryByText('메뉴 4개 확인 · 새 메뉴 0개 · 새 연결 0개 · 기존 연결 4개')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '최근 가져오기 보기' }))
+
     expect(screen.getByText('메뉴 4개 확인 · 새 메뉴 0개 · 새 연결 0개 · 기존 연결 4개')).toBeTruthy()
   })
 
@@ -292,7 +296,19 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />)
 
-    expect(await screen.findByText('메뉴 35개 확인 · 옵션 그룹 26개 확인 · 새 메뉴 35개 · 새 연결 35개 · 기존 연결 0개 · 중복 7건 정리 · 현재 세션 읽기')).toBeTruthy()
+    expect(
+      screen.queryByText(
+        '메뉴 35개 확인 · 옵션 그룹 26개 확인 · 새 메뉴 35개 · 새 연결 35개 · 기존 연결 0개 · 중복 7건 정리 · 현재 세션 읽기'
+      )
+    ).toBeNull()
+
+    fireEvent.click(await screen.findByRole('button', { name: '최근 가져오기 보기' }))
+
+    expect(
+      screen.getByText(
+        '메뉴 35개 확인 · 옵션 그룹 26개 확인 · 새 메뉴 35개 · 새 연결 35개 · 기존 연결 0개 · 중복 7건 정리 · 현재 세션 읽기'
+      )
+    ).toBeTruthy()
   })
 
   it('shows the latest partial failure reason for a platform import', async () => {
@@ -313,6 +329,7 @@ describe('SettingsPage', () => {
     render(<SettingsPage />)
 
     expect(await screen.findByText('일부 실패')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '최근 가져오기 보기' }))
     expect(screen.getByText('메뉴 목록을 끝까지 읽지 못했습니다. 페이지를 다시 가져오거나 수집 검사를 확인해 주세요.')).toBeTruthy()
   })
 

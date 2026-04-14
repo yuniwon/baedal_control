@@ -110,7 +110,13 @@ const buildLinkedMenuPreview = (linkedMenuNames: string[]) => {
   return `${linkedMenuNames.slice(0, 3).join(', ')} 외 ${linkedMenuNames.length - 3}개`
 }
 
-export const OptionGroupTable = ({ groups }: { groups: LogicalOptionGroupRecord[] }) => {
+export const OptionGroupTable = ({
+  groups,
+  showSourceDetails = false
+}: {
+  groups: LogicalOptionGroupRecord[]
+  showSourceDetails?: boolean
+}) => {
   if (!groups.length) {
     return <p className="source-empty">조건에 맞는 옵션 묶음이 없습니다.</p>
   }
@@ -161,35 +167,37 @@ export const OptionGroupTable = ({ groups }: { groups: LogicalOptionGroupRecord[
                 옵션명은 같지만 실제 구성이나 가격이 달라 먼저 비교가 필요합니다.
               </p>
             ) : null}
-            <div className="option-group-source-list">
-              {group.sourceGroups.map((sourceGroup, index) => (
-                <div className="option-group-source-item" key={`${group.logicalGroupKey}:${index}`}>
-                  <div className="option-group-source-head">
-                    <strong>{sourceGroup.optionGroupName}</strong>
-                    <span
-                      className={`source-status-pill source-status-pill-${getSourcePresenceTone(
-                        sourceGroup.presenceStatus
-                      )}`}
-                    >
-                      {getSourcePresenceLabel(sourceGroup.presenceStatus)}
-                    </span>
-                  </div>
-                  <p className="source-detail">
-                    {sourceGroup.linkedMenuNames.length
-                      ? buildLinkedMenuPreview(sourceGroup.linkedMenuNames)
-                      : '연결 메뉴 없음'}
-                  </p>
-                  <p className="source-note">
-                    {`연결 메뉴 ${sourceGroup.linkedMenuCount}개`}
-                  </p>
-                  {sourceGroup.lastSeenAt ? (
-                    <p className="source-note source-note-muted">
-                      {`마지막 확인 ${formatDateTimeLabel(sourceGroup.lastSeenAt)}`}
+            {showSourceDetails ? (
+              <div className="option-group-source-list">
+                {group.sourceGroups.map((sourceGroup, index) => (
+                  <div className="option-group-source-item" key={`${group.logicalGroupKey}:${index}`}>
+                    <div className="option-group-source-head">
+                      <strong>{sourceGroup.optionGroupName}</strong>
+                      <span
+                        className={`source-status-pill source-status-pill-${getSourcePresenceTone(
+                          sourceGroup.presenceStatus
+                        )}`}
+                      >
+                        {getSourcePresenceLabel(sourceGroup.presenceStatus)}
+                      </span>
+                    </div>
+                    <p className="source-detail">
+                      {sourceGroup.linkedMenuNames.length
+                        ? buildLinkedMenuPreview(sourceGroup.linkedMenuNames)
+                        : '연결 메뉴 없음'}
                     </p>
-                  ) : null}
-                </div>
-              ))}
-            </div>
+                    <p className="source-note">
+                      {`연결 메뉴 ${sourceGroup.linkedMenuCount}개`}
+                    </p>
+                    {sourceGroup.lastSeenAt ? (
+                      <p className="source-note source-note-muted">
+                        {`마지막 확인 ${formatDateTimeLabel(sourceGroup.lastSeenAt)}`}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </article>
         )
       })}

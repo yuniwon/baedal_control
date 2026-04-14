@@ -61,6 +61,7 @@ export const OptionPage = () => {
   const [groups, setGroups] = useState<LogicalOptionGroupRecord[]>([])
   const [filter, setFilter] = useState<OptionFilter>('all')
   const [search, setSearch] = useState('')
+  const [showSourceDetails, setShowSourceDetails] = useState(false)
 
   useEffect(() => {
     void appApi.logicalOptionGroups.list().then((value) => {
@@ -135,8 +136,8 @@ export const OptionPage = () => {
   return (
     <section className="page">
       <header className="page-header">
-        <h1>옵션 관리</h1>
-        <p>같은 구성의 옵션은 한 묶음으로 보고, 사라진 옵션은 별도로 추적합니다.</p>
+        <h1>옵션</h1>
+        <p>같은 구성의 옵션은 한 묶음으로 먼저 보고, 원본 연결은 필요할 때만 펼쳐 확인합니다.</p>
       </header>
 
       <section className="panel panel-flat">
@@ -157,7 +158,7 @@ export const OptionPage = () => {
           </div>
         )}
         {groups.length ? (
-          <div className="panel-toolbar">
+          <div className="panel-toolbar workspace-toolbar">
             <div className="menu-filter-list">
               {filterKeys.map((key) => (
                 <button
@@ -170,17 +171,26 @@ export const OptionPage = () => {
                 </button>
               ))}
             </div>
-            <label className="toolbar-search">
-              <input
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="옵션명, 가격 또는 연결 메뉴 검색"
-                type="search"
-                value={search}
-              />
-            </label>
+            <div className="workspace-toolbar-actions">
+              <label className="toolbar-search">
+                <input
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="옵션명, 가격 또는 연결 메뉴 검색"
+                  type="search"
+                  value={search}
+                />
+              </label>
+              <button
+                className="secondary-button"
+                onClick={() => setShowSourceDetails((current) => !current)}
+                type="button"
+              >
+                {showSourceDetails ? '원본 연결 접기' : '원본 연결 보기'}
+              </button>
+            </div>
           </div>
         ) : null}
-        <OptionGroupTable groups={filteredGroups} />
+        <OptionGroupTable groups={filteredGroups} showSourceDetails={showSourceDetails} />
       </section>
     </section>
   )
