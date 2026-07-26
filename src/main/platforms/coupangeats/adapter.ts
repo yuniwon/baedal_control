@@ -1,4 +1,3 @@
-import type { Page } from 'playwright'
 import type {
   BrowserInspectionSnapshot,
   PlatformInspectionReport,
@@ -10,9 +9,7 @@ import {
   parseCoupangEatsMenusFromBrowserSnapshot,
   parseCoupangEatsOptionGroupsFromBrowserSnapshot
 } from './browser-session-parser'
-import { parseCoupangEatsMenus } from './parser'
-import { coupangEatsSelectors } from './selectors'
-import { launchPlaywrightChromium } from '../../services/playwright-runtime'
+import { buildBrowserCatalogCompleteness } from '../browser-catalog/completeness'
 
 type ImportErrorWithInspection = Error & { inspection?: PlatformInspectionReport }
 interface CoupangEatsAdapterOptions {
@@ -24,8 +21,8 @@ export class CoupangEatsAdapter implements PlatformAdapter {
   readonly platformCode = 'coupangeats' as const
 
   constructor(
-    private readonly credentials: { username: string; password: string },
-    private readonly baseUrl = 'https://store.coupangeats.com/',
+    _credentials: { username: string; password: string },
+    _baseUrl = 'https://store.coupangeats.com/',
     private readonly options: CoupangEatsAdapterOptions = {}
   ) {}
 
@@ -36,23 +33,18 @@ export class CoupangEatsAdapter implements PlatformAdapter {
 
   async fetchMenusWithInspection(): Promise<PlatformMenuFetchResult> {
     const inspection = this.createInspectionReport()
-    let browser: Awaited<ReturnType<CoupangEatsAdapter['launchBrowser']>> | null = null
-
-    try {
-      browser = await this.launchBrowser()
-      const page = await this.createAuthenticatedSession(browser, inspection)
-      const menus = await this.openManagementPageAndReadMenus(page, inspection)
-      return { menus, inspection }
-    } catch (error) {
-      const recovered = await this.tryManagedBrowserFallback(error, inspection)
-      if (recovered) {
-        return recovered
-      }
-
-      throw this.attachInspection(error, inspection)
-    } finally {
-      await browser?.close()
+    const recovered = await this.tryManagedBrowserFallback(
+      new Error('coupangeats_login_access_denied'),
+      inspection
+    )
+    if (recovered) {
+      return recovered
     }
+
+    throw this.attachInspection(
+      new Error('coupangeats_managed_session_unavailable'),
+      inspection
+    )
   }
 
   async applyMenuUpdate(_item: SyncPreviewItem) {
@@ -62,106 +54,6 @@ export class CoupangEatsAdapter implements PlatformAdapter {
     }
 
     throw new Error('coupangeats_menu_update_not_implemented')
-  }
-
-  private async launchBrowser() {
-    return launchPlaywrightChromium()
-  }
-
-  private async createAuthenticatedSession(
-    browser: Awaited<ReturnType<CoupangEatsAdapter['launchBrowser']>>,
-    inspection?: PlatformInspectionReport
-  ) {
-    const page = await browser.newPage()
-
-    await page.goto(new URL('/merchant/login', this.baseUrl).toString(), {
-      waitUntil: 'domcontentloaded'
-    })
-    if (inspection) {
-      await this.capturePageStep(inspection, page, {
-        kind: 'navigation',
-        title: '로그인 페이지',
-        detail: '쿠팡이츠 로그인 화면을 열었습니다.'
-      })
-    }
-    await page.waitForSelector(coupangEatsSelectors.username, { timeout: 30000 })
-
-    return page
-  }
-
-  private async openManagementPageAndReadMenus(
-    page: Page,
-    inspection: PlatformInspectionReport
-  ) {
-    let loginBlocked = false
-
-    const onResponse = (response: { url: () => string; status: () => number }) => {
-      if (
-        response.url().includes('/api/v1/merchant/login') &&
-        response.status() === 403
-      ) {
-        loginBlocked = true
-      }
-    }
-
-    page.on('response', onResponse)
-
-    try {
-      await page.fill(coupangEatsSelectors.username, this.credentials.username)
-      await page.fill(coupangEatsSelectors.password, this.credentials.password)
-      await page.click(coupangEatsSelectors.loginButton)
-      await page.waitForTimeout(5000)
-
-      if (loginBlocked) {
-        throw new Error('coupangeats_login_access_denied')
-      }
-
-      const visibleText = await this.readVisibleText(page)
-      if (
-        visibleText?.includes("Cannot read properties of undefined (reading 'data')") &&
-        (await this.isLoginFormVisible(page))
-      ) {
-        throw new Error('coupangeats_login_script_error')
-      }
-
-      await this.capturePageStep(inspection, page, {
-        kind: 'navigation',
-        title: '로그인 이후 화면',
-        detail: '로그인 직후 쿠팡이츠 화면 상태를 확인했습니다.'
-      })
-
-      if (page.url().includes('/merchant/login') && (await this.isLoginFormVisible(page))) {
-        throw new Error('coupangeats_login_script_error')
-      }
-
-      const bodyText = visibleText ?? ''
-      if (bodyText.includes('Access Denied')) {
-        throw new Error('coupangeats_login_access_denied')
-      }
-
-      if (!bodyText.trim()) {
-        throw new Error('coupangeats_management_app_blank')
-      }
-
-      await page.waitForSelector(coupangEatsSelectors.menuRow, { timeout: 10000 })
-      return parseCoupangEatsMenus(await page.content())
-    } catch (error) {
-      if (error instanceof Error && error.message.startsWith('page.waitForSelector: Timeout')) {
-        throw new Error('coupangeats_menu_page_not_loaded')
-      }
-
-      throw error
-    } finally {
-      page.off('response', onResponse)
-    }
-  }
-
-  private async isLoginFormVisible(page: Page) {
-    try {
-      return await page.locator(coupangEatsSelectors.username).first().isVisible({ timeout: 1000 })
-    } catch {
-      return false
-    }
   }
 
   private attachInspection(error: unknown, inspection: PlatformInspectionReport) {
@@ -196,6 +88,21 @@ export class CoupangEatsAdapter implements PlatformAdapter {
     }
 
     const optionGroups = parseCoupangEatsOptionGroupsFromBrowserSnapshot(snapshots)
+    const menuCollectionProven = this.hasSuccessfulCatalogEvent(
+      snapshots,
+      (url) => url.includes('/all-menu-dishes')
+    )
+    const optionCollectionProven = this.hasSuccessfulCatalogEvent(
+      snapshots,
+      (url) => url.includes('/all-options') && url.includes('fetchDish=true')
+    )
+    const completeness = buildBrowserCatalogCompleteness({
+      menus,
+      optionGroups,
+      menuCollectionProven,
+      optionCollectionProven,
+      parseIssues: []
+    })
 
     this.pushInspectionStep(inspection, {
       kind: 'result',
@@ -209,11 +116,31 @@ export class CoupangEatsAdapter implements PlatformAdapter {
     return {
       menus,
       optionGroups,
-      optionCatalogFetched: optionGroups.length > 0,
+      optionCatalogFetched: optionCollectionProven,
       rawMenuCount: menus.length,
       fetchMode: 'managed_browser',
+      completeness,
       inspection
     }
+  }
+
+  private hasSuccessfulCatalogEvent(
+    snapshots: BrowserInspectionSnapshot[],
+    matchesUrl: (url: string) => boolean
+  ) {
+    return snapshots.some((snapshot) =>
+      snapshot.apiEvents.some((event) => {
+        if (event.status !== 200 || !matchesUrl(event.url) || !event.responsePreview?.trim()) {
+          return false
+        }
+        try {
+          JSON.parse(event.responsePreview)
+          return true
+        } catch {
+          return false
+        }
+      })
+    )
   }
 
   private shouldUseManagedBrowserFallback(error: unknown) {
@@ -242,44 +169,4 @@ export class CoupangEatsAdapter implements PlatformAdapter {
     })
   }
 
-  private async capturePageStep(
-    inspection: PlatformInspectionReport,
-    page: Page,
-    step: Omit<
-      PlatformInspectionStep,
-      'recordedAt' | 'pageTitle' | 'url' | 'visibleTextSnippet' | 'screenshotDataUrl'
-    >
-  ) {
-    const [pageTitle, visibleTextSnippet, screenshotDataUrl] = await Promise.all([
-      page.title().catch(() => ''),
-      this.readVisibleText(page),
-      this.captureScreenshot(page)
-    ])
-
-    this.pushInspectionStep(inspection, {
-      ...step,
-      pageTitle: pageTitle || undefined,
-      url: page.url(),
-      visibleTextSnippet: visibleTextSnippet || undefined,
-      screenshotDataUrl: screenshotDataUrl || undefined
-    })
-  }
-
-  private async readVisibleText(page: Page) {
-    try {
-      const text = await page.locator('body').innerText()
-      return text.replace(/\s+/g, ' ').trim().slice(0, 400)
-    } catch {
-      return undefined
-    }
-  }
-
-  private async captureScreenshot(page: Page) {
-    try {
-      const image = await page.screenshot({ type: 'png' })
-      return `data:image/png;base64,${image.toString('base64')}`
-    } catch {
-      return undefined
-    }
-  }
 }

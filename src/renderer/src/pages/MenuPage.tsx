@@ -17,6 +17,7 @@ import {
   isSourceResurfaced
 } from '../lib/menu-source-labels'
 import { flattenPlatformMenuPriceVariants } from '../lib/platform-menu-price-variants'
+import { PLATFORM_CODES } from '../../../shared/platforms'
 
 type MenuFilter =
   | 'all'
@@ -27,7 +28,11 @@ type MenuFilter =
   | 'platform-absent'
   | 'resurfaced'
 const uncategorizedLabel = '미분류'
-const preferredPlatformOrder = ['baemin', 'coupangeats', 'ddangyo'] as const
+const preferredPlatformOrder = PLATFORM_CODES
+const getPlatformOrder = (platformCode: string) => {
+  const index = (preferredPlatformOrder as readonly string[]).indexOf(platformCode)
+  return index >= 0 ? index : preferredPlatformOrder.length
+}
 const normalizeSearchValue = (value: string) =>
   value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ko-KR')
 
@@ -48,8 +53,7 @@ const deriveBasePriceVariants = (
 
   const orderedSources = [...(sources ?? [])].sort(
     (left, right) =>
-      preferredPlatformOrder.indexOf(left.platformCode as (typeof preferredPlatformOrder)[number]) -
-      preferredPlatformOrder.indexOf(right.platformCode as (typeof preferredPlatformOrder)[number])
+      getPlatformOrder(left.platformCode) - getPlatformOrder(right.platformCode)
   )
 
   return (
@@ -152,8 +156,7 @@ const deriveCategoryName = (menu: MenuRow) => {
 
   const orderedSources = [...(menu.sources ?? [])].sort(
     (left, right) =>
-      preferredPlatformOrder.indexOf(left.platformCode) -
-      preferredPlatformOrder.indexOf(right.platformCode)
+      getPlatformOrder(left.platformCode) - getPlatformOrder(right.platformCode)
   )
 
   return (

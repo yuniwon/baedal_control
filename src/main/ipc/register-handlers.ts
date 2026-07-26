@@ -1,4 +1,6 @@
 import { ipcMain } from 'electron'
+import { randomUUID } from 'node:crypto'
+import { z } from 'zod'
 import type { CredentialVault } from '../services/credential-vault'
 import type {
   AgentActionPlanReport,
@@ -6,6 +8,13 @@ import type {
   AgentReportEnvelope,
   BrowserInspectionSnapshot,
   BrowserInspectorStatus,
+  CatalogBootstrapActivationInput,
+  CatalogBootstrapPreview,
+  CatalogBootstrapPreviewInput,
+  CatalogIntentRule,
+  CatalogReviewItem,
+  CatalogReviewResolutionInput,
+  CatalogWorkspaceRecord,
   PlatformImportResult,
   MenuRecord,
   PlatformCode,
@@ -18,12 +27,116 @@ import type {
   PlatformMenuCatalogRecord,
   PlatformOptionGroupRecord,
   PlatformMenuMappingRecord,
+  PlatformSessionStateRecord,
+  PlatformAuthPreferenceRecord,
   SyncPreviewItem,
   SyncRunItemRecord,
   SyncRunRecord
 } from '../../shared/contracts'
 import { serializePlatformMenuPriceVariants } from '../../shared/platform-menu-price-variants'
+import { PLATFORM_CODES, isPlatformCode } from '../../shared/platforms'
+import { PLATFORM_CAPABILITIES } from '../../shared/platform-capabilities'
+import { requiresApplicationCredential } from '../services/platform-session-strategy'
 import { buildSyncPreview } from '../services/sync-planner'
+
+const platformCodeSchema = z.enum(PLATFORM_CODES)
+const catalogReviewKindSchema = z.enum([
+  'missing_on_platform',
+  'unmatched_platform_menu',
+  'price_outlier',
+  'price_policy_pattern',
+  'variant_shape_conflict',
+  'duplicate_option_group',
+  'option_shape_conflict',
+  'legacy_noise_candidate',
+  'external_drift',
+  'lossy_projection',
+  'authentication_required'
+])
+const catalogRecommendationSchema = z.enum([
+  'add_to_platform',
+  'add_to_canonical',
+  'align_to_canonical',
+  'keep_platform_value',
+  'merge_canonical_only',
+  'ignore_source',
+  'manual_review'
+])
+const catalogReviewItemSchema = z.object({
+  reviewItemId: z.string().trim().min(1),
+  workspaceId: z.string().trim().min(1),
+  fingerprint: z.string().trim().min(1),
+  kind: catalogReviewKindSchema,
+  state: z.enum(['open', 'resolved', 'deferred', 'blocked']),
+  confidence: z.number().min(0).max(1),
+  title: z.string().trim().min(1),
+  explanation: z.string().trim().min(1),
+  recommendation: catalogRecommendationSchema.nullable(),
+  evidenceJson: z.string(),
+  canonicalMenuId: z.string().nullable().optional(),
+  platformCode: platformCodeSchema.nullable().optional(),
+  sourceEntityId: z.string().nullable().optional(),
+  intentRuleId: z.string().nullable().optional()
+}).passthrough()
+const catalogMappingSchema = z.object({
+  mappingId: z.string().trim().min(1),
+  menuId: z.string().trim().min(1),
+  platformCode: platformCodeSchema,
+  platformMenuId: z.string().trim().min(1),
+  platformMenuName: z.string().trim().min(1),
+  matchedBy: z.enum(['auto', 'manual']),
+  isConfirmed: z.union([z.literal(0), z.literal(1)])
+}).passthrough()
+const catalogMenuSchema = z.object({
+  menuId: z.string().trim().min(1),
+  baseName: z.string().trim().min(1),
+  basePrice: z.number().int().nonnegative(),
+  basePriceVariants: z.unknown().nullable().optional(),
+  isDirty: z.union([z.literal(0), z.literal(1)]),
+  isManaged: z.union([z.literal(0), z.literal(1)]).optional()
+}).passthrough()
+const catalogBootstrapPreviewSchema = z.object({
+  workspaceId: z.string().trim().min(1),
+  seedMode: z.enum(['platform', 'blank']),
+  seedPlatformCode: platformCodeSchema.nullable()
+}).strict()
+const catalogBootstrapActivationSchema = z.object({
+  workspaceId: z.string().trim().min(1),
+  seedMode: z.enum(['platform', 'blank']),
+  seedPlatformCode: platformCodeSchema.nullable(),
+  previewFingerprint: z.string().trim().min(1),
+  menus: z.array(catalogMenuSchema),
+  ignoredSourceEntityIds: z.array(z.string().trim().min(1)),
+  confirmedMappings: z.array(catalogMappingSchema),
+  remainingReviewItems: z.array(catalogReviewItemSchema)
+}).strict()
+const catalogReviewResolutionSchema = z.object({
+  reviewItemIds: z.array(z.string().trim().min(1)).min(1),
+  resolution: z.enum([
+    'apply_recommendation',
+    'keep_platform_value',
+    'exclude_platform',
+    'defer',
+    'ignore_source',
+    'merge_canonical_only'
+  ]),
+  remember: z.boolean(),
+  scope: z.enum(['entity', 'platform', 'category', 'field', 'workspace']),
+  reason: z.string().trim().min(1),
+  expiresAt: z.string().datetime().nullable().optional()
+}).strict()
+
+const parseCatalogPayload = <T>(schema: z.ZodType<T>, payload: unknown): T => {
+  const result = schema.safeParse(payload)
+  if (result.success) {
+    return result.data
+  }
+
+  const fields = result.error.issues
+    .map((issue) => `${issue.path.join('.') || 'payload'}:${issue.code}`)
+    .join(',')
+  throw new Error(`invalid_catalog_request:${fields}`)
+}
 
 interface HandlerDependencies {
   menuRepository: {
@@ -95,8 +208,40 @@ interface HandlerDependencies {
   syncRunItemRepository?: { listForRunIds: (syncRunIds: string[]) => SyncRunItemRecord[] }
   credentialVault: CredentialVault
   platformMenuImporter?: { importPlatform: (platformCode: PlatformCode) => Promise<PlatformImportResult> }
+  platformSessionOrchestrator?: {
+    list: () => PlatformSessionStateRecord[]
+    check: (platformCode: PlatformCode) => Promise<PlatformSessionStateRecord>
+    connect: (platformCode: PlatformCode) => Promise<PlatformSessionStateRecord>
+    resumeAfterUserAction: (platformCode: PlatformCode) => Promise<PlatformSessionStateRecord>
+  }
+  platformAuthPreferenceRepository?: {
+    get: (workspaceId: string, platformCode: PlatformCode) => PlatformAuthPreferenceRecord
+    setAutoClickConsent: (
+      workspaceId: string,
+      platformCode: PlatformCode,
+      consented: boolean,
+      changedAt: string
+    ) => PlatformAuthPreferenceRecord
+  }
+  catalogWorkspaceRepository?: { getDefault: () => CatalogWorkspaceRecord }
+  catalogBootstrapService?: {
+    preview: (input: CatalogBootstrapPreviewInput) => CatalogBootstrapPreview
+    activate: (input: CatalogBootstrapActivationInput) => CatalogWorkspaceRecord
+  }
+  catalogReviewRepository?: {
+    listOpen: (workspaceId: string) => CatalogReviewItem[]
+    resolve: (reviewItemIds: string[], intentRuleId?: string | null) => void
+    setState: (
+      reviewItemIds: string[],
+      state: 'resolved' | 'deferred',
+      intentRuleId?: string | null
+    ) => void
+  }
+  catalogIntentRuleRepository?: { upsert: (record: CatalogIntentRule) => void }
   syncEngine?: { run: (items: SyncPreviewItem[]) => Promise<unknown> }
   onCredentialSaved?: (platformCode: PlatformCode) => void
+  createId?: () => string
+  now?: () => string
 }
 
 export const registerHandlers = ({
@@ -118,8 +263,16 @@ export const registerHandlers = ({
   syncRunItemRepository,
   credentialVault,
   platformMenuImporter,
+  platformSessionOrchestrator,
+  platformAuthPreferenceRepository,
+  catalogWorkspaceRepository,
+  catalogBootstrapService,
+  catalogReviewRepository,
+  catalogIntentRuleRepository,
   syncEngine,
-  onCredentialSaved
+  onCredentialSaved,
+  createId,
+  now = () => new Date().toISOString()
 }: HandlerDependencies) => {
   const register = (
     channel: string,
@@ -153,8 +306,69 @@ export const registerHandlers = ({
     return Math.min(Math.floor(numericLimit), maxLimit)
   }
 
-  const isPlatformCode = (value: unknown): value is PlatformCode =>
-    value === 'baemin' || value === 'coupangeats' || value === 'ddangyo'
+  const parsePlatformSessionRequest = (payload: unknown) => {
+    const result = z.object({ platformCode: platformCodeSchema }).safeParse(payload)
+    if (!result.success) {
+      throw new Error('invalid_platform_code')
+    }
+    return result.data.platformCode
+  }
+
+  register('platformSessions:list', async () => platformSessionOrchestrator?.list() ?? [])
+  register('platformSessions:check', async (_event, payload) => {
+    const platformCode = parsePlatformSessionRequest(payload)
+    if (!platformSessionOrchestrator) {
+      throw new Error('platform_session_orchestrator_unavailable')
+    }
+    return platformSessionOrchestrator.check(platformCode)
+  })
+  register('platformSessions:connect', async (_event, payload) => {
+    const platformCode = parsePlatformSessionRequest(payload)
+    if (!platformSessionOrchestrator) {
+      throw new Error('platform_session_orchestrator_unavailable')
+    }
+    return platformSessionOrchestrator.connect(platformCode)
+  })
+  register('platformSessions:resumeAfterUserAction', async (_event, payload) => {
+    const platformCode = parsePlatformSessionRequest(payload)
+    if (!platformSessionOrchestrator) {
+      throw new Error('platform_session_orchestrator_unavailable')
+    }
+    return platformSessionOrchestrator.resumeAfterUserAction(platformCode)
+  })
+
+  register('platformAuthPreferences:list', async () => {
+    if (!platformAuthPreferenceRepository) {
+      return []
+    }
+    return PLATFORM_CODES.map((platformCode) =>
+      platformAuthPreferenceRepository.get('default', platformCode)
+    )
+  })
+  register('platformAuthPreferences:setAutoClickConsent', async (_event, payload) => {
+    const result = z.object({
+      platformCode: platformCodeSchema,
+      consented: z.boolean()
+    }).safeParse(payload)
+    if (!result.success) {
+      throw new Error('invalid_platform_auth_preference')
+    }
+    const { platformCode, consented } = result.data
+    if (!PLATFORM_CAPABILITIES[platformCode].authentication.strategies.includes(
+      'managed_password_manager_login'
+    )) {
+      throw new Error('password_manager_login_unsupported')
+    }
+    if (!platformAuthPreferenceRepository) {
+      throw new Error('platform_auth_preference_repository_unavailable')
+    }
+    return platformAuthPreferenceRepository.setAutoClickConsent(
+      'default',
+      platformCode,
+      consented,
+      now()
+    )
+  })
 
   const getBrowserInspectorStatus = (): BrowserInspectorStatus => ({
     receiverUrl: '',
@@ -208,6 +422,102 @@ export const registerHandlers = ({
   register('platformImportChanges:listLatest', async (_event, limit?: number) =>
     platformImportChangeRepository?.listLatest(normalizeListLimit(limit)) ?? []
   )
+  register('catalogWorkspace:get', async () => {
+    if (!catalogWorkspaceRepository) {
+      throw new Error('catalog_workspace_unavailable')
+    }
+    return catalogWorkspaceRepository.getDefault()
+  })
+  register('catalogBootstrap:preview', async (_event, payload: unknown) => {
+    if (!catalogBootstrapService) {
+      throw new Error('catalog_bootstrap_unavailable')
+    }
+    const input = parseCatalogPayload(catalogBootstrapPreviewSchema, payload)
+    return catalogBootstrapService.preview(input)
+  })
+  register('catalogBootstrap:activate', async (_event, payload: unknown) => {
+    if (!catalogBootstrapService) {
+      throw new Error('catalog_bootstrap_unavailable')
+    }
+    const input = parseCatalogPayload(catalogBootstrapActivationSchema, payload)
+    return catalogBootstrapService.activate(input as CatalogBootstrapActivationInput)
+  })
+  register('catalogReviews:listOpen', async () =>
+    catalogReviewRepository?.listOpen('default') ?? []
+  )
+  register('catalogReviews:resolve', async (_event, payload: unknown) => {
+    if (!catalogReviewRepository) {
+      throw new Error('catalog_reviews_unavailable')
+    }
+    const input = parseCatalogPayload(
+      catalogReviewResolutionSchema,
+      payload
+    ) as CatalogReviewResolutionInput
+    const openItems = catalogReviewRepository.listOpen('default')
+    const itemsById = new Map(openItems.map((item) => [item.reviewItemId, item]))
+    const selectedItems = input.reviewItemIds.map((reviewItemId) => {
+      const item = itemsById.get(reviewItemId)
+      if (!item) {
+        throw new Error(`catalog_review_item_not_open:${reviewItemId}`)
+      }
+      return item
+    })
+
+    for (const item of selectedItems) {
+      let intentRuleId: string | null = null
+      if (input.remember) {
+        if (!catalogIntentRuleRepository) {
+          throw new Error('catalog_intent_rules_unavailable')
+        }
+
+        let evidence: Record<string, unknown> = {}
+        try {
+          evidence = JSON.parse(item.evidenceJson) as Record<string, unknown>
+        } catch {
+          evidence = {}
+        }
+        const fieldKey = typeof evidence.fieldKey === 'string' ? evidence.fieldKey : null
+        const categoryKey = typeof evidence.categoryKey === 'string' ? evidence.categoryKey : null
+        if (input.scope === 'entity' && !item.canonicalMenuId && !item.sourceEntityId) {
+          throw new Error(`catalog_intent_scope_unavailable:entity:${item.reviewItemId}`)
+        }
+        if (input.scope === 'platform' && !item.platformCode) {
+          throw new Error(`catalog_intent_scope_unavailable:platform:${item.reviewItemId}`)
+        }
+        if (input.scope === 'field' && !fieldKey) {
+          throw new Error(`catalog_intent_scope_unavailable:field:${item.reviewItemId}`)
+        }
+        if (input.scope === 'category' && !categoryKey) {
+          throw new Error(`catalog_intent_scope_unavailable:category:${item.reviewItemId}`)
+        }
+
+        intentRuleId = createId?.() ?? randomUUID()
+        catalogIntentRuleRepository.upsert({
+          intentRuleId,
+          workspaceId: item.workspaceId,
+          kind: item.kind,
+          scope: input.scope,
+          resolution: input.resolution,
+          platformCode: input.scope === 'workspace' ? null : item.platformCode ?? null,
+          canonicalMenuId: input.scope === 'entity' ? item.canonicalMenuId ?? null : null,
+          sourceEntityId: input.scope === 'entity' ? item.sourceEntityId ?? null : null,
+          fieldKey: input.scope === 'field' ? fieldKey : null,
+          categoryKey: input.scope === 'category' ? categoryKey : null,
+          reason: input.reason,
+          expiresAt: input.expiresAt ?? null,
+          isActive: 1
+        })
+      }
+
+      if (input.resolution === 'defer') {
+        catalogReviewRepository.setState([item.reviewItemId], 'deferred', intentRuleId)
+      } else {
+        catalogReviewRepository.resolve([item.reviewItemId], intentRuleId)
+      }
+    }
+
+    return { ok: true as const, resolvedCount: selectedItems.length }
+  })
   register('agentReports:getNextActionPlan', async (_event, filters?: Record<string, unknown>) =>
     agentOperationsReportService?.getNextActionPlan(filters ?? {}) ?? {
       task: 'agent-plan-next-actions',
@@ -256,6 +566,29 @@ export const registerHandlers = ({
           : undefined
       const platformCode = isPlatformCode(payload?.platformCode) ? payload.platformCode : null
       const autoLoginRequested = Boolean(platformCode) && payload?.autoLogin === true
+      const usesPasswordManagerLogin = Boolean(
+        platformCode &&
+          PLATFORM_CAPABILITIES[platformCode].authentication.strategies.includes(
+            'managed_password_manager_login'
+          )
+      )
+
+      if (platformCode && autoLoginRequested && usesPasswordManagerLogin) {
+        if (!platformSessionOrchestrator) {
+          throw new Error('platform_session_orchestrator_unavailable')
+        }
+        const sessionState = await platformSessionOrchestrator.connect(platformCode)
+        const ready = sessionState.state === 'ready'
+        return {
+          ...getBrowserInspectorStatus(),
+          managedChromeAutoLoginPlatformCode: platformCode,
+          managedChromeAutoLoginStatus: ready ? 'already_authenticated' : 'failed',
+          managedChromeAutoLoginMessage: ready
+            ? '쿠팡이츠 로그인 상태를 확인했습니다.'
+            : sessionState.detailCode ?? '쿠팡이츠 로그인에 사용자 확인이 필요합니다.'
+        }
+      }
+
       const launchUrl =
         requestedUrl ??
         (platformCode && autoLoginRequested
@@ -327,17 +660,23 @@ export const registerHandlers = ({
   })
 
   register('settings:get-platform-credential-status', async () => {
-    const platforms: PlatformCode[] = ['baemin', 'coupangeats', 'ddangyo']
-    return platforms.map((platformCode) => ({
-      platformCode,
-      connected: Boolean(credentialVault.get(platformCode))
-    }))
+    return PLATFORM_CODES.map((platformCode) => {
+      const usesApplicationCredential = requiresApplicationCredential(
+        PLATFORM_CAPABILITIES[platformCode].authentication.strategies
+      )
+      return {
+        platformCode,
+        connected: usesApplicationCredential ? Boolean(credentialVault.get(platformCode)) : false
+      }
+    })
   })
 
   register('settings:list-platform-credentials', async () => {
-    const platforms: PlatformCode[] = ['baemin', 'coupangeats', 'ddangyo']
-    return platforms.map((platformCode) => {
-      const credential = credentialVault.get(platformCode)
+    return PLATFORM_CODES.map((platformCode) => {
+      const usesApplicationCredential = requiresApplicationCredential(
+        PLATFORM_CAPABILITIES[platformCode].authentication.strategies
+      )
+      const credential = usesApplicationCredential ? credentialVault.get(platformCode) : null
       return {
         platformCode,
         connected: Boolean(credential),
@@ -347,11 +686,38 @@ export const registerHandlers = ({
     })
   })
 
-  const runPlatformImport = async (platformCode: PlatformCode) => {
+  register('settings:get-legacy-platform-credential-status', async (_event, payload) => {
+    const platformCode = parsePlatformSessionRequest(payload)
+    return { stored: credentialVault.hasStoredEntry(platformCode) }
+  })
+
+  register('settings:clear-legacy-platform-credential', async (_event, payload) => {
+    const platformCode = parsePlatformSessionRequest(payload)
+    if (platformCode !== 'coupangeats') {
+      throw new Error('legacy_credential_cleanup_unsupported')
+    }
+    credentialVault.clear(platformCode)
+    return { ok: true as const }
+  })
+
+  const runPlatformImport = async (
+    platformCode: PlatformCode,
+    sessionAction?: () => Promise<PlatformSessionStateRecord>
+  ) => {
+    const sessionState = await sessionAction?.()
+    if (sessionState && sessionState.state !== 'ready') {
+      return {
+        ok: true as const,
+        sessionState,
+        importError: `platform_session_not_ready:${sessionState.state}`
+      }
+    }
+
     try {
       const importResult = await platformMenuImporter?.importPlatform(platformCode)
       return {
         ok: true as const,
+        ...(sessionState ? { sessionState } : {}),
         importSummary: importResult?.summary as PlatformImportSummary | undefined,
         importInspection: importResult?.inspection as PlatformInspectionReport | undefined
       }
@@ -364,6 +730,7 @@ export const registerHandlers = ({
           : undefined
       return {
         ok: true as const,
+        ...(sessionState ? { sessionState } : {}),
         importError: error instanceof Error ? error.message : 'unknown_error',
         importInspection
       }
@@ -371,23 +738,47 @@ export const registerHandlers = ({
   }
 
   register('settings:save-platform-credential', async (_event, payload) => {
+    if (!isPlatformCode(payload.platformCode)) {
+      throw new Error('invalid_platform_code')
+    }
     const platformCode = payload.platformCode as PlatformCode
+    if (!requiresApplicationCredential(
+      PLATFORM_CAPABILITIES[platformCode].authentication.strategies
+    )) {
+      throw new Error('application_credential_not_supported')
+    }
     credentialVault.set(platformCode, payload.username, payload.password)
     onCredentialSaved?.(platformCode)
 
-    return runPlatformImport(platformCode)
+    return runPlatformImport(
+      platformCode,
+      platformSessionOrchestrator
+        ? () => platformSessionOrchestrator.connect(platformCode)
+        : undefined
+    )
   })
 
   register('settings:import-platform-menus', async (_event, payload) => {
+    if (!isPlatformCode(payload.platformCode)) {
+      throw new Error('invalid_platform_code')
+    }
     const platformCode = payload.platformCode as PlatformCode
-    if (!credentialVault.get(platformCode)) {
+    const usesApplicationCredential = requiresApplicationCredential(
+      PLATFORM_CAPABILITIES[platformCode].authentication.strategies
+    )
+    if (usesApplicationCredential && !credentialVault.get(platformCode)) {
       return {
         ok: true as const,
         importError: 'credential_not_found'
       }
     }
 
-    return runPlatformImport(platformCode)
+    return runPlatformImport(
+      platformCode,
+      platformSessionOrchestrator
+        ? () => platformSessionOrchestrator.connect(platformCode)
+        : undefined
+    )
   })
 
   register('sync:preview', async () => getSyncPreview())

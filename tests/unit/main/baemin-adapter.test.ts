@@ -26,12 +26,35 @@ const createMenuResponse = (pageNumber: number, totalPages: number, items: Array
       totalPages
     }
   }),
-  request: () => ({ method: () => 'GET' }),
+  request: () => ({
+    method: () => 'GET',
+    headers: () => ({ authorization: 'Bearer test-token', accept: 'application/json' })
+  }),
   url: () =>
     `https://self-api.baemin.com/v1/menu-sys/core/v2/shop-owners/201806280156/menus/one-shop?shopId=10788244&page=${pageNumber}&size=20`
 })
 
 describe('BaeminAdapter', () => {
+  it('selects the visible option tab by its tab role instead of a duplicate text node', async () => {
+    const adapter = new BaeminAdapter({ username: 'owner-id', password: 'secret' }) as any
+    const optionTab = {
+      first: vi.fn().mockReturnThis(),
+      waitFor: vi.fn().mockResolvedValue(undefined),
+      click: vi.fn().mockResolvedValue(undefined)
+    }
+    const filter = vi.fn().mockReturnValue(optionTab)
+    const locator = vi.fn().mockReturnValue({ filter })
+    const page = { locator, getByText: vi.fn() }
+
+    await adapter.selectOptionCatalogTab(page)
+
+    expect(locator).toHaveBeenCalledWith('button[role="tab"]')
+    expect(filter).toHaveBeenCalledWith({ hasText: /^옵션$/ })
+    expect(optionTab.waitFor).toHaveBeenCalledWith({ state: 'visible', timeout: 15000 })
+    expect(optionTab.click).toHaveBeenCalledWith({ timeout: 15000, force: true })
+    expect(page.getByText).not.toHaveBeenCalled()
+  })
+
   it('waits until the detail modal reflects the updated values', async () => {
     const adapter = new BaeminAdapter({
       username: 'owner-id',
@@ -1201,5 +1224,66 @@ describe('BaeminAdapter', () => {
 
     expect(dismissButton.click).toHaveBeenCalledTimes(1)
     expect(close).toHaveBeenCalled()
+  })
+
+  it('scrolls the document bottom when mouse-wheel scrolling misses the final menu page', async () => {
+    const responseListeners = new Set<(response: ReturnType<typeof createMenuResponse>) => void>()
+    const evaluate = vi.fn().mockImplementation(async (_callback, input?: unknown) => {
+      if (input !== undefined) throw new Error('direct_fetch_should_not_run')
+      if (!secondPageSent || thirdPageSent) return
+      thirdPageSent = true
+      const thirdPage = createMenuResponse(2, 3, [[3, '세 번째 메뉴', 33000]])
+      for (const listener of responseListeners) await listener(thirdPage)
+    })
+    let secondPageSent = false
+    let thirdPageSent = false
+    const fakePage = {
+      click: vi.fn().mockResolvedValue(undefined),
+      evaluate,
+      fill: vi.fn().mockResolvedValue(undefined),
+      goto: vi.fn().mockImplementation(async (url: string) => {
+        if (url.endsWith('/menu')) {
+          const firstPage = createMenuResponse(0, 3, [[1, '첫 번째 메뉴', 11000]])
+          for (const listener of responseListeners) await listener(firstPage)
+        }
+      }),
+      getByRole: vi.fn().mockReturnValue({
+        first: vi.fn().mockReturnThis(),
+        isVisible: vi.fn().mockResolvedValue(false),
+        click: vi.fn().mockResolvedValue(undefined)
+      }),
+      locator: vi.fn().mockReturnValue({ innerText: vi.fn().mockResolvedValue('메뉴 관리') }),
+      mouse: {
+        move: vi.fn().mockResolvedValue(undefined),
+        wheel: vi.fn().mockImplementation(async () => {
+          if (secondPageSent) return
+          secondPageSent = true
+          const secondPage = createMenuResponse(1, 3, [[2, '두 번째 메뉴', 22000]])
+          for (const listener of responseListeners) await listener(secondPage)
+        })
+      },
+      off: vi.fn().mockImplementation((event: string, listener: (response: ReturnType<typeof createMenuResponse>) => void) => {
+        if (event === 'response') responseListeners.delete(listener)
+      }),
+      on: vi.fn().mockImplementation((event: string, listener: (response: ReturnType<typeof createMenuResponse>) => void) => {
+        if (event === 'response') responseListeners.add(listener)
+      }),
+      screenshot: vi.fn().mockResolvedValue(Buffer.from('fake-image')),
+      title: vi.fn().mockResolvedValue('배민셀프서비스'),
+      url: vi.fn().mockReturnValue('https://self.baemin.com/menu'),
+      waitForLoadState: vi.fn().mockResolvedValue(undefined),
+      waitForFunction: vi.fn().mockResolvedValue(undefined),
+      waitForSelector: vi.fn().mockResolvedValue(undefined),
+      waitForTimeout: vi.fn().mockResolvedValue(undefined)
+    }
+    const close = vi.fn().mockResolvedValue(undefined)
+    launchPlaywrightChromium.mockResolvedValue({ close, newPage: async () => fakePage })
+    const adapter = new BaeminAdapter({ username: 'owner-id', password: 'secret' })
+
+    const result = await adapter.fetchMenusWithInspection()
+
+    expect(result.menus.map((menu) => menu.platformMenuId)).toEqual(['1', '2', '3'])
+    expect(evaluate).toHaveBeenCalled()
+    expect(evaluate.mock.calls.every((call) => call[1] === undefined)).toBe(true)
   })
 })

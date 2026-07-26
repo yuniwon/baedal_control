@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { PlatformCode } from '../../shared/contracts'
@@ -28,6 +29,17 @@ export class CredentialVault {
     }
   }
 
+  getRevision(platformCode: PlatformCode): string | null {
+    const credential = this.get(platformCode)
+    if (!credential) {
+      return null
+    }
+
+    return createHash('sha256')
+      .update(`${platformCode}\u0000${credential.username}\u0000${credential.password}`)
+      .digest('hex')
+  }
+
   set(platformCode: PlatformCode, username: string, password: string) {
     if (!this.cipher.isEncryptionAvailable()) {
       throw new Error('encryption_unavailable')
@@ -38,6 +50,10 @@ export class CredentialVault {
     const current = this.readAll()
     current[platformCode] = encrypted
     this.writeAll(current)
+  }
+
+  hasStoredEntry(platformCode: PlatformCode) {
+    return Boolean(this.readAll()[platformCode])
   }
 
   clear(platformCode: PlatformCode) {

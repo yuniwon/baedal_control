@@ -20,9 +20,9 @@ interface SyncRunLogger {
 }
 
 interface AdapterRegistryLike {
-  get: (
+  getWriter: (
     platformCode: PlatformCode
-  ) => { applyMenuUpdate: (item: SyncPreviewItem) => Promise<void> | void }
+  ) => { apply: (item: SyncPreviewItem) => Promise<void> | void }
 }
 
 interface FailureContextCollectorLike {
@@ -57,7 +57,7 @@ export class SyncEngine {
 
     for (const item of items) {
       try {
-        await this.adapterRegistry.get(item.platformCode).applyMenuUpdate(item)
+        await this.adapterRegistry.getWriter(item.platformCode).apply(item)
         await this.successStateReconciler?.reconcile(item)
         successCount += 1
         this.runLogger.addItem({

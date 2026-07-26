@@ -67,7 +67,11 @@ describe('BrowserInspectionSnapshotRepository', () => {
           responsePreview: '{"menus":[{"name":"왕새우갈비"}]}'
         }
       ],
-      screenshotDataUrl: 'data:image/png;base64,ZmFrZQ=='
+      screenshotDataUrl: 'data:image/png;base64,ZmFrZQ==',
+      visiblePasswordInputCount: 0,
+      loginMarkerDetected: false,
+      logoutMarkerDetected: true,
+      managementMarkerDetected: true
     })
 
     repository.save({
@@ -88,7 +92,11 @@ describe('BrowserInspectionSnapshotRepository', () => {
       inputHints: ['가격'],
       fields: [],
       apiEvents: [],
-      screenshotDataUrl: null
+      screenshotDataUrl: null,
+      visiblePasswordInputCount: 1,
+      loginMarkerDetected: true,
+      logoutMarkerDetected: false,
+      managementMarkerDetected: false
     })
 
     expect(repository.listLatest(2)).toEqual([
@@ -102,7 +110,11 @@ describe('BrowserInspectionSnapshotRepository', () => {
         optionGroupNames: [],
         buttonLabels: ['저장'],
         inputHints: ['가격'],
-        apiEvents: []
+        apiEvents: [],
+        visiblePasswordInputCount: 1,
+        loginMarkerDetected: true,
+        logoutMarkerDetected: false,
+        managementMarkerDetected: false
       }),
       expect.objectContaining({
         snapshotId: 'snap-1',
@@ -118,7 +130,11 @@ describe('BrowserInspectionSnapshotRepository', () => {
             method: 'GET',
             status: 200
           })
-        ]
+        ],
+        visiblePasswordInputCount: 0,
+        loginMarkerDetected: false,
+        logoutMarkerDetected: true,
+        managementMarkerDetected: true
       })
     ])
   })

@@ -5,30 +5,56 @@ import { createConnection } from './db/connection'
 import { migrate } from './db/migrations'
 import { registerHandlers } from './ipc/register-handlers'
 import { BrowserInspectionSnapshotRepository } from './repositories/browser-inspection-snapshot-repository'
+import { CatalogWorkspaceRepository } from './repositories/catalog-workspace-repository'
+import { CatalogReviewRepository } from './repositories/catalog-review-repository'
+import { CatalogIntentRuleRepository } from './repositories/catalog-intent-rule-repository'
 import { MappingRepository } from './repositories/mapping-repository'
 import { MenuRepository } from './repositories/menu-repository'
 import { PlatformImportChangeRepository } from './repositories/platform-import-change-repository'
 import { PlatformImportRunRepository } from './repositories/platform-import-run-repository'
+import { PlatformAuthPreferenceRepository } from './repositories/platform-auth-preference-repository'
+import { PlatformLoginClickAttemptRepository } from './repositories/platform-login-click-attempt-repository'
+import { PlatformSessionStateRepository } from './repositories/platform-session-state-repository'
 import { PlatformMenuRepository } from './repositories/platform-menu-repository'
 import { PlatformOptionGroupRepository } from './repositories/platform-option-group-repository'
 import { SyncRunItemRepository } from './repositories/sync-run-item-repository'
 import { SyncRunRepository } from './repositories/sync-run-repository'
 import { PlatformAdapterRegistry } from './platforms/base/registry'
+import { PlatformPluginRegistry } from './platforms/base/plugin-registry'
+import { createLegacyAdapterPlugin } from './platforms/base/legacy-adapter-plugin'
+import type { PlatformAdapter } from './platforms/base/types'
 import { BaeminAdapter } from './platforms/baemin/adapter'
 import { CoupangEatsAdapter } from './platforms/coupangeats/adapter'
 import { CoupangEatsManagedBrowserUpdater } from './platforms/coupangeats/managed-browser-updater'
+import { coupangEatsPasswordManagerLoginDescriptor } from './platforms/coupangeats/password-manager-login-descriptor'
 import { DdangyoAdapter } from './platforms/ddangyo/adapter'
+import { DdangyoManagedCatalogReader } from './platforms/ddangyo/managed-catalog'
+import { DeliverySpecialAdapter } from './platforms/deliveryspecial/adapter'
+import { NaverOrderAdapter } from './platforms/naverorder/adapter'
+import { YogiyoAdapter } from './platforms/yogiyo/adapter'
 import { CredentialVault } from './services/credential-vault'
+import { AuthAttemptGuard } from './services/auth-attempt-guard'
+import { BrowserPlatformAuthDriver } from './services/browser-platform-auth-driver'
 import { BrowserInspectorBridge } from './services/browser-inspector-bridge'
 import { createCatalogImportOrchestrator } from './services/catalog-import-orchestrator'
+import { CatalogBootstrapService } from './services/catalog-bootstrap-service'
 import { AgentOperationsReportService } from './services/agent-operations-report-service'
 import { CliTaskRunner } from './services/cli-task-runner'
 import { buildLogicalOptionGroups } from './services/logical-option-group-service'
 import { ManagedChromeLauncher } from './services/managed-chrome-launcher'
 import { ManagedChromeLoginAutomator } from './services/managed-chrome-login-automator'
+import { ManagedChromeLoginPageProbe } from './services/managed-chrome-login-page-probe'
 import { ManagedChromeSessionProbe } from './services/managed-chrome-session-probe'
 import { ManagedChromeSnapshotCapturer } from './services/managed-chrome-snapshot-capturer'
 import { ManagedChromeScriptRunner } from './services/managed-chrome-script-runner'
+import { ManagedChromeAuthEvidenceProbe } from './services/managed-chrome-auth-evidence-probe'
+import { ManagedPasswordManagerLoginCoordinator } from './services/managed-password-manager-login-coordinator'
+import { ExtensionSessionBroker } from './services/extension-session-broker'
+import { PlatformSessionOrchestrator } from './services/platform-session-orchestrator'
+import {
+  requiresApplicationCredential,
+  selectManagedCatalogCaptureTabs
+} from './services/platform-session-strategy'
 import {
   EmbeddedFailureContextHandler,
   ManagedBrowserFailureContextHandler,
@@ -37,9 +63,11 @@ import {
 import { SyncEngine } from './services/sync-engine'
 import { SyncSuccessReconciler } from './services/sync-success-reconciler'
 import { buildSyncPreview } from './services/sync-planner'
+import { PLATFORM_CAPABILITIES } from '../shared/platform-capabilities'
+import { PLATFORM_METADATA } from '../shared/platforms'
 
 type PlatformCredential = NonNullable<ReturnType<CredentialVault['get']>>
-type PlatformAdapterFactory = (credential: PlatformCredential) => BaeminAdapter | CoupangEatsAdapter | DdangyoAdapter
+type PlatformAdapterFactory = (credential: PlatformCredential) => PlatformAdapter
 
 const APP_NAME = 'delivery-menu-sync'
 
@@ -74,7 +102,13 @@ app.whenReady().then(async () => {
   const platformOptionGroupRepository = new PlatformOptionGroupRepository(db)
   const platformImportRunRepository = new PlatformImportRunRepository(db)
   const platformImportChangeRepository = new PlatformImportChangeRepository(db)
+  const catalogWorkspaceRepository = new CatalogWorkspaceRepository(db)
+  const catalogReviewRepository = new CatalogReviewRepository(db)
+  const catalogIntentRuleRepository = new CatalogIntentRuleRepository(db)
   const browserInspectionSnapshotRepository = new BrowserInspectionSnapshotRepository(db)
+  const platformSessionStateRepository = new PlatformSessionStateRepository(db)
+  const platformAuthPreferenceRepository = new PlatformAuthPreferenceRepository(db)
+  const platformLoginClickAttemptRepository = new PlatformLoginClickAttemptRepository(db)
   const syncRunRepository = new SyncRunRepository(db)
   const syncRunItemRepository = new SyncRunItemRepository(db)
   const credentialVault = new CredentialVault(join(app.getPath('userData'), 'credentials.json'), safeStorage)
@@ -88,6 +122,27 @@ app.whenReady().then(async () => {
   const managedChromeSessionProbe = new ManagedChromeSessionProbe()
   const managedChromeSnapshotCapturer = new ManagedChromeSnapshotCapturer()
   const managedChromeScriptRunner = new ManagedChromeScriptRunner()
+  const managedChromeLoginPageProbe = new ManagedChromeLoginPageProbe(
+    managedChromeScriptRunner
+  )
+  const managedPasswordManagerLoginCoordinator = new ManagedPasswordManagerLoginCoordinator({
+    descriptors: {
+      coupangeats: coupangEatsPasswordManagerLoginDescriptor
+    },
+    preferences: platformAuthPreferenceRepository,
+    clickAttempts: platformLoginClickAttemptRepository,
+    managedChromeLauncher,
+    managedChromeSessionProbe,
+    loginPageProbe: managedChromeLoginPageProbe,
+    scriptRunner: managedChromeScriptRunner
+  })
+  const managedChromeAuthEvidenceProbe = new ManagedChromeAuthEvidenceProbe(
+    managedChromeScriptRunner
+  )
+  const ddangyoManagedCatalogReader = new DdangyoManagedCatalogReader(
+    managedChromeSessionProbe,
+    managedChromeScriptRunner
+  )
   const managedChromeLoginAutomator = new ManagedChromeLoginAutomator({
     managedChromeSessionProbe,
     managedChromeScriptRunner
@@ -106,6 +161,24 @@ app.whenReady().then(async () => {
     })
   ])
   const adapterRegistry = new PlatformAdapterRegistry()
+  const pluginRegistry = new PlatformPluginRegistry()
+  const extensionSessionBroker = new ExtensionSessionBroker()
+  const captureManagedBrowserSnapshots = async (platformCode: PlatformCode) => {
+    const session = await managedChromeSessionProbe.inspect()
+    const tabs = selectManagedCatalogCaptureTabs(
+      platformCode,
+      session.tabs.filter((tab) => tab.platformCode === platformCode)
+    )
+    const snapshots: BrowserInspectionSnapshot[] = []
+
+    for (const tab of tabs) {
+      const snapshot = await managedChromeSnapshotCapturer.captureTab(tab.tabId)
+      browserInspectionSnapshotRepository.save(snapshot)
+      snapshots.push(snapshot)
+    }
+
+    return snapshots
+  }
   const syncSuccessReconciler = new SyncSuccessReconciler({
     menuRepository,
     mappingRepository,
@@ -113,56 +186,105 @@ app.whenReady().then(async () => {
     platformImportRunRepository,
     managedChromeSessionProvider: () => managedChromeSessionProbe.inspect()
   })
-  const adapterFactories: Record<PlatformCode, PlatformAdapterFactory> = {
+  const adapterFactories: Partial<Record<PlatformCode, PlatformAdapterFactory>> = {
     baemin: (credential) => new BaeminAdapter(credential),
     coupangeats: (credential) =>
       new CoupangEatsAdapter(credential, 'https://store.coupangeats.com/', {
-        captureManagedBrowserSnapshots: async () => {
-          const session = await managedChromeSessionProbe.inspect()
-          const tabs = session.tabs.filter(
-            (tab) =>
-              tab.platformCode === 'coupangeats' &&
-              (tab.pageKind === 'menu_list' || tab.pageKind === 'option_list')
-          )
-
-          const snapshots: BrowserInspectionSnapshot[] = []
-
-          for (const tab of tabs) {
-            const snapshot = await managedChromeSnapshotCapturer.captureTab(tab.tabId)
-            browserInspectionSnapshotRepository.save(snapshot)
-            snapshots.push(snapshot)
-          }
-
-          return snapshots
-        },
+        captureManagedBrowserSnapshots: () => captureManagedBrowserSnapshots('coupangeats'),
         applyManagedBrowserUpdate: (item) => coupangEatsManagedBrowserUpdater.applyMenuUpdate(item)
       }),
-    ddangyo: (credential) => new DdangyoAdapter(credential)
+    ddangyo: (credential) =>
+      new DdangyoAdapter(credential, undefined, {
+        readManagedBrowserCatalog: () => ddangyoManagedCatalogReader.read()
+      }),
+    yogiyo: (credential) =>
+      new YogiyoAdapter(credential, {
+        captureManagedBrowserSnapshots: () => captureManagedBrowserSnapshots('yogiyo')
+      }),
+    deliveryspecial: (credential) =>
+      new DeliverySpecialAdapter(credential, {
+        captureManagedBrowserSnapshots: () => captureManagedBrowserSnapshots('deliveryspecial')
+      }),
+    naverorder: (credential) =>
+      new NaverOrderAdapter(credential, {
+        captureManagedBrowserSnapshots: () => captureManagedBrowserSnapshots('naverorder')
+      })
   }
 
+  const registeredPluginCodes = new Set<PlatformCode>()
+
   const registerPlatformAdapter = (platformCode: PlatformCode) => {
-    const credential = credentialVault.get(platformCode)
-    if (!credential) {
+    const factory = adapterFactories[platformCode]
+    if (!factory) {
       return
     }
 
-    adapterRegistry.register(platformCode, adapterFactories[platformCode](credential))
+    const strategies = PLATFORM_CAPABILITIES[platformCode].authentication.strategies
+    const credential = requiresApplicationCredential(strategies)
+      ? credentialVault.get(platformCode) ?? { username: '', password: '' }
+      : { username: '', password: '' }
+    const adapter = factory(credential)
+    const auth = new BrowserPlatformAuthDriver({
+      platformCode,
+      metadata: PLATFORM_METADATA[platformCode],
+      capabilities: PLATFORM_CAPABILITIES[platformCode],
+      managedChromeSessionProbe,
+      managedChromeAuthEvidenceProbe,
+      browserInspectionSnapshots: browserInspectionSnapshotRepository,
+      extensionSessionBroker,
+      managedChromeLoginAutomator,
+      managedChromeLauncher,
+      managedPasswordManagerLoginCoordinator
+    })
+    const plugin = createLegacyAdapterPlugin(
+      adapter,
+      { code: platformCode, ...PLATFORM_METADATA[platformCode] },
+      PLATFORM_CAPABILITIES[platformCode],
+      auth
+    )
+
+    adapterRegistry.register(platformCode, adapter)
+    if (registeredPluginCodes.has(platformCode)) {
+      pluginRegistry.replace(plugin)
+    } else {
+      pluginRegistry.register(plugin)
+      registeredPluginCodes.add(platformCode)
+    }
   }
 
-  const syncEngine = new SyncEngine(adapterRegistry, {
+  const syncEngine = new SyncEngine(pluginRegistry, {
     create: (record) => syncRunRepository.create(record),
     finish: (record) => syncRunRepository.update(record),
     addItem: (record) => syncRunItemRepository.addItem(record)
   }, syncFailureContextCollector, syncSuccessReconciler)
   const catalogImportOrchestrator = createCatalogImportOrchestrator({
     db,
-    adapterRegistry,
+    adapterRegistry: pluginRegistry,
     menuRepository,
     mappingRepository,
     platformMenuRepository,
     platformOptionGroupRepository,
     platformImportRunRepository,
-    platformImportChangeRepository
+    platformImportChangeRepository,
+    catalogWorkspaceRepository,
+    catalogReviewRepository,
+    catalogIntentRuleRepository
+  });
+  const platformSessionOrchestrator = new PlatformSessionOrchestrator({
+    plugins: pluginRegistry,
+    states: platformSessionStateRepository,
+    credentialVault,
+    attemptGuard: new AuthAttemptGuard(platformSessionStateRepository),
+    passwordManagerLoginCoordinator: managedPasswordManagerLoginCoordinator
+  })
+  const catalogBootstrapService = new CatalogBootstrapService({
+    db,
+    menuRepository,
+    mappingRepository,
+    platformMenuRepository,
+    platformImportRunRepository,
+    workspaceRepository: catalogWorkspaceRepository,
+    reviewRepository: catalogReviewRepository
   });
   (Object.keys(adapterFactories) as PlatformCode[]).forEach(registerPlatformAdapter)
 
@@ -194,6 +316,7 @@ app.whenReady().then(async () => {
     agentOperationsReportService,
     syncEngine,
     platformMenuImporter: catalogImportOrchestrator,
+    platformSessionOrchestrator,
     platformFlowInspector: {
       inspectCreateMenuFlow: async (platformCode) => {
         const adapter = adapterRegistry.get(platformCode)
@@ -204,7 +327,11 @@ app.whenReady().then(async () => {
         return adapter.inspectCreateMenuFlow()
       }
     },
-    hasCredential: (platformCode) => Boolean(credentialVault.get(platformCode))
+    hasCredential: (platformCode) => Boolean(credentialVault.get(platformCode)),
+    requiresApplicationCredential: (platformCode) =>
+      requiresApplicationCredential(
+        PLATFORM_CAPABILITIES[platformCode].authentication.strategies
+      )
   })
   const cliTaskResult = await cliTaskRunner.run(process.argv.slice(2))
 
@@ -238,7 +365,13 @@ app.whenReady().then(async () => {
     syncRunRepository,
     syncRunItemRepository,
     credentialVault,
+    platformSessionOrchestrator,
+    platformAuthPreferenceRepository,
     platformMenuImporter: catalogImportOrchestrator,
+    catalogWorkspaceRepository,
+    catalogBootstrapService,
+    catalogReviewRepository,
+    catalogIntentRuleRepository,
     syncEngine,
     onCredentialSaved: registerPlatformAdapter
   })

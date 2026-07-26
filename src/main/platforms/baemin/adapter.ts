@@ -35,6 +35,7 @@ import {
 import { pickBaeminSearchResult } from './update-flow'
 import { pickBaeminRenderedSearchResult } from './update-flow'
 import { launchPlaywrightChromium } from '../../services/playwright-runtime'
+import { buildSafeNoticeDialogDismissalExpression } from '../../services/safe-notice-dialog-dismissal'
 
 type BaeminCreateWizardEntryState = {
   buttonFound: boolean
@@ -1172,6 +1173,14 @@ export class BaeminAdapter implements PlatformAdapter {
       while (pages.size < totalPages && attempts < totalPages * 4) {
         await page.mouse.move(900, 500)
         await page.mouse.wheel(0, 2400)
+        if (typeof page.evaluate === 'function') {
+          await page
+            .evaluate(() => {
+              const scrollingElement = document.scrollingElement ?? document.documentElement
+              window.scrollTo({ top: scrollingElement.scrollHeight, behavior: 'auto' })
+            })
+            .catch(() => undefined)
+        }
         await page.waitForTimeout(1500)
         attempts += 1
       }
@@ -1212,7 +1221,7 @@ export class BaeminAdapter implements PlatformAdapter {
         waitUntil: 'domcontentloaded'
       })
       await this.dismissCollectionOverlays(page)
-      await page.getByText('옵션', { exact: true }).first().click({ timeout: 15000 })
+      await this.selectOptionCatalogTab(page)
       await this.dismissCollectionOverlays(page)
 
       await this.waitFor(() => pages.has(0), 30000)
@@ -1246,6 +1255,15 @@ export class BaeminAdapter implements PlatformAdapter {
     }
   }
 
+  private async selectOptionCatalogTab(page: Page) {
+    const optionTab = page
+      .locator('button[role="tab"]')
+      .filter({ hasText: /^옵션$/ })
+      .first()
+    await optionTab.waitFor({ state: 'visible', timeout: 15000 })
+    await optionTab.click({ timeout: 15000, force: true })
+  }
+
   private async waitFor(check: () => boolean, timeoutMs: number) {
     const startedAt = Date.now()
     while (!check()) {
@@ -1257,6 +1275,12 @@ export class BaeminAdapter implements PlatformAdapter {
   }
 
   private async dismissCollectionOverlays(page: Page) {
+    if (typeof page.evaluate === 'function') {
+      await page
+        .evaluate(buildSafeNoticeDialogDismissalExpression())
+        .catch(() => undefined)
+    }
+
     const dismissButtons = [
       page.getByRole('button', { name: /오늘 하루 보지 않기|오늘 하루 보지않기/ }).first(),
       page.getByRole('button', { name: /오늘 하루 닫기|오늘만 닫기/ }).first(),

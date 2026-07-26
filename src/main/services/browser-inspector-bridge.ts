@@ -7,6 +7,7 @@ import type {
   BrowserInspectorStatus,
   PlatformCode
 } from '../../shared/contracts'
+import { PLATFORM_CODES } from '../../shared/platforms'
 
 const browserInspectionFieldSchema = z.object({
   name: z.string().min(1),
@@ -23,9 +24,9 @@ const browserInspectionApiEventSchema = z.object({
   responsePreview: z.string().nullable().optional()
 })
 
-const browserInspectionSnapshotSchema = z.object({
+export const browserInspectionSnapshotSchema = z.object({
   snapshotId: z.string().min(1),
-  platformCode: z.enum(['baemin', 'coupangeats', 'ddangyo']),
+  platformCode: z.enum(PLATFORM_CODES),
   source: z.enum(['browser_extension', 'manual_browser']),
   pageUrl: z.string().url(),
   pageTitle: z.string().min(1),
@@ -49,7 +50,11 @@ const browserInspectionSnapshotSchema = z.object({
   inputHints: z.array(z.string()),
   fields: z.array(browserInspectionFieldSchema),
   apiEvents: z.array(browserInspectionApiEventSchema),
-  screenshotDataUrl: z.string().nullable().optional()
+  screenshotDataUrl: z.string().nullable().optional(),
+  visiblePasswordInputCount: z.number().int().nonnegative().default(0),
+  loginMarkerDetected: z.boolean().default(false),
+  logoutMarkerDetected: z.boolean().default(false),
+  managementMarkerDetected: z.boolean().default(false)
 })
 
 interface BrowserInspectionSnapshotRepositoryLike {
@@ -208,7 +213,11 @@ export class BrowserInspectorBridge {
           inputHints: parsedPayload.inputHints,
           fields: parsedPayload.fields as BrowserInspectionField[],
           apiEvents: parsedPayload.apiEvents as BrowserInspectionApiEvent[],
-          screenshotDataUrl: parsedPayload.screenshotDataUrl ?? null
+          screenshotDataUrl: parsedPayload.screenshotDataUrl ?? null,
+          visiblePasswordInputCount: parsedPayload.visiblePasswordInputCount,
+          loginMarkerDetected: parsedPayload.loginMarkerDetected,
+          logoutMarkerDetected: parsedPayload.logoutMarkerDetected,
+          managementMarkerDetected: parsedPayload.managementMarkerDetected
         })
 
         writeJson(response, 200, { ok: true, snapshotId: parsedPayload.snapshotId })

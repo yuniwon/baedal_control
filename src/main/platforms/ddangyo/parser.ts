@@ -2,12 +2,18 @@ import { JSDOM } from 'jsdom'
 import type { PlatformMenuPriceVariantRecord } from '../../../shared/contracts'
 import type { PlatformMenuSnapshot } from '../base/types'
 
-const ddangyoStatusLabels = ['대표메뉴', '품절', '배달숨김', '포장숨김', '매장숨김'] as const
 const ddangyoPriceChannelLabels = ['배달', '포장', '매장식사'] as const
 const ddangyoMenuItemSelector = '#mf_wfm_contents_wfm_tabcontents_gen_menu > li'
 const ddangyoMenuIdSelector = '[id$="_spa_menuId"]'
 const ddangyoMenuNameSelector = '[id$="_tbx_menuNm"]'
 const ddangyoPriceContainerSelector = '[id$="_gen_menuPrc"]'
+const ddangyoMenuStatusSelector = [
+  '[id$="_hdn_menuStatus"]',
+  '[id$="_spa_menuStatus"]',
+  '[id$="_tbx_menuStatus"]',
+  '[id$="_saleStatus"]',
+  '[id$="_menuStatus"]'
+].join(', ')
 
 interface ParsedPriceVariant {
   label?: string
@@ -143,14 +149,27 @@ const parseChannelPrice = (line: string) => {
 }
 
 const resolveMenuStatus = (item: Element) => {
-  const text = normalizeText(item.textContent)
-  const labels = ddangyoStatusLabels.filter((label) => text.includes(label))
+  const statusElement = item.querySelector(ddangyoMenuStatusSelector)
+  const statusValue =
+    item.getAttribute('data-menu-status') ??
+    item.getAttribute('data-status') ??
+    (statusElement && 'value' in statusElement
+      ? String((statusElement as HTMLInputElement).value)
+      : statusElement?.textContent) ??
+    ''
+  const normalized = normalizeText(statusValue).toUpperCase().replaceAll('-', '_')
 
-  if (labels.length === 0) {
+  if (['HIDDEN', 'HIDE', 'NOT_EXPOSE', 'INACTIVE'].includes(normalized)) {
+    return '숨김'
+  }
+  if (['SOLD_OUT', 'SOLDOUT', 'OUT_OF_STOCK', 'PAUSE'].includes(normalized)) {
+    return '품절'
+  }
+  if (['ON_SALE', 'SALE', 'NORMAL', 'ACTIVE', 'EXPOSE'].includes(normalized)) {
     return '판매중'
   }
 
-  return labels.join(' · ')
+  return normalized ? normalizeText(statusValue) : '판매중'
 }
 
 const formatPriceSummary = (variants: ParsedPriceVariant[]) =>

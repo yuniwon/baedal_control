@@ -22,6 +22,15 @@ const platformMenuUpdatePolicies: Record<PlatformCode, PlatformMenuUpdatePolicy>
   ddangyo: {
     multiPriceMenuUpdatePolicy: 'price_change_requires_review',
     supportsStructuredVariantPriceWrite: true
+  },
+  yogiyo: {
+    multiPriceMenuUpdatePolicy: 'all_changes_require_review'
+  },
+  deliveryspecial: {
+    multiPriceMenuUpdatePolicy: 'all_changes_require_review'
+  },
+  naverorder: {
+    multiPriceMenuUpdatePolicy: 'all_changes_require_review'
   }
 }
 

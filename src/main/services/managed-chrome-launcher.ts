@@ -22,6 +22,11 @@ interface ManagedChromeLauncherOptions {
 
 const CHROME_NOT_FOUND_MESSAGE = '크롬 실행 파일을 찾지 못했습니다.'
 
+const isGoogleChromeExecutable = (executablePath: string) =>
+  /(?:google[\\/]chrome[\\/]application[\\/]chrome\.exe|google chrome\.app[\\/]contents[\\/]macos[\\/]google chrome|google-chrome(?:-stable)?)$/i.test(
+    executablePath
+  )
+
 export const getDefaultChromeExecutableCandidates = (
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform
@@ -76,6 +81,9 @@ export class ManagedChromeLauncher {
       chromeAvailable,
       chromePath: chromePath ?? null,
       chromeProfilePath: this.options.profileDir,
+      passwordManagerLoginReady: Boolean(
+        chromePath && this.options.profileDir.trim() && isGoogleChromeExecutable(chromePath)
+      ),
       managedChromeRunning: this.isChildRunning(),
       lastLaunchUrl: this.lastLaunchUrl,
       chromeError: chromeAvailable ? this.lastError : this.lastError ?? CHROME_NOT_FOUND_MESSAGE

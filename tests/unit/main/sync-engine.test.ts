@@ -4,8 +4,8 @@ import { SyncEngine } from '../../../src/main/services/sync-engine'
 describe('SyncEngine', () => {
   it('continues to the next platform when one adapter fails', async () => {
     const adapterRegistry = {
-      get: (platformCode: string) => ({
-        applyMenuUpdate: vi.fn().mockImplementation(() => {
+      getWriter: (platformCode: string) => ({
+        apply: vi.fn().mockImplementation(() => {
           if (platformCode === 'coupangeats') {
             throw new Error('save_failed')
           }
@@ -59,8 +59,8 @@ describe('SyncEngine', () => {
     }
     const engine = new SyncEngine(
       {
-        get: () => ({
-          applyMenuUpdate: vi
+        getWriter: () => ({
+          apply: vi
             .fn()
             .mockRejectedValue(
               new Error(
@@ -110,8 +110,8 @@ describe('SyncEngine', () => {
     const reconcile = vi.fn().mockResolvedValue(undefined)
     const engine = new SyncEngine(
       {
-        get: () => ({
-          applyMenuUpdate: vi.fn().mockResolvedValue(undefined)
+        getWriter: () => ({
+          apply: vi.fn().mockResolvedValue(undefined)
         })
       } as never,
       {

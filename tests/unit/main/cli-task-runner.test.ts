@@ -143,6 +143,127 @@ describe('CliTaskRunner', () => {
     })
   })
 
+  it('imports Yogiyo through the CLI task path used for unattended rereads', async () => {
+    const importPlatform = vi.fn().mockResolvedValue({
+      summary: {
+        platformCode: 'yogiyo',
+        fetchedCount: 71,
+        optionGroupCount: 18,
+        createdMenuCount: 0,
+        linkedMappingCount: 0,
+        verifiedMappingCount: 0
+      }
+    })
+    const runner = new CliTaskRunner({
+      getSyncPreview: vi.fn(),
+      platformMenuImporter: { importPlatform },
+      hasCredential: vi.fn().mockReturnValue(true)
+    })
+
+    await expect(
+      runner.run(['--task=import-platform', '--platformCode=yogiyo'])
+    ).resolves.toEqual({
+      exitCode: 0,
+      payload: {
+        task: 'import-platform',
+        platformCode: 'yogiyo',
+        summary: expect.objectContaining({ fetchedCount: 71, optionGroupCount: 18 })
+      }
+    })
+    expect(importPlatform).toHaveBeenCalledWith('yogiyo')
+  })
+
+  it('restores the platform session before an unattended import', async () => {
+    const connect = vi.fn().mockResolvedValue({ state: 'ready' })
+    const importPlatform = vi.fn().mockResolvedValue({
+      summary: { platformCode: 'deliveryspecial', fetchedCount: 47 }
+    })
+    const runner = new CliTaskRunner({
+      getSyncPreview: vi.fn(),
+      platformMenuImporter: { importPlatform } as never,
+      platformSessionOrchestrator: { connect } as never,
+      hasCredential: vi.fn().mockReturnValue(true)
+    })
+
+    const result = await runner.run([
+      '--task=import-platform',
+      '--platformCode=deliveryspecial'
+    ])
+
+    expect(result).toMatchObject({ exitCode: 0 })
+    expect(connect).toHaveBeenCalledWith('deliveryspecial')
+    expect(importPlatform).toHaveBeenCalledWith('deliveryspecial')
+  })
+
+  it('imports Coupang through its browser password-manager strategy without app credentials', async () => {
+    const connect = vi.fn().mockResolvedValue({ state: 'ready' })
+    const importPlatform = vi.fn().mockResolvedValue({
+      summary: { platformCode: 'coupangeats', fetchedCount: 38 }
+    })
+    const hasCredential = vi.fn(() => {
+      throw new Error('coupang credential must not be read')
+    })
+    const runner = new CliTaskRunner({
+      getSyncPreview: vi.fn(),
+      platformMenuImporter: { importPlatform } as never,
+      platformSessionOrchestrator: { connect } as never,
+      requiresApplicationCredential: vi.fn().mockReturnValue(false),
+      hasCredential
+    })
+
+    await expect(
+      runner.run(['--task=import-platform', '--platformCode=coupangeats'])
+    ).resolves.toMatchObject({ exitCode: 0 })
+    expect(hasCredential).not.toHaveBeenCalled()
+    expect(connect).toHaveBeenCalledWith('coupangeats')
+    expect(importPlatform).toHaveBeenCalledWith('coupangeats')
+  })
+
+  it('returns immediately when an unattended import cannot restore its session', async () => {
+    const importPlatform = vi.fn()
+    const runner = new CliTaskRunner({
+      getSyncPreview: vi.fn(),
+      platformMenuImporter: { importPlatform },
+      platformSessionOrchestrator: {
+        connect: vi.fn().mockResolvedValue({ state: 'challenge_required' })
+      } as never,
+      hasCredential: vi.fn().mockReturnValue(true)
+    })
+
+    await expect(
+      runner.run(['--task=import-platform', '--platformCode=deliveryspecial'])
+    ).resolves.toEqual({
+      exitCode: 1,
+      payload: {
+        task: 'import-platform',
+        platformCode: 'deliveryspecial',
+        error: 'platform_session_not_ready:challenge_required'
+      }
+    })
+    expect(importPlatform).not.toHaveBeenCalled()
+  })
+
+  it('returns a failed CLI result instead of leaving Electron open when import throws', async () => {
+    const runner = new CliTaskRunner({
+      getSyncPreview: vi.fn(),
+      platformMenuImporter: {
+        importPlatform: vi.fn().mockRejectedValue(new Error('deliveryspecial_catalog_page_not_ready'))
+      },
+      hasCredential: vi.fn().mockReturnValue(true)
+    })
+
+    await expect(
+      runner.run(['--task=import-platform', '--platformCode=deliveryspecial'])
+    ).resolves.toEqual({
+      exitCode: 1,
+      payload: {
+        task: 'import-platform',
+        platformCode: 'deliveryspecial',
+        error: 'deliveryspecial_catalog_page_not_ready'
+      }
+    })
+  })
+
   it('returns a read-only create-menu inspection report for the requested platform', async () => {
     const inspectCreateMenuFlow = vi.fn().mockResolvedValue({
       platformCode: 'baemin',

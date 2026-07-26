@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import type { PlatformCode } from '../../../src/shared/contracts'
 import {
   MappingReviewTable,
   type MappingCandidate
@@ -9,7 +10,7 @@ describe('MappingReviewTable', () => {
   it('groups rows by base menu and highlights the current candidate', () => {
     const onSelectCandidate = vi.fn()
     const onClear = vi.fn()
-    const catalog: Record<'baemin' | 'coupangeats' | 'ddangyo', MappingCandidate[]> = {
+    const catalog: Record<PlatformCode, MappingCandidate[]> = {
       baemin: [
         {
           currentMappingId: 'm1:baemin',
@@ -49,8 +50,11 @@ describe('MappingReviewTable', () => {
           platformMenuBindingStatus: '연결 정상'
         }
       ],
+      yogiyo: [],
       coupangeats: [],
-      ddangyo: []
+      ddangyo: [],
+      deliveryspecial: [],
+      naverorder: []
     }
 
     render(

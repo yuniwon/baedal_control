@@ -1,6 +1,20 @@
 import type { DatabaseConnection } from './connection'
 
 export const migrate = (db: DatabaseConnection) => {
+  const tableExists = (tableName: string) =>
+    Boolean(
+      db.prepare(`
+        select name
+        from sqlite_master
+        where type = 'table' and name = ?
+      `).get(tableName)
+    )
+  const hadCatalogWorkspaceTable = tableExists('catalog_workspaces')
+  const legacyMenuCount =
+    !hadCatalogWorkspaceTable && tableExists('menus')
+      ? (db.prepare('select count(*) as count from menus').get() as { count: number }).count
+      : 0
+
   db.exec(`
     create table if not exists menus (
       menu_id text primary key,
@@ -102,6 +116,10 @@ export const migrate = (db: DatabaseConnection) => {
       fields_json text not null,
       api_events_json text not null,
       screenshot_data_url text,
+      visible_password_input_count integer not null default 0,
+      login_marker_detected integer not null default 0,
+      logout_marker_detected integer not null default 0,
+      management_marker_detected integer not null default 0,
       created_at text not null default current_timestamp
     );
 
@@ -112,7 +130,137 @@ export const migrate = (db: DatabaseConnection) => {
       trigger_type text not null,
       result_summary text
     );
+
+    create table if not exists catalog_workspaces (
+      workspace_id text primary key,
+      display_name text not null,
+      lifecycle_state text not null,
+      seed_mode text,
+      seed_platform_code text,
+      canonical_version integer not null default 0,
+      activated_at text,
+      created_at text not null default current_timestamp,
+      updated_at text not null default current_timestamp
+    );
+
+    create table if not exists catalog_review_items (
+      review_item_id text primary key,
+      workspace_id text not null,
+      fingerprint text not null,
+      kind text not null,
+      state text not null,
+      confidence real not null,
+      title text not null,
+      explanation text not null,
+      recommendation text,
+      evidence_json text not null,
+      canonical_menu_id text,
+      platform_code text,
+      source_entity_id text,
+      intent_rule_id text,
+      created_at text not null default current_timestamp,
+      updated_at text not null default current_timestamp,
+      unique(workspace_id, fingerprint)
+    );
+
+    create table if not exists catalog_intent_rules (
+      intent_rule_id text primary key,
+      workspace_id text not null,
+      kind text not null,
+      scope text not null,
+      resolution text not null,
+      platform_code text,
+      canonical_menu_id text,
+      source_entity_id text,
+      field_key text,
+      category_key text,
+      reason text not null,
+      expires_at text,
+      is_active integer not null default 1,
+      created_at text not null default current_timestamp,
+      updated_at text not null default current_timestamp
+    );
+
+    create table if not exists platform_session_states (
+      workspace_id text not null,
+      platform_code text not null,
+      state text not null,
+      detail_code text,
+      credential_revision text,
+      last_attempt_at text,
+      last_ready_at text,
+      updated_at text not null default current_timestamp,
+      primary key (workspace_id, platform_code)
+    );
+
+    create table if not exists platform_auth_preferences (
+      workspace_id text not null,
+      platform_code text not null,
+      auto_click_login_button_consented integer not null default 0,
+      consent_updated_at text,
+      updated_at text not null default current_timestamp,
+      primary key (workspace_id, platform_code)
+    );
+
+    create table if not exists platform_login_click_attempts (
+      attempt_id text primary key,
+      workspace_id text not null,
+      platform_code text not null,
+      document_key_hash text not null,
+      state text not null,
+      attempted_at text not null,
+      resolved_at text
+    );
+
+    create index if not exists idx_catalog_review_items_workspace_state
+      on catalog_review_items (workspace_id, state);
+
+    create index if not exists idx_catalog_intent_rules_workspace_active
+      on catalog_intent_rules (workspace_id, is_active);
+
+    create index if not exists idx_platform_session_states_workspace
+      on platform_session_states (workspace_id, platform_code);
+
+    create index if not exists idx_platform_auth_preferences_workspace
+      on platform_auth_preferences (workspace_id, platform_code);
+
+    create unique index if not exists idx_platform_login_click_attempts_unresolved
+      on platform_login_click_attempts (workspace_id, platform_code)
+      where state in ('claimed', 'submitted', 'handed_off');
   `)
+
+  const intentRuleColumns = new Set(
+    (
+      db.prepare(`
+        select name
+        from pragma_table_info('catalog_intent_rules')
+      `).all() as Array<{ name: string }>
+    ).map((column) => column.name)
+  )
+
+  if (!intentRuleColumns.has('category_key')) {
+    db.exec('alter table catalog_intent_rules add column category_key text')
+  }
+
+  if (!hadCatalogWorkspaceTable) {
+    const isLegacyCatalog = legacyMenuCount > 0
+    db.prepare(`
+      insert into catalog_workspaces (
+        workspace_id,
+        display_name,
+        lifecycle_state,
+        seed_mode,
+        seed_platform_code,
+        canonical_version,
+        activated_at
+      ) values ('default', '기본 매장', ?, ?, null, ?, ?)
+    `).run(
+      isLegacyCatalog ? 'active' : 'collecting',
+      isLegacyCatalog ? 'legacy' : null,
+      isLegacyCatalog ? 1 : 0,
+      isLegacyCatalog ? new Date().toISOString() : null
+    )
+  }
 
   const mappingColumns = new Set(
     (
@@ -229,7 +377,11 @@ export const migrate = (db: DatabaseConnection) => {
   const missingBrowserInspectionSnapshotColumns = [
     ['page_kind', 'text'],
     ['capture_mode', 'text'],
-    ["menu_items_json", "text not null default '[]'"]
+    ["menu_items_json", "text not null default '[]'"],
+    ['visible_password_input_count', 'integer not null default 0'],
+    ['login_marker_detected', 'integer not null default 0'],
+    ['logout_marker_detected', 'integer not null default 0'],
+    ['management_marker_detected', 'integer not null default 0']
   ].filter(([name]) => !browserInspectionSnapshotColumns.has(name))
 
   for (const [name, type] of missingBrowserInspectionSnapshotColumns) {

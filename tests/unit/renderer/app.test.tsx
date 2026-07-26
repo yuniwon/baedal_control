@@ -1,6 +1,21 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
+vi.mock('../../../src/renderer/src/lib/api', () => ({
+  appApi: {
+    catalogWorkspace: {
+      get: vi.fn().mockResolvedValue({
+        workspaceId: 'default',
+        displayName: '기본 매장',
+        lifecycleState: 'active',
+        seedMode: 'legacy',
+        seedPlatformCode: null,
+        canonicalVersion: 1
+      })
+    }
+  }
+}))
+
 vi.mock('../../../src/renderer/src/pages/DashboardPage', () => ({
   DashboardPage: () => <h1>대시보드</h1>
 }))
@@ -31,7 +46,7 @@ describe('App navigation', () => {
   it('shows task-first navigation and keeps advanced pages collapsed until requested', async () => {
     render(<App />)
 
-    expect(screen.getByRole('button', { name: '홈' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: '홈' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '메뉴' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '옵션' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '가져오기' })).toBeTruthy()

@@ -12,8 +12,14 @@ import {
 } from '../components/MappingReviewTable'
 import type { MenuRow } from '../components/MenuTable'
 import { flattenPlatformMenuPriceVariants } from '../lib/platform-menu-price-variants'
+import { PLATFORM_CODES } from '../../../shared/platforms'
 
-const platforms: PlatformCode[] = ['baemin', 'coupangeats', 'ddangyo']
+const platforms: readonly PlatformCode[] = PLATFORM_CODES
+const createEmptyCandidateCatalog = (): Record<PlatformCode, MappingCandidate[]> =>
+  platforms.reduce<Record<PlatformCode, MappingCandidate[]>>((catalog, platformCode) => {
+    catalog[platformCode] = []
+    return catalog
+  }, {} as Record<PlatformCode, MappingCandidate[]>)
 const normalizeSearchValue = (value: string) =>
   value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ko-KR')
 
@@ -99,11 +105,7 @@ const buildCandidateCatalog = (
 
       return catalog
     },
-    {
-      baemin: [],
-      coupangeats: [],
-      ddangyo: []
-    }
+    createEmptyCandidateCatalog()
   )
 }
 
@@ -164,20 +166,14 @@ const mergeCandidateCatalog = (
       merged[platformCode] = [...byPlatformMenuId.values()]
       return merged
     },
-    {
-      baemin: [],
-      coupangeats: [],
-      ddangyo: []
-    }
+    createEmptyCandidateCatalog()
   )
 
 export const MappingPage = () => {
   const [rows, setRows] = useState<MappingReviewRow[]>([])
-  const [catalog, setCatalog] = useState<Record<PlatformCode, MappingCandidate[]>>({
-    baemin: [],
-    coupangeats: [],
-    ddangyo: []
-  })
+  const [catalog, setCatalog] = useState<Record<PlatformCode, MappingCandidate[]>>(
+    createEmptyCandidateCatalog()
+  )
   const [search, setSearch] = useState('')
   const [showDetails, setShowDetails] = useState(false)
 

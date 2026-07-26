@@ -39,11 +39,20 @@ const uniqueStrings = (items) => uniqueBy(items.map((item) => sanitizeText(item)
 
 const resolvePlatformCode = (href) => {
   const host = new URL(href).host
+  if (host.includes('yogiyo')) {
+    return 'yogiyo'
+  }
   if (host.includes('coupangeats')) {
     return 'coupangeats'
   }
   if (host.includes('ddangyo')) {
     return 'ddangyo'
+  }
+  if (host.includes('partner.payco') || host.includes('specialdelivery')) {
+    return 'deliveryspecial'
+  }
+  if (host.includes('smartplace.naver')) {
+    return 'naverorder'
   }
   return 'baemin'
 }

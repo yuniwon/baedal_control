@@ -4,8 +4,83 @@ import {
   parseCoupangEatsMenusFromBrowserSnapshot,
   parseCoupangEatsOptionGroupsFromBrowserSnapshot
 } from '../../../src/main/platforms/coupangeats/browser-session-parser'
+import { expandCoupangEatsOptionPayload } from '../../../src/main/platforms/coupangeats/managed-catalog'
 
 describe('CoupangEats browser session parser', () => {
+  it('expands representative option bindings with each option detail response', () => {
+    const mappingDishes = Array.from({ length: 18 }, (_, index) => ({
+      id: index + 1,
+      name: `메뉴 ${index + 1}`
+    }))
+    const expanded = expandCoupangEatsOptionPayload(
+      {
+        data: [
+          {
+            optionId: 100,
+            optionName: '사이즈',
+            mappingDishCount: 17,
+            mappingDishes: [{ id: 1, name: '대표 메뉴' }],
+            optionItems: []
+          }
+        ],
+        error: null,
+        code: 'SUCCESS'
+      },
+      [{ data: { optionId: 100, mappingDishCount: 0, mappingDishes } }]
+    ) as { data: Array<{ mappingDishCount: number; mappingDishes: unknown[] }> }
+
+    expect(expanded.data[0]?.mappingDishCount).toBe(18)
+    expect(expanded.data[0]?.mappingDishes).toHaveLength(18)
+  })
+
+  it('preserves the platform-reported binding count when only one representative menu is returned', () => {
+    const optionGroups = parseCoupangEatsOptionGroupsFromBrowserSnapshot({
+      snapshotId: 'snap-truncated-bindings',
+      platformCode: 'coupangeats',
+      source: 'manual_browser',
+      pageUrl: 'https://store.coupangeats.com/merchant/management/menu/109935/options',
+      pageTitle: '옵션 관리',
+      pageKind: 'option_list',
+      host: 'store.coupangeats.com',
+      capturedAt: '2026-07-21T00:00:00.000Z',
+      textSnippet: null,
+      menuNames: [],
+      menuItems: [],
+      optionGroupNames: [],
+      buttonLabels: [],
+      inputHints: [],
+      fields: [],
+      apiEvents: [
+        {
+          url: 'https://store.coupangeats.com/api/v1/merchant/web/stores/109935/all-options?fetchDish=true',
+          method: 'GET',
+          status: 200,
+          capturedAt: '2026-07-21T00:00:00.000Z',
+          responsePreview: JSON.stringify({
+            data: [
+              {
+                optionId: 100,
+                optionName: '사이즈',
+                mappingDishCount: 17,
+                mappingDishes: [{ id: 1, name: '대표 메뉴' }],
+                optionItems: []
+              }
+            ]
+          })
+        }
+      ],
+      screenshotDataUrl: null
+    })
+
+    expect(optionGroups[0]).toEqual(
+      expect.objectContaining({
+        optionGroupId: '100',
+        mappingMenusCount: 17,
+        menus: [expect.objectContaining({ platformMenuId: '1' })]
+      })
+    )
+  })
+
   it('parses menu ids, category names, prices, and statuses from the captured api preview', () => {
     const menus = parseCoupangEatsMenusFromBrowserSnapshot({
       snapshotId: 'snap-1',

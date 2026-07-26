@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import type { CatalogWorkspaceRecord } from '../../shared/contracts'
 import './App.css'
 import { DashboardPage } from './pages/DashboardPage'
 import { HistoryPage } from './pages/HistoryPage'
@@ -6,6 +7,8 @@ import { MappingPage } from './pages/MappingPage'
 import { MenuPage } from './pages/MenuPage'
 import { OptionPage } from './pages/OptionPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { CatalogOnboardingPage } from './pages/CatalogOnboardingPage'
+import { appApi } from './lib/api'
 
 const primaryTabs = ['home', 'menus', 'options', 'imports'] as const
 const advancedTabs = ['mapping', 'history'] as const
@@ -29,7 +32,7 @@ const getTabLabel = (tab: AppTab) => {
   }
 }
 
-export default function App() {
+const WorkspaceShell = () => {
   const [tab, setTab] = useState<AppTab>('home')
   const [showAdvancedNav, setShowAdvancedNav] = useState(false)
 
@@ -83,4 +86,27 @@ export default function App() {
       </main>
     </div>
   )
+}
+
+export default function App() {
+  const [workspace, setWorkspace] = useState<CatalogWorkspaceRecord | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void appApi.catalogWorkspace.get()
+      .then(setWorkspace)
+      .catch((error) => setLoadError(error instanceof Error ? error.message : '통합 메뉴 상태를 확인하지 못했습니다.'))
+  }, [])
+
+  if (loadError) {
+    return <main className="catalog-workspace-error" role="alert">{loadError}</main>
+  }
+  if (!workspace) {
+    return <main className="catalog-workspace-loading" role="status">통합 메뉴 상태 확인 중</main>
+  }
+  if (workspace.lifecycleState !== 'active') {
+    return <CatalogOnboardingPage workspace={workspace} onActivated={setWorkspace} />
+  }
+
+  return <WorkspaceShell />
 }

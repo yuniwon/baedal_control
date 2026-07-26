@@ -1,11 +1,19 @@
+export type { PlatformCode } from './platforms'
+import type { PlatformCode } from './platforms'
+
 export const appApiKeys = [
   'menus',
   'mappings',
   'platformOptionGroups',
   'logicalOptionGroups',
   'platformMenus',
+  'platformSessions',
+  'platformAuthPreferences',
   'platformImportRuns',
   'platformImportChanges',
+  'catalogWorkspace',
+  'catalogBootstrap',
+  'catalogReviews',
   'agentReports',
   'browserInspectionSnapshots',
   'browserInspector',
@@ -16,7 +24,139 @@ export const appApiKeys = [
 
 export type AppApiKey = (typeof appApiKeys)[number]
 
-export type PlatformCode = 'baemin' | 'coupangeats' | 'ddangyo'
+export type CatalogLifecycleState = 'collecting' | 'reviewing' | 'active'
+export type CatalogSeedMode = 'platform' | 'blank' | 'legacy'
+export type CatalogReviewState = 'open' | 'resolved' | 'deferred' | 'blocked'
+export type CatalogReviewRecommendation =
+  | 'add_to_platform'
+  | 'add_to_canonical'
+  | 'align_to_canonical'
+  | 'keep_platform_value'
+  | 'merge_canonical_only'
+  | 'ignore_source'
+  | 'manual_review'
+export type CatalogReviewKind =
+  | 'missing_on_platform'
+  | 'unmatched_platform_menu'
+  | 'price_outlier'
+  | 'price_policy_pattern'
+  | 'variant_shape_conflict'
+  | 'duplicate_option_group'
+  | 'option_shape_conflict'
+  | 'legacy_noise_candidate'
+  | 'external_drift'
+  | 'lossy_projection'
+  | 'authentication_required'
+
+export interface CatalogWorkspaceRecord {
+  workspaceId: string
+  displayName: string
+  lifecycleState: CatalogLifecycleState
+  seedMode: CatalogSeedMode | null
+  seedPlatformCode: PlatformCode | null
+  canonicalVersion: number
+  activatedAt?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface CatalogReviewItem {
+  reviewItemId: string
+  workspaceId: string
+  fingerprint: string
+  kind: CatalogReviewKind
+  state: CatalogReviewState
+  confidence: number
+  title: string
+  explanation: string
+  recommendation: CatalogReviewRecommendation | null
+  evidenceJson: string
+  canonicalMenuId?: string | null
+  platformCode?: PlatformCode | null
+  sourceEntityId?: string | null
+  intentRuleId?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface CatalogIntentRule {
+  intentRuleId: string
+  workspaceId: string
+  kind: CatalogReviewKind
+  scope: 'entity' | 'platform' | 'category' | 'field' | 'workspace'
+  resolution:
+    | 'apply_recommendation'
+    | 'keep_platform_value'
+    | 'exclude_platform'
+    | 'defer'
+    | 'ignore_source'
+    | 'merge_canonical_only'
+  platformCode?: PlatformCode | null
+  canonicalMenuId?: string | null
+  sourceEntityId?: string | null
+  fieldKey?: string | null
+  categoryKey?: string | null
+  reason: string
+  expiresAt?: string | null
+  isActive: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type PlatformSessionState =
+  | 'unknown'
+  | 'checking'
+  | 'ready'
+  | 'expired'
+  | 'credential_required'
+  | 'challenge_required'
+  | 'credential_rejected'
+  | 'locked_out_risk'
+  | 'unsupported'
+  | 'error'
+
+export interface PlatformSessionStateRecord {
+  workspaceId: string
+  platformCode: PlatformCode
+  state: PlatformSessionState
+  detailCode?: string | null
+  credentialRevision?: string | null
+  lastAttemptAt?: string | null
+  lastReadyAt?: string | null
+  updatedAt?: string
+}
+
+export interface PlatformAuthPreferenceRecord {
+  workspaceId: string
+  platformCode: PlatformCode
+  autoClickLoginButtonConsented: boolean
+  consentUpdatedAt: string | null
+  updatedAt?: string
+}
+
+export interface PlatformAuthProbe {
+  state: PlatformSessionState
+  detailCode?: string | null
+  authenticatedStoreKey?: string | null
+}
+
+export interface CanonicalMenuProjectionInput {
+  menu: MenuRecord
+  mappings: PlatformMenuMappingRecord[]
+  targetPlatformCode: PlatformCode
+}
+
+export interface PlatformProjectionResult {
+  disposition: 'exact' | 'transformed' | 'lossy' | 'unsupported' | 'unverified'
+  projectedMenu: SyncPreviewItem | null
+  issues: string[]
+}
+
+export interface PlatformWriteVerification {
+  status: 'verified' | 'mismatch' | 'unknown'
+  issues: string[]
+}
+
 export type CatalogPresenceStatus =
   | 'present'
   | 'missing_suspected'
@@ -25,7 +165,23 @@ export type CatalogPresenceStatus =
 
 export type CatalogEntityType = 'menu' | 'option_group'
 export type PlatformImportRunStatus = 'running' | 'completed' | 'partial_failed'
-export type PlatformImportFetchMode = 'managed_browser'
+export type PlatformImportFetchMode =
+  | 'embedded_browser'
+  | 'managed_browser'
+  | 'api_capture'
+  | 'dom_fallback'
+export type PlatformCatalogCompletenessState = 'complete' | 'incomplete' | 'unknown'
+
+export interface PlatformCatalogCompleteness {
+  menuCatalog: PlatformCatalogCompletenessState
+  optionCatalog: PlatformCatalogCompletenessState
+  optionBindings: PlatformCatalogCompletenessState
+  expectedMenuCount?: number
+  collectedMenuCount: number
+  expectedOptionGroupCount?: number
+  collectedOptionGroupCount: number
+  issues: string[]
+}
 export type PlatformImportChangeType =
   | 'created'
   | 'missing_suspected'
@@ -85,6 +241,52 @@ export interface PlatformMenuMappingRecord {
   matchedBy: 'auto' | 'manual'
   isConfirmed: number
   lastVerifiedAt?: string | null
+}
+
+export interface CatalogBootstrapDraftMenu {
+  menuId: string
+  sourcePlatformCode: PlatformCode | null
+  sourcePlatformMenuId: string | null
+  baseName: string
+  basePrice: number
+  basePriceVariants: PlatformMenuPriceVariantRecord[] | null
+  disposition: 'include' | 'ignore' | 'undecided'
+}
+
+export interface CatalogBootstrapPreviewInput {
+  workspaceId: string
+  seedMode: Exclude<CatalogSeedMode, 'legacy'>
+  seedPlatformCode: PlatformCode | null
+}
+
+export interface CatalogBootstrapPreview {
+  workspaceId: string
+  seedMode: Exclude<CatalogSeedMode, 'legacy'>
+  seedPlatformCode: PlatformCode | null
+  previewFingerprint: string
+  draftMenus: CatalogBootstrapDraftMenu[]
+  suggestedMappings: PlatformMenuMappingRecord[]
+  reviewItems: CatalogReviewItem[]
+}
+
+export interface CatalogBootstrapActivationInput {
+  workspaceId: string
+  seedMode: Exclude<CatalogSeedMode, 'legacy'>
+  seedPlatformCode: PlatformCode | null
+  previewFingerprint: string
+  menus: MenuRecord[]
+  ignoredSourceEntityIds: string[]
+  confirmedMappings: PlatformMenuMappingRecord[]
+  remainingReviewItems: CatalogReviewItem[]
+}
+
+export interface CatalogReviewResolutionInput {
+  reviewItemIds: string[]
+  resolution: CatalogIntentRule['resolution']
+  remember: boolean
+  scope: CatalogIntentRule['scope']
+  reason: string
+  expiresAt?: string | null
 }
 
 export interface PlatformMenuCatalogRecord {
@@ -490,6 +692,10 @@ export interface BrowserInspectionSnapshot {
   fields: BrowserInspectionField[]
   apiEvents: BrowserInspectionApiEvent[]
   screenshotDataUrl?: string | null
+  visiblePasswordInputCount?: number
+  loginMarkerDetected?: boolean
+  logoutMarkerDetected?: boolean
+  managementMarkerDetected?: boolean
 }
 
 export interface BrowserInspectorStatus {
@@ -499,6 +705,7 @@ export interface BrowserInspectorStatus {
   chromeAvailable?: boolean
   chromePath?: string | null
   chromeProfilePath?: string | null
+  passwordManagerLoginReady?: boolean
   managedChromeRunning?: boolean
   lastLaunchUrl?: string | null
   chromeError?: string | null

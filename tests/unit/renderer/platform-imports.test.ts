@@ -14,6 +14,10 @@ describe('formatPlatformImportError', () => {
     expect(formatPlatformImportError('coupangeats', 'coupangeats_login_script_error')).toBe(
       '쿠팡이츠 로그인 화면이 오류로 멈췄습니다. 잠시 후 다시 시도해 주세요.'
     )
+
+    expect(formatPlatformImportError('coupangeats', 'coupangeats_managed_session_unavailable')).toBe(
+      '로그인된 쿠팡이츠 전용 Chrome 메뉴 화면을 읽지 못했습니다. 로그인 상태와 메뉴 화면을 확인해 주세요.'
+    )
   })
 
   it('builds import descriptions with option counts, duplicate cleanup, and managed-browser mode', () => {

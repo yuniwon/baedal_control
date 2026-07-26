@@ -6,11 +6,14 @@ import type {
   MenuRecord,
   PlatformImportChangeRecord,
   PlatformImportRunRecord,
+  PlatformCode,
   SyncPreviewResult
 } from '../../../shared/contracts'
+import { PLATFORM_CODES } from '../../../shared/platforms'
 import { appApi } from '../lib/api'
 import { formatSyncSummary } from '../lib/format-sync-summary'
 import { SyncPreviewDialog } from '../components/SyncPreviewDialog'
+import { ReviewInboxPanel } from '../components/ReviewInboxPanel'
 import { formatNeedsReviewLabel, getPlatformLabel } from '../lib/menu-source-labels'
 import {
   buildCompactPlatformImportRunDescription,
@@ -21,7 +24,7 @@ import {
 } from '../lib/platform-imports'
 
 type PlatformStatus = {
-  platformCode: 'baemin' | 'coupangeats' | 'ddangyo'
+  platformCode: PlatformCode
   name: string
   connected: boolean
 }
@@ -49,11 +52,11 @@ const getActionPriorityLabel = (priority: AgentActionPlanItem['priority']) => {
   return '참고'
 }
 
-const defaultPlatformStatuses: PlatformStatus[] = [
-  { platformCode: 'baemin', name: '배민', connected: false },
-  { platformCode: 'coupangeats', name: '쿠팡이츠', connected: false },
-  { platformCode: 'ddangyo', name: '땡겨요', connected: false }
-]
+const defaultPlatformStatuses: PlatformStatus[] = PLATFORM_CODES.map((platformCode) => ({
+  platformCode,
+  name: getPlatformLabel(platformCode),
+  connected: false
+}))
 
 const getImportChangeLabel = (change: PlatformImportChangeRecord) => {
   const entityLabel = change.entityType === 'menu' ? '메뉴' : '옵션'
@@ -221,6 +224,8 @@ export const DashboardPage = () => {
         <h1>홈</h1>
         <p>지금 처리할 일과 플랫폼 상태만 먼저 보고, 세부 변화는 필요할 때 펼쳐 확인합니다.</p>
       </header>
+
+      <ReviewInboxPanel />
 
       <div className="summary-grid">
         <article className="summary-card">

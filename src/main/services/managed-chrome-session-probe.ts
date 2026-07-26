@@ -2,9 +2,9 @@ import { URL } from 'node:url'
 import type {
   BrowserInspectionPageKind,
   ManagedChromeSessionStatus,
-  ManagedChromeTabInfo,
-  PlatformCode
+  ManagedChromeTabInfo
 } from '../../shared/contracts'
+import { inferPlatformCodeFromHost } from '../../shared/platforms'
 
 interface ManagedChromeSessionProbeOptions {
   endpointUrl?: string
@@ -16,22 +16,6 @@ interface DevtoolsListEntry {
   title?: string
   type?: string
   url?: string
-}
-
-const inferPlatformCode = (host: string): PlatformCode | null => {
-  if (host.includes('baemin.com')) {
-    return 'baemin'
-  }
-
-  if (host.includes('coupangeats.com')) {
-    return 'coupangeats'
-  }
-
-  if (host.includes('ddangyo.com')) {
-    return 'ddangyo'
-  }
-
-  return null
 }
 
 const inferPageKind = (url: string): BrowserInspectionPageKind => {
@@ -78,7 +62,7 @@ export class ManagedChromeSessionProbe {
             url: parsedUrl.url,
             type: entry.type ?? 'page',
             host: parsedUrl.host,
-            platformCode: inferPlatformCode(parsedUrl.host),
+            platformCode: inferPlatformCodeFromHost(parsedUrl.host),
             pageKind: inferPageKind(parsedUrl.url)
           }
         })

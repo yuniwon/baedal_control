@@ -4,6 +4,7 @@ import type {
   PlatformMappingStatus,
   SyncPreviewNeedsReview
 } from '../../../shared/contracts'
+import { getPlatformLabel as getSharedPlatformLabel } from '../../../shared/platforms'
 
 type MenuSourceStatusInput = {
   mappingStatus?: PlatformMappingStatus | null
@@ -12,7 +13,7 @@ type MenuSourceStatusInput = {
 }
 
 export const getPlatformLabel = (platformCode: PlatformCode) =>
-  platformCode === 'baemin' ? '배민' : platformCode === 'coupangeats' ? '쿠팡이츠' : '땡겨요'
+  getSharedPlatformLabel(platformCode)
 
 const dateTimeFormatter = new Intl.DateTimeFormat('ko-KR', {
   year: 'numeric',

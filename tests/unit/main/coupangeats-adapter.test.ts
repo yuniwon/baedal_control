@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { launchPlaywrightChromium } = vi.hoisted(() => ({
   launchPlaywrightChromium: vi.fn()
@@ -11,6 +11,10 @@ vi.mock('../../../src/main/services/playwright-runtime', () => ({
 import { CoupangEatsAdapter } from '../../../src/main/platforms/coupangeats/adapter'
 
 describe('CoupangEatsAdapter', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('delegates managed-browser execution items to the managed browser updater', async () => {
     const applyManagedBrowserUpdate = vi.fn().mockResolvedValue(undefined)
     const adapter = new CoupangEatsAdapter(
@@ -39,46 +43,22 @@ describe('CoupangEatsAdapter', () => {
     expect(applyManagedBrowserUpdate).toHaveBeenCalledWith(item)
   })
 
-  it('attaches inspection and closes the browser when the login form never appears', async () => {
-    const fakePage = {
-      goto: vi.fn().mockResolvedValue(undefined),
-      locator: vi.fn().mockReturnValue({
-        innerText: vi.fn().mockResolvedValue('쿠팡이츠 로그인')
-      }),
-      screenshot: vi.fn().mockResolvedValue(Buffer.from('fake-image')),
-      title: vi.fn().mockResolvedValue('쿠팡이츠 로그인'),
-      url: vi.fn().mockReturnValue('https://store.coupangeats.com/merchant/login'),
-      waitForSelector: vi
-        .fn()
-        .mockRejectedValue(new Error('page.waitForSelector: Timeout 30000ms exceeded. waiting for locator(\'#loginId\')'))
-    }
-
-    const close = vi.fn().mockResolvedValue(undefined)
-    launchPlaywrightChromium.mockResolvedValue({
-      close,
-      newPage: async () => fakePage
-    })
-
-    const adapter = new CoupangEatsAdapter({
-      username: 'owner-id',
-      password: 'secret'
-    })
+  it('uses only the managed Chrome session and never launches Playwright login', async () => {
+    const adapter = new CoupangEatsAdapter(
+      { username: 'sentinel-owner', password: 'sentinel-password' },
+      'https://store.coupangeats.com/',
+      { captureManagedBrowserSnapshots: vi.fn().mockResolvedValue([]) }
+    )
 
     await expect(adapter.fetchMenusWithInspection()).rejects.toMatchObject({
-      message: expect.stringContaining('page.waitForSelector: Timeout'),
+      message: 'coupangeats_managed_session_unavailable',
       inspection: expect.objectContaining({
         platformCode: 'coupangeats',
-        steps: expect.arrayContaining([
-          expect.objectContaining({
-            kind: 'navigation',
-            title: '로그인 페이지',
-            pageTitle: '쿠팡이츠 로그인'
-          })
-        ])
+        steps: []
       })
     })
 
-    expect(close).toHaveBeenCalledTimes(1)
+    expect(launchPlaywrightChromium).not.toHaveBeenCalled()
   })
 
   it('falls back to the managed browser snapshot path when login is denied and returns menu and option data', async () => {
@@ -251,6 +231,11 @@ describe('CoupangEatsAdapter', () => {
             optionGroupName: '기본'
           })
         ],
+        completeness: expect.objectContaining({
+          menuCatalog: 'complete',
+          optionCatalog: 'complete',
+          optionBindings: 'complete'
+        }),
         inspection: expect.objectContaining({
           steps: expect.arrayContaining([
             expect.objectContaining({
@@ -262,6 +247,7 @@ describe('CoupangEatsAdapter', () => {
       })
     )
 
-    expect(close).toHaveBeenCalledTimes(1)
+    expect(launchPlaywrightChromium).not.toHaveBeenCalled()
+    expect(close).not.toHaveBeenCalled()
   })
 })
