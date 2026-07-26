@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 const {
@@ -10,7 +10,15 @@ const {
   getBrowserInspectorStatus,
   launchManagedChrome,
   getManagedChromeSession,
-  captureManagedChromeTab
+  captureManagedChromeTab,
+  listPlatformSessions,
+  checkPlatformSession,
+  connectPlatformSession,
+  resumePlatformSession,
+  listPlatformAuthPreferences,
+  setAutoClickConsent,
+  getLegacyPlatformCredentialStatus,
+  clearLegacyPlatformCredential
 } = vi.hoisted(() => ({
   listPlatformCredentials: vi.fn().mockResolvedValue([
     { platformCode: 'baemin', connected: true, username: 'owner-id', password: 'pw1' },
@@ -130,8 +138,8 @@ const {
     managedChromeRunning: true,
     lastLaunchUrl: 'https://store.coupangeats.com/merchant/menu',
     chromeError: null,
-    managedChromeAutoLoginStatus: 'submitted',
-    managedChromeAutoLoginMessage: '저장된 쿠팡이츠 계정으로 로그인을 시도했습니다.'
+    managedChromeAutoLoginStatus: 'already_authenticated',
+    managedChromeAutoLoginMessage: '쿠팡이츠 로그인 상태를 확인했습니다.'
   }),
   getManagedChromeSession: vi.fn().mockResolvedValue({
     endpointUrl: 'http://127.0.0.1:39482',
@@ -177,7 +185,57 @@ const {
     fields: [],
     apiEvents: [],
     screenshotDataUrl: 'data:image/png;base64,ZmFrZQ=='
-  })
+  }),
+  listPlatformSessions: vi.fn().mockResolvedValue([
+    {
+      workspaceId: 'default',
+      platformCode: 'baemin',
+      state: 'ready',
+      detailCode: null
+    },
+    {
+      workspaceId: 'default',
+      platformCode: 'coupangeats',
+      state: 'challenge_required',
+      detailCode: 'otp_required'
+    }
+  ]),
+  checkPlatformSession: vi.fn().mockResolvedValue({
+    workspaceId: 'default',
+    platformCode: 'baemin',
+    state: 'ready',
+    detailCode: null
+  }),
+  connectPlatformSession: vi.fn().mockResolvedValue({
+    workspaceId: 'default',
+    platformCode: 'coupangeats',
+    state: 'challenge_required',
+    detailCode: 'otp_required'
+  }),
+  resumePlatformSession: vi.fn().mockResolvedValue({
+    workspaceId: 'default',
+    platformCode: 'coupangeats',
+    state: 'ready',
+    detailCode: null
+  }),
+  listPlatformAuthPreferences: vi.fn().mockResolvedValue([
+    {
+      workspaceId: 'default',
+      platformCode: 'coupangeats',
+      autoClickLoginButtonConsented: false,
+      consentUpdatedAt: null
+    }
+  ]),
+  setAutoClickConsent: vi.fn().mockImplementation((platformCode, consented) =>
+    Promise.resolve({
+      workspaceId: 'default',
+      platformCode,
+      autoClickLoginButtonConsented: consented,
+      consentUpdatedAt: '2026-07-26T00:00:00.000Z'
+    })
+  ),
+  getLegacyPlatformCredentialStatus: vi.fn().mockResolvedValue({ stored: false }),
+  clearLegacyPlatformCredential: vi.fn().mockResolvedValue({ ok: true })
 }))
 
 vi.mock('../../../src/renderer/src/lib/api', () => ({
@@ -194,7 +252,19 @@ vi.mock('../../../src/renderer/src/lib/api', () => ({
       getPlatformCredentialStatus: vi.fn(),
       listPlatformCredentials,
       savePlatformCredential,
+      getLegacyPlatformCredentialStatus,
+      clearLegacyPlatformCredential,
       importPlatformMenus
+    },
+    platformSessions: {
+      list: listPlatformSessions,
+      check: checkPlatformSession,
+      connect: connectPlatformSession,
+      resumeAfterUserAction: resumePlatformSession
+    },
+    platformAuthPreferences: {
+      list: listPlatformAuthPreferences,
+      setAutoClickConsent
     },
     syncRuns: {
       list: vi.fn()
@@ -224,6 +294,82 @@ vi.mock('../../../src/renderer/src/lib/api', () => ({
 import { SettingsPage } from '../../../src/renderer/src/pages/SettingsPage'
 
 describe('SettingsPage', () => {
+  it('checks unknown sessions on mount without attempting credential login', async () => {
+    listPlatformSessions.mockResolvedValueOnce([
+      {
+        workspaceId: 'default',
+        platformCode: 'baemin',
+        state: 'unknown',
+        detailCode: null
+      }
+    ])
+    checkPlatformSession.mockResolvedValueOnce({
+      workspaceId: 'default',
+      platformCode: 'baemin',
+      state: 'ready',
+      detailCode: null
+    })
+
+    render(<SettingsPage />)
+
+    await waitFor(() => expect(checkPlatformSession).toHaveBeenCalledWith('baemin'))
+    expect(await screen.findByText('연결됨')).toBeTruthy()
+    expect(connectPlatformSession).not.toHaveBeenCalled()
+  })
+
+  it('shows one user action for an OTP challenge and no automatic retry button', async () => {
+    render(<SettingsPage />)
+
+    expect(
+      await screen.findByText('쿠팡이츠에서 OTP 인증을 완료한 뒤 인증 완료 확인을 눌러 주세요.')
+    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: '인증 화면 열기' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '인증 완료 확인' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '자동 재시도' })).toBeNull()
+  })
+
+  it('uses Chrome Password Manager for Coupang Eats without app credential fields', async () => {
+    render(<SettingsPage />)
+
+    const card = await screen.findByTestId('platform-auth-coupangeats')
+    expect(
+      within(card).getByText(
+        '쿠팡이츠 로그인 정보는 앱에 저장하지 않습니다. 전용 Google Chrome 프로필과 Chrome 비밀번호 관리자를 사용합니다.'
+      )
+    ).toBeTruthy()
+    expect(within(card).queryByPlaceholderText('아이디')).toBeNull()
+    expect(within(card).queryByPlaceholderText('비밀번호')).toBeNull()
+    expect(within(card).queryByRole('button', { name: '저장하고 읽기' })).toBeNull()
+  })
+
+  it('stores explicit consent before allowing the Coupang Eats login-button click', async () => {
+    render(<SettingsPage />)
+
+    const consent = await screen.findByRole('checkbox', {
+      name: '쿠팡이츠 로그인 버튼 1회 자동 클릭 허용'
+    })
+    fireEvent.click(consent)
+
+    await waitFor(() => {
+      expect(setAutoClickConsent).toHaveBeenCalledWith('coupangeats', true)
+    })
+    expect((consent as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('renders import controls for all six delivery platforms', async () => {
+    render(<SettingsPage />)
+
+    expect(await screen.findByText('배민')).toBeTruthy()
+    expect(screen.getByText('요기요')).toBeTruthy()
+    expect(screen.getAllByText('쿠팡이츠').length).toBeGreaterThan(0)
+    expect(screen.getByText('땡겨요')).toBeTruthy()
+    expect(screen.getByText('배달특급')).toBeTruthy()
+    expect(screen.getByText('네이버주문')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '요기요 로그인 열기' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '배달특급 로그인 열기' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '네이버주문 로그인 열기' })).toBeTruthy()
+  })
+
   it('reloads saved platform credentials when the page mounts again', async () => {
     render(<SettingsPage />)
 
@@ -420,9 +566,7 @@ describe('SettingsPage', () => {
     })
 
     expect(await screen.findByText('전용 프로필 실행 중')).toBeTruthy()
-    expect(
-      screen.getByText('저장된 쿠팡이츠 계정으로 로그인을 시도했습니다.')
-    ).toBeTruthy()
+    expect(screen.getByText('쿠팡이츠 로그인 상태를 확인했습니다.')).toBeTruthy()
     expect(
       screen.getByText('C:\\Users\\WON2\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe')
     ).toBeTruthy()

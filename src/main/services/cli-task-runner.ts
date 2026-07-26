@@ -14,6 +14,7 @@ import type {
   SyncPreviewNeedsReview,
   SyncPreviewResult
 } from '../../shared/contracts'
+import { isPlatformCode } from '../../shared/platforms'
 
 interface CliTaskRunnerDependencies {
   getSyncPreview: () => Promise<SyncPreviewResult> | SyncPreviewResult
@@ -45,12 +46,16 @@ interface CliTaskRunnerDependencies {
   platformMenuImporter?: {
     importPlatform: (platformCode: PlatformCode) => Promise<{ summary: PlatformImportSummary }>
   }
+  platformSessionOrchestrator?: {
+    connect: (platformCode: PlatformCode) => Promise<{ state: string }>
+  }
   platformFlowInspector?: {
     inspectCreateMenuFlow: (
       platformCode: PlatformCode
     ) => Promise<PlatformInspectionReport> | PlatformInspectionReport
   }
   hasCredential?: (platformCode: PlatformCode) => boolean
+  requiresApplicationCredential?: (platformCode: PlatformCode) => boolean
 }
 
 interface CliTaskRunnerResult {
@@ -66,9 +71,6 @@ interface ParsedCliArgs {
   reason: SyncPreviewNeedsReview['reason'] | null
   limit: number | null
 }
-
-const isPlatformCode = (value: string | null): value is PlatformCode =>
-  value === 'baemin' || value === 'coupangeats' || value === 'ddangyo'
 
 const isNeedsReviewReason = (
   value: string | null
@@ -355,20 +357,52 @@ export class CliTaskRunner {
         }
       }
 
-      if (this.dependencies.hasCredential && !this.dependencies.hasCredential(parsed.platformCode)) {
+      const requiresCredential =
+        this.dependencies.requiresApplicationCredential?.(parsed.platformCode) ??
+        Boolean(this.dependencies.hasCredential)
+      if (
+        requiresCredential &&
+        this.dependencies.hasCredential &&
+        !this.dependencies.hasCredential(parsed.platformCode)
+      ) {
         return {
           exitCode: 1,
           payload: { task: parsed.task, error: 'credential_not_found' }
         }
       }
 
-      const result = await this.dependencies.platformMenuImporter.importPlatform(parsed.platformCode)
-      return {
-        exitCode: 0,
-        payload: {
-          task: parsed.task,
-          platformCode: parsed.platformCode,
-          summary: result.summary
+      try {
+        const sessionState = await this.dependencies.platformSessionOrchestrator?.connect(
+          parsed.platformCode
+        )
+        if (sessionState && sessionState.state !== 'ready') {
+          return {
+            exitCode: 1,
+            payload: {
+              task: parsed.task,
+              platformCode: parsed.platformCode,
+              error: `platform_session_not_ready:${sessionState.state}`
+            }
+          }
+        }
+
+        const result = await this.dependencies.platformMenuImporter.importPlatform(parsed.platformCode)
+        return {
+          exitCode: 0,
+          payload: {
+            task: parsed.task,
+            platformCode: parsed.platformCode,
+            summary: result.summary
+          }
+        }
+      } catch (error) {
+        return {
+          exitCode: 1,
+          payload: {
+            task: parsed.task,
+            platformCode: parsed.platformCode,
+            error: error instanceof Error ? error.message : 'unknown_error'
+          }
         }
       }
     }

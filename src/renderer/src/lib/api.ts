@@ -3,12 +3,21 @@ import type {
   AgentReportEnvelope,
   BrowserInspectionSnapshot,
   BrowserInspectorStatus,
+  CatalogBootstrapActivationInput,
+  CatalogBootstrapPreview,
+  CatalogBootstrapPreviewInput,
+  CatalogReviewItem,
+  CatalogReviewResolutionInput,
+  CatalogWorkspaceRecord,
   LogicalOptionGroupRecord,
   ManagedChromeSessionStatus,
   PlatformImportChangeRecord,
   PlatformImportRunRecord,
+  PlatformAuthPreferenceRecord,
+  PlatformCode,
   PlatformMenuCatalogRecord,
   PlatformOptionGroupRecord,
+  PlatformSessionStateRecord,
   PlatformImportSummary,
   PlatformInspectionReport,
   SyncRunRecord
@@ -25,18 +34,24 @@ declare global {
       settings: {
         getPlatformCredentialStatus: () => Promise<unknown[]>
         listPlatformCredentials: () => Promise<unknown[]>
+        getLegacyPlatformCredentialStatus: (
+          platformCode: PlatformCode
+        ) => Promise<{ stored: boolean }>
+        clearLegacyPlatformCredential: (platformCode: PlatformCode) => Promise<{ ok: true }>
         savePlatformCredential: (payload: {
           platformCode: string
           username: string
           password: string
         }) => Promise<{
           ok: true
+          sessionState?: PlatformSessionStateRecord
           importSummary?: PlatformImportSummary
           importInspection?: PlatformInspectionReport
           importError?: string
         }>
         importPlatformMenus: (payload: { platformCode: string }) => Promise<{
           ok: true
+          sessionState?: PlatformSessionStateRecord
           importSummary?: PlatformImportSummary
           importInspection?: PlatformInspectionReport
           importError?: string
@@ -64,11 +79,38 @@ declare global {
       platformMenus: {
         list: () => Promise<PlatformMenuCatalogRecord[]>
       }
+      platformSessions: {
+        list: () => Promise<PlatformSessionStateRecord[]>
+        check: (platformCode: PlatformCode) => Promise<PlatformSessionStateRecord>
+        connect: (platformCode: PlatformCode) => Promise<PlatformSessionStateRecord>
+        resumeAfterUserAction: (platformCode: PlatformCode) => Promise<PlatformSessionStateRecord>
+      }
+      platformAuthPreferences: {
+        list: () => Promise<PlatformAuthPreferenceRecord[]>
+        setAutoClickConsent: (
+          platformCode: PlatformCode,
+          consented: boolean
+        ) => Promise<PlatformAuthPreferenceRecord>
+      }
       platformImportRuns: {
         list: () => Promise<PlatformImportRunRecord[]>
       }
       platformImportChanges: {
         listLatest: (limit?: number) => Promise<PlatformImportChangeRecord[]>
+      }
+      catalogWorkspace: {
+        get: () => Promise<CatalogWorkspaceRecord>
+      }
+      catalogBootstrap: {
+        preview: (payload: CatalogBootstrapPreviewInput) => Promise<CatalogBootstrapPreview>
+        activate: (payload: CatalogBootstrapActivationInput) => Promise<CatalogWorkspaceRecord>
+      }
+      catalogReviews: {
+        listOpen: () => Promise<CatalogReviewItem[]>
+        resolve: (payload: CatalogReviewResolutionInput) => Promise<{
+          ok: true
+          resolvedCount: number
+        }>
       }
       agentReports: {
         getNextActionPlan: (filters?: unknown) => Promise<AgentReportEnvelope<AgentActionPlanReport>>
@@ -82,7 +124,7 @@ declare global {
         captureManagedChromeTab: (payload: { tabId: string }) => Promise<BrowserInspectionSnapshot>
         launchManagedChrome: (payload?: {
           url?: string
-          platformCode?: 'baemin' | 'coupangeats' | 'ddangyo'
+          platformCode?: PlatformCode
           autoLogin?: boolean
         }) => Promise<BrowserInspectorStatus>
       }
@@ -103,6 +145,8 @@ export const appApi: AppApi = window.appApi ?? {
   settings: {
     getPlatformCredentialStatus: () => noopPromise([] as unknown[]),
     listPlatformCredentials: () => noopPromise([] as unknown[]),
+    getLegacyPlatformCredentialStatus: () => noopPromise({ stored: false }),
+    clearLegacyPlatformCredential: () => noopPromise({ ok: true as const }),
     savePlatformCredential: () =>
       noopPromise({
         ok: true as const,
@@ -138,11 +182,66 @@ export const appApi: AppApi = window.appApi ?? {
   platformMenus: {
     list: () => noopPromise([] as PlatformMenuCatalogRecord[])
   },
+  platformSessions: {
+    list: () => noopPromise([] as PlatformSessionStateRecord[]),
+    check: (platformCode) =>
+      noopPromise({ workspaceId: 'default', platformCode, state: 'unknown' } as PlatformSessionStateRecord),
+    connect: (platformCode) =>
+      noopPromise({ workspaceId: 'default', platformCode, state: 'unknown' } as PlatformSessionStateRecord),
+    resumeAfterUserAction: (platformCode) =>
+      noopPromise({ workspaceId: 'default', platformCode, state: 'unknown' } as PlatformSessionStateRecord)
+  },
+  platformAuthPreferences: {
+    list: () => noopPromise([] as PlatformAuthPreferenceRecord[]),
+    setAutoClickConsent: (platformCode, consented) =>
+      noopPromise({
+        workspaceId: 'default',
+        platformCode,
+        autoClickLoginButtonConsented: consented,
+        consentUpdatedAt: null
+      } as PlatformAuthPreferenceRecord)
+  },
   platformImportRuns: {
     list: () => noopPromise([] as PlatformImportRunRecord[])
   },
   platformImportChanges: {
     listLatest: () => noopPromise([] as PlatformImportChangeRecord[])
+  },
+  catalogWorkspace: {
+    get: () =>
+      noopPromise({
+        workspaceId: 'default',
+        displayName: '기본 매장',
+        lifecycleState: 'collecting',
+        seedMode: null,
+        seedPlatformCode: null,
+        canonicalVersion: 0
+      } as CatalogWorkspaceRecord)
+  },
+  catalogBootstrap: {
+    preview: (payload) =>
+      noopPromise({
+        workspaceId: payload.workspaceId,
+        seedMode: payload.seedMode,
+        seedPlatformCode: payload.seedPlatformCode,
+        previewFingerprint: '',
+        draftMenus: [],
+        suggestedMappings: [],
+        reviewItems: []
+      } as CatalogBootstrapPreview),
+    activate: (payload) =>
+      noopPromise({
+        workspaceId: payload.workspaceId,
+        displayName: '기본 매장',
+        lifecycleState: 'active',
+        seedMode: payload.seedMode,
+        seedPlatformCode: payload.seedPlatformCode,
+        canonicalVersion: 1
+      } as CatalogWorkspaceRecord)
+  },
+  catalogReviews: {
+    listOpen: () => noopPromise([] as CatalogReviewItem[]),
+    resolve: (payload) => noopPromise({ ok: true as const, resolvedCount: payload.reviewItemIds.length })
   },
   agentReports: {
     getNextActionPlan: () =>

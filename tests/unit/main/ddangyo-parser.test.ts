@@ -39,7 +39,7 @@ describe('parseDdangyoMenus', () => {
           }
         ],
         platformMenuGroupName: '피자 메뉴',
-        platformMenuStatus: '대표메뉴 · 품절 · 배달숨김',
+        platformMenuStatus: '판매중',
         platformMenuPriceSummary:
           'F사이즈 · 배달 32,900원 · 포장 32,900원 · 매장식사 32,900원'
       },
@@ -90,5 +90,21 @@ describe('parseDdangyoMenus', () => {
           '500ml · 배달 1,800원 · 포장 1,800원 / 1.25L · 배달 2,800원 · 포장 2,800원'
       }
     ])
+  })
+
+  it('does not concatenate action labels into the actual sale status', () => {
+    const html = `
+      <ul id="mf_wfm_contents_wfm_tabcontents_gen_menu">
+        <li data-menu-status="HIDDEN">
+          <span id="row_spa_menuId">42</span>
+          <span id="row_tbx_menuNm">숨김 메뉴</span>
+          <div class="actions">대표메뉴 · 품절 · 배달숨김 · 포장숨김</div>
+          <div id="row_gen_menuPrc"><div>배달 : 19,000원</div></div>
+        </li>
+      </ul>`
+
+    expect(parseDdangyoMenus(html)[0]).toEqual(
+      expect.objectContaining({ platformMenuStatus: '숨김' })
+    )
   })
 })

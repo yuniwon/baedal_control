@@ -6,8 +6,11 @@ import type {
 
 const allowedChannelsByPlatform: Record<PlatformCode, PlatformMenuPriceChannelCode[]> = {
   baemin: ['delivery', 'pickup'],
+  yogiyo: ['base'],
   coupangeats: ['base'],
-  ddangyo: ['delivery', 'pickup', 'dine_in']
+  ddangyo: ['delivery', 'pickup', 'dine_in'],
+  deliveryspecial: ['base'],
+  naverorder: ['base']
 }
 
 export const projectPlatformPriceVariants = (

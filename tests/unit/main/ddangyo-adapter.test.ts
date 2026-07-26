@@ -16,6 +16,29 @@ describe('DdangyoAdapter', () => {
     launchPlaywrightChromium.mockReset()
   })
 
+  it('reads from the authenticated managed Chrome session without replaying credentials', async () => {
+    const readManagedBrowserCatalog = vi.fn().mockResolvedValue([
+      {
+        platformMenuId: '10000001',
+        platformMenuName: '콰트로피자',
+        currentPrice: 23900
+      }
+    ])
+    const adapter = new DdangyoAdapter(
+      { username: 'owner-id', password: 'secret' },
+      undefined,
+      { readManagedBrowserCatalog }
+    )
+
+    await expect(adapter.fetchMenusWithInspection()).resolves.toMatchObject({
+      menus: [{ platformMenuId: '10000001', platformMenuName: '콰트로피자' }],
+      rawMenuCount: 1,
+      fetchMode: 'managed_browser'
+    })
+    expect(readManagedBrowserCatalog).toHaveBeenCalledTimes(1)
+    expect(launchPlaywrightChromium).not.toHaveBeenCalled()
+  })
+
   it('skips browser work when neither the name nor price changed', async () => {
     const adapter = new DdangyoAdapter({
       username: 'owner-id',

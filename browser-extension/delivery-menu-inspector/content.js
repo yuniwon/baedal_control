@@ -68,11 +68,20 @@
 
   const resolvePlatformCode = (href) => {
     const host = new URL(href).host
+    if (host.includes('yogiyo')) {
+      return 'yogiyo'
+    }
     if (host.includes('coupangeats')) {
       return 'coupangeats'
     }
     if (host.includes('ddangyo')) {
       return 'ddangyo'
+    }
+    if (host.includes('partner.payco') || host.includes('specialdelivery')) {
+      return 'deliveryspecial'
+    }
+    if (host.includes('smartplace.naver')) {
+      return 'naverorder'
     }
     return 'baemin'
   }
@@ -323,6 +332,15 @@
     element.getAttribute('aria-hidden') === 'true' ||
     element.getAttribute('type') === 'hidden'
 
+  const isVisibleElement = (element) => {
+    if (isHiddenInput(element)) {
+      return false
+    }
+
+    const style = window.getComputedStyle(element)
+    return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0'
+  }
+
   const getInputPayload = (root) => {
     const inputs = Array.from(root.querySelectorAll('input, textarea, select')).filter(
       (element) => !isHiddenInput(element)
@@ -342,31 +360,39 @@
         .filter(Boolean)
     ).slice(0, 20)
 
-    const fields = inputs
-      .map((element) => {
-        const name = normalizeText(
-          element.getAttribute('aria-label') ||
-            element.getAttribute('placeholder') ||
-            findLabelText(element) ||
-            element.getAttribute('name') ||
-            element.id ||
-            ''
-        )
-        const value = normalizeText(element.value || '')
+    return { inputHints, fields: [] }
+  }
 
-        if (!name || !value) {
-          return null
-        }
+  const getAuthEvidence = (root) => {
+    const visiblePasswordInputCount = Array.from(
+      root.querySelectorAll('input[type="password"]')
+    ).filter(isVisibleElement).length
+    const controlLabels = uniqueStrings(
+      Array.from(root.querySelectorAll('button, a, [role="button"]')).map((element) =>
+        normalizeText(element.textContent || element.getAttribute('aria-label') || '')
+      )
+    )
+    const loginMarkerDetected =
+      visiblePasswordInputCount > 0 ||
+      /(?:^|\s)(?:로그인|log in|sign in)(?:\s|$)/i.test(controlLabels.join(' ')) ||
+      /\/(?:login|signin)(?:[/?#]|$)/i.test(window.location.href)
+    const logoutMarkerDetected = controlLabels.some((label) =>
+      /(?:로그아웃|log out|sign out)/i.test(label)
+    )
+    const managementMarkerDetected =
+      !loginMarkerDetected &&
+      Boolean(
+        root.querySelector('main, [role="main"]') &&
+          (PAGE_HEADING_PATTERN.test(normalizeText(root.textContent || '')) ||
+            getPageHint(window.location.href) !== 'unknown')
+      )
 
-        return {
-          name,
-          value,
-          source: 'input'
-        }
-      })
-      .filter((field) => field !== null)
-
-    return { inputHints, fields }
+    return {
+      visiblePasswordInputCount,
+      loginMarkerDetected,
+      logoutMarkerDetected,
+      managementMarkerDetected
+    }
   }
 
   const getPageKind = ({ menuItems, optionGroupNames, inputHints, buttonLabels }) => {
@@ -412,6 +438,7 @@
         )
     ).slice(0, 20)
     const { inputHints, fields: inputFields } = getInputPayload(root)
+    const authEvidence = getAuthEvidence(root)
     const menuFields = menuItems.flatMap((item, index) => [
       {
         name: `menu[${index}].name`,
@@ -457,7 +484,8 @@
       inputHints,
       fields: [...menuFields, ...inputFields],
       apiEvents,
-      screenshotDataUrl: null
+      screenshotDataUrl: null,
+      ...authEvidence
     }
   }
 
@@ -561,7 +589,13 @@
       apiEvents: uniqueBy(
         snapshots.flatMap((snapshot) => snapshot.apiEvents || []),
         (event) => `${event.url}|${event.method}|${event.status || ''}|${event.capturedAt}`
-      )
+      ),
+      visiblePasswordInputCount: Math.max(
+        ...snapshots.map((snapshot) => snapshot.visiblePasswordInputCount || 0)
+      ),
+      loginMarkerDetected: snapshots.some((snapshot) => snapshot.loginMarkerDetected),
+      logoutMarkerDetected: snapshots.some((snapshot) => snapshot.logoutMarkerDetected),
+      managementMarkerDetected: snapshots.some((snapshot) => snapshot.managementMarkerDetected)
     }
   }
 
@@ -612,7 +646,7 @@
 
         const cloneText = async (response) => {
           try {
-            return (await response.clone().text()).slice(0, 2000)
+            return (await response.clone().text()).slice(0, 500000)
           } catch {
             return null
           }
@@ -650,7 +684,7 @@
               status: Number.isFinite(this.status) ? this.status : null,
               capturedAt: new Date().toISOString(),
               requestPreview: typeof body === 'string' ? body.slice(0, 1200) : null,
-              responsePreview: typeof this.responseText === 'string' ? this.responseText.slice(0, 2000) : null
+              responsePreview: typeof this.responseText === 'string' ? this.responseText.slice(0, 500000) : null
             })
           })
 

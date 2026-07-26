@@ -1,0 +1,889 @@
+{
+  "version": "2026-07-25.1",
+  "lastVerifiedAt": "2026-07-25T00:00:00+09:00",
+  "referencePlatform": "baemin",
+  "documentation": "./platform-capability-matrix.md",
+  "projectionStatuses": [
+    "EXACT",
+    "TRANSFORM",
+    "LOSSY",
+    "MANUAL",
+    "UNSUPPORTED",
+    "UNVERIFIED"
+  ],
+  "evidenceLevels": [
+    "LIVE_UI",
+    "PUBLIC_SOURCE",
+    "OFFICIAL_HELP",
+    "WRITE_VERIFIED",
+    "OPERATING_DATA",
+    "USER_OBSERVED",
+    "UNVERIFIED"
+  ],
+  "safetyDefaults": {
+    "allowAutomaticWriteFor": [
+      "EXACT",
+      "TRANSFORM"
+    ],
+    "requireExplicitApprovalFor": [
+      "LOSSY"
+    ],
+    "blockAutomaticWriteFor": [
+      "MANUAL",
+      "UNSUPPORTED",
+      "UNVERIFIED"
+    ],
+    "requirePostWriteReimport": true,
+    "requirePlatformEntityId": true,
+    "requirePreWriteSnapshot": true
+  },
+  "platforms": {
+    "baemin": {
+      "label": "배달의민족",
+      "sessionAfterRestart": "authenticated_after_session_refresh",
+      "currentAutomation": {
+        "read": {
+          "status": "verified",
+          "scope": [
+            "menus",
+            "price_variants",
+            "option_groups"
+          ]
+        },
+        "write": {
+          "status": "partial",
+          "verifiedScope": [
+            "existing_menu_name",
+            "existing_menu_price"
+          ],
+          "blockedScope": [
+            "new_menu",
+            "option_group",
+            "image"
+          ]
+        }
+      },
+      "menu": {
+        "name": {
+          "maxChars": 30,
+          "foodSuitabilityCheck": true,
+          "projection": "EXACT",
+          "evidence": [
+            "LIVE_UI",
+            "PUBLIC_SOURCE"
+          ]
+        },
+        "groupName": {
+          "maxChars": 25,
+          "projection": "EXACT",
+          "evidence": [
+            "LIVE_UI"
+          ]
+        },
+        "groupDescription": {
+          "maxChars": 500,
+          "projection": "EXACT",
+          "evidence": [
+            "LIVE_UI"
+          ]
+        },
+        "composition": {
+          "maxChars": 250,
+          "projection": "EXACT",
+          "evidence": [
+            "LIVE_UI",
+            "PUBLIC_SOURCE"
+          ]
+        },
+        "description": {
+          "maxChars": 500,
+          "projection": "EXACT",
+          "characterSet": "unverified; exclamation mark has an observed server rejection",
+          "evidence": [
+            "LIVE_UI",
+            "USER_OBSERVED"
+          ]
+        },
+        "maxMenusPerStore": {
+          "value": 400,
+          "projection": "EXACT",
+          "evidence": [
+            "PUBLIC_SOURCE"
+          ]
+        }
+      },
+      "price": {
+        "model": "multi_variant",
+        "maxVariants": 20,
+        "variantLabelMaxChars": 20,
+        "channels": [
+          "delivery",
+          "in_store",
+          "pickup"
+        ],
+        "minAmount": 1,
+        "maxAmount": 500000,
+        "warnBelowAmount": 1000,
+        "rules": [
+          "pickup_requires_in_store",
+          "pickup_must_not_exceed_in_store",
+          "create_wizard_may_hide_in_store_and_pickup_fields"
+        ],
+        "projection": "EXACT",
+        "evidence": [
+          "LIVE_UI",
+          "PUBLIC_SOURCE",
+          "WRITE_VERIFIED"
+        ]
+      },
+      "options": {
+        "requiredAndOptional": true,
+        "minMaxSelection": true,
+        "maxGroupsPerMenu": 100,
+        "groupNameMaxChars": 25,
+        "itemNameMaxChars": 40,
+        "maxItemsPerGroup": null,
+        "minPriceDelta": 0,
+        "maxPriceDelta": 500000,
+        "quantityAdjustable": null,
+        "connection": "create_then_bind_to_menu",
+        "rules": [
+          "required_group_should_contain_zero_price_item_to_avoid_display_price_shift"
+        ],
+        "projection": "EXACT",
+        "evidence": [
+          "LIVE_UI",
+          "PUBLIC_SOURCE"
+        ]
+      },
+      "images": {
+        "maxCount": 6,
+        "minWidth": 1280,
+        "minHeight": 960,
+        "maxWidth": 8960,
+        "maxHeight": 6720,
+        "aspectRatio": "4:3",
+        "maxBytes": 15728640,
+        "formats": [
+          "jpg",
+          "jpeg",
+          "png"
+        ],
+        "moderation": "approval_required",
+        "editWhilePending": false,
+        "projection": "TRANSFORM",
+        "evidence": [
+          "LIVE_UI",
+          "PUBLIC_SOURCE",
+          "OFFICIAL_HELP"
+        ]
+      },
+      "availability": {
+        "states": [
+          "selling",
+          "sold_out",
+          "hidden"
+        ],
+        "perChannelVisibility": null,
+        "schedule": null,
+        "projection": "UNVERIFIED"
+      },
+      "promotions": {
+        "dedicatedReviewEvent": null,
+        "projection": "UNVERIFIED"
+      }
+    },
+    "yogiyo": {
+      "label": "요기요",
+      "sessionAfterRestart": "authenticated",
+      "currentAutomation": {
+        "read": {
+          "status": "verified",
+          "scope": [
+            "menus",
+            "option_groups"
+          ]
+        },
+        "write": {
+          "status": "read_only",
+          "verifiedScope": [],
+          "blockedScope": [
+            "all"
+          ]
+        }
+      },
+      "menu": {
+        "name": {
+          "maxChars": 70,
+          "projection": "EXACT",
+          "evidence": [
+            "LIVE_UI"
+          ]
+        },
+        "groupName": {
+          "maxChars": null,
+          "projection": "UNVERIFIED"
+        },
+        "description": {
+          "maxChars": 500,
+          "characterSet": null,
+          "projection": "EXACT",
+          "evidence": [
+            "LIVE_UI",
+            "OFFICIAL_HELP"
+          ]
+        }
+      },
+      "price": {
+        "model": "single_scalar",
+        "maxVariants": 1,
+        "channels": [
+          "shared"
+        ],
+        "separatePickupPrice": null,
+        "projectionFromMultiVariant": "TRANSFORM",
+        "transformChoices": [
+          "split_into_menus",
+          "required_option_group"
+        ],
+        "evidence": [
+          "LIVE_UI",
+          "OPERATING_DATA"
+        ]
+      },
+      "options": {
+        "requiredAndOptional": true,
+        "requiredSelectionRule": "exact_n",
+        "optionalSelectionRule": "max_n",
+        "maxGroupsPerMenu": null,
+        "maxItemsPerGroup": null,
+        "quantityAdjustable": true,
+        "itemStatus": true,
+        "connection": "reusable_group_to_many_menus",
+        "projection": "TRANSFORM",
+        "evidence": [
+          "LIVE_UI",
+          "OPERATING_DATA"
+        ]
+      },
+      "images": {
+        "maxCount": 1,
+        "minWidth": null,
+        "minHeight": null,
+        "maxBytes": null,
+        "formats": [
+          "png",
+          "jpeg"
+        ],
+        "mayAttachPlatformDefaultAfterDays": 30,
+        "platformDefaultReusableOutsidePlatform": false,
+        "projection": "UNVERIFIED",
+        "evidence": [
+          "LIVE_UI"
+        ]
+      },
+      "availability": {
+        "states": [
+          "selling",
+          "sold_out_today",
+          "hidden"
+        ],
+        "perChannelVisibility": null,
+        "schedule": null,
+        "projection": "UNVERIFIED",
+        "evidence": [
+          "LIVE_UI"
+        ]
+      },
+      "promotions": {
+        "types": [
+          "store_coupon",
+          "discount_ranking",
+          "time_deal"
+        ],
+        "dedicatedReviewEvent": null,
+        "storeCoupon": {
+          "appliesToOrderTypes": [
+            "delivery",
+            "pickup"
+          ],
+          "minDiscountAmount": "5_percent_of_store_minimum_order",
+          "maxDiscountAmount": 50000,
+          "amountIncrement": 500,
+          "limitStatus": "UNVERIFIED",
+          "limitNote": "Published guide values; recheck the current issuance screen before any write"
+        },
+        "projection": "MANUAL",
+        "evidence": [
+          "OFFICIAL_HELP"
+        ]
+      }
+    },
+    "coupangeats": {
+      "label": "쿠팡이츠",
+      "sessionAfterRestart": "authenticated",
+      "currentAutomation": {
+        "read": {
+          "status": "verified",
+          "scope": [
+            "menus",
+            "option_groups",
+            "option_bindings"
+          ]
+        },
+        "write": {
+          "status": "partial",
+          "verifiedScope": [
+            "existing_menu_name",
+            "existing_menu_price"
+          ],
+          "blockedScope": [
+            "new_menu",
+            "option_group",
+            "image",
+            "review_event"
+          ]
+        }
+      },
+      "menu": {
+        "name": {
+          "maxChars": null,
+          "characterSet": "restricted_item_and_word_validation",
+          "projection": "UNVERIFIED"
+        },
+        "description": {
+          "maxChars": 500,
+          "projection": "EXACT",
+          "evidence": [
+            "LIVE_UI"
+          ]
+        },
+        "noMinimumOrderToggle": true
+      },
+      "price": {
+        "model": "single_scalar_plus_option_delta",
+        "maxVariants": 1,
+        "channels": [
+          "delivery_and_pickup_shared"
+        ],
+        "differentDeliveryAndPickupPrice": false,
+        "requiredOptionDisplayPriceRule": "do_not_use_mandatory_surcharge_to_understate_display_price",
+        "projectionFromMultiVariant": "TRANSFORM",
+        "projectionFromChannelPriceDifference": "UNSUPPORTED",
+        "evidence": [
+          "LIVE_UI",
+          "OFFICIAL_HELP",
+          "WRITE_VERIFIED"
+        ]
+      },
+      "options": {
+        "requiredAndOptional": true,
+        "minMaxSelection": true,
+        "unlimitedMaximum": true,
+        "maxGroupsPerMenu": null,
+        "maxItemsPerGroup": null,
+        "quantityAdjustable": true,
+        "connection": "reusable_group_to_many_menus",
+        "restaurantPriceIncrement": null,
+        "projection": "TRANSFORM",
+        "evidence": [
+          "LIVE_UI",
+          "OFFICIAL_HELP"
+        ]
+      },
+      "images": {
+        "maxCount": 3,
+        "minWidth": 1280,
+        "minHeight": 960,
+        "recommendedDpi": 300,
+        "maxBytes": 15728640,
+        "uploaderFormats": [
+          "jpg",
+          "jpeg",
+          "png",
+          "gif"
+        ],
+        "officialRecommendedFormats": [
+          "jpg",
+          "jpeg",
+          "png"
+        ],
+        "moderation": "approval_required",
+        "reorderAppliesImmediately": true,
+        "projection": "TRANSFORM",
+        "evidence": [
+          "LIVE_UI",
+          "OFFICIAL_HELP"
+        ]
+      },
+      "availability": {
+        "states": [
+          "selling",
+          "sold_out_today",
+          "hidden"
+        ],
+        "perChannelVisibility": false,
+        "schedule": null,
+        "projection": "UNVERIFIED",
+        "evidence": [
+          "LIVE_UI",
+          "OFFICIAL_HELP"
+        ]
+      },
+      "promotions": {
+        "dedicatedReviewEvent": true,
+        "separateMenuAndOptionTabs": true,
+        "benefitNotReclaimedWhenNoReview": true,
+        "projection": "EXACT",
+        "evidence": [
+          "LIVE_UI"
+        ]
+      }
+    },
+    "ddangyo": {
+      "label": "땡겨요",
+      "sessionAfterRestart": "authenticated_after_session_refresh",
+      "currentAutomation": {
+        "read": {
+          "status": "partial",
+          "scope": [
+            "menus",
+            "multi_channel_price_variants"
+          ]
+        },
+        "write": {
+          "status": "partial",
+          "verifiedScope": [
+            "existing_menu_name",
+            "existing_single_price",
+            "same_shape_multi_channel_price"
+          ],
+          "blockedScope": [
+            "new_menu",
+            "option_group",
+            "image",
+            "schedule"
+          ]
+        }
+      },
+      "menu": {
+        "name": {
+          "maxChars": 50,
+          "projection": "EXACT",
+          "evidence": [
+            "PUBLIC_SOURCE"
+          ]
+        },
+        "composition": {
+          "maxChars": 250,
+          "projection": "EXACT",
+          "evidence": [
+            "PUBLIC_SOURCE"
+          ]
+        },
+        "description": {
+          "maxChars": 500,
+          "projection": "EXACT",
+          "evidence": [
+            "PUBLIC_SOURCE"
+          ]
+        },
+        "onePersonFlag": true,
+        "externalPosMenuId": {
+          "maxChars": 13,
+          "characterSet": "ascii_alphanumeric"
+        },
+        "allowedSpecialCharacters": "!@$^`_-|?\";':,./~%&()+{}[]™®",
+        "nameMustContainLetterOrDigit": true
+      },
+      "price": {
+        "model": "multi_variant_multi_channel",
+        "maxVariants": 20,
+        "variantLabelMaxChars": 20,
+        "channels": [
+          "delivery",
+          "pickup",
+          "in_store"
+        ],
+        "minAmount": 0,
+        "maxAmount": 500000,
+        "zeroRequiresConfirmation": true,
+        "activeChannelPriceRequired": true,
+        "writeRequiresExactVariantShape": true,
+        "projection": "EXACT",
+        "evidence": [
+          "PUBLIC_SOURCE",
+          "WRITE_VERIFIED"
+        ]
+      },
+      "options": {
+        "requiredAndOptional": true,
+        "requiredMinSelect": {
+          "min": 1,
+          "max": 5
+        },
+        "optionalMinSelect": {
+          "min": 0,
+          "max": 0
+        },
+        "maxSelect": {
+          "min": 1,
+          "max": 60
+        },
+        "maxGroupsPerMenu": 100,
+        "groupNameMaxChars": 30,
+        "maxItemsPerGroup": 150,
+        "itemNameMinChars": 2,
+        "itemNameMaxChars": 50,
+        "minPriceDelta": 0,
+        "maxPriceDelta": 500000,
+        "hashCharacterAllowed": false,
+        "hashCharacterUiMessageConflict": true,
+        "connection": "reusable_group_to_many_menus",
+        "projection": "EXACT",
+        "evidence": [
+          "PUBLIC_SOURCE",
+          "LIVE_UI"
+        ]
+      },
+      "images": {
+        "acceptedDimensions": [
+          {
+            "width": 1080,
+            "height": 660
+          },
+          {
+            "width": 660,
+            "height": 660
+          }
+        ],
+        "maxBytes": 500000,
+        "displayedLimit": "500KB",
+        "formats": [
+          "jpg",
+          "jpeg",
+          "png"
+        ],
+        "ownerUploadModeration": "up_to_two_weeks",
+        "platformOwnedImageAppliesImmediately": true,
+        "representativeImageDeletable": false,
+        "editWhilePending": false,
+        "editDuringTimeSale": false,
+        "projection": "TRANSFORM",
+        "evidence": [
+          "LIVE_UI",
+          "PUBLIC_SOURCE"
+        ]
+      },
+      "availability": {
+        "states": [
+          "selling",
+          "sold_out",
+          "hidden"
+        ],
+        "perChannelVisibility": true,
+        "visibilityChannels": [
+          "delivery",
+          "pickup"
+        ],
+        "schedule": {
+          "supported": true,
+          "nameMaxChars": 50,
+          "nameUnique": true,
+          "actions": [
+            "show",
+            "hide"
+          ],
+          "channels": [
+            "delivery",
+            "pickup",
+            "in_store"
+          ],
+          "startsNoEarlierThanDaysFromNow": 1,
+          "timeIncrementMinutes": 10,
+          "minimumDurationMinutes": 30,
+          "latestNextDayHour": 5,
+          "overlapAllowed": false
+        },
+        "projection": "EXACT",
+        "evidence": [
+          "LIVE_UI"
+        ]
+      },
+      "promotions": {
+        "dedicatedReviewEvent": false,
+        "observedReviewConvention": "ordinary_option_group_named_++후기참여++",
+        "projection": "TRANSFORM",
+        "evidence": [
+          "LIVE_UI",
+          "OPERATING_DATA"
+        ]
+      }
+    },
+    "deliveryspecial": {
+      "label": "배달특급",
+      "portal": "PAYCO 스마트오더",
+      "sessionAfterRestart": "authenticated_after_session_refresh",
+      "currentAutomation": {
+        "read": {
+          "status": "verified_with_session",
+          "scope": [
+            "menus",
+            "option_groups",
+            "catalog_api_events"
+          ]
+        },
+        "write": {
+          "status": "read_only",
+          "verifiedScope": [],
+          "blockedScope": [
+            "all"
+          ]
+        }
+      },
+      "catalogLayers": [
+        "master_product",
+        "sale_menu",
+        "menu_board"
+      ],
+      "menu": {
+        "name": {
+          "maxChars": 50,
+          "sourceField": "simpleName",
+          "projection": "EXACT",
+          "evidence": [
+            "LIVE_UI"
+          ]
+        },
+        "categoryName": {
+          "maxChars": 50,
+          "projection": "EXACT",
+          "evidence": [
+            "LIVE_UI"
+          ]
+        },
+        "categoryCode": {
+          "maxChars": 20,
+          "projection": "EXACT",
+          "evidence": [
+            "LIVE_UI"
+          ]
+        },
+        "posMenuCode": {
+          "maxChars": 20,
+          "characterSet": null,
+          "projection": "UNVERIFIED",
+          "evidence": [
+            "LIVE_UI"
+          ]
+        },
+        "description": {
+          "clientMaxChars": null,
+          "characterSet": null,
+          "projection": "UNVERIFIED",
+          "evidence": [
+            "LIVE_UI"
+          ]
+        },
+        "categorySimpleName": {
+          "maxChars": 50,
+          "projection": "EXACT",
+          "evidence": [
+            "LIVE_UI",
+            "OPERATING_DATA"
+          ]
+        },
+        "legacyNoiseClassificationRequired": true
+      },
+      "price": {
+        "model": "layered_catalog_price",
+        "channels": [
+          "delivery",
+          "pickup"
+        ],
+        "clientInputMaxDigits": 10,
+        "serverMaximum": null,
+        "projection": "UNVERIFIED"
+      },
+      "options": {
+        "catalogPresent": true,
+        "requiredAndOptional": null,
+        "selectionLimits": null,
+        "priceLimits": null,
+        "projection": "UNVERIFIED",
+        "evidence": [
+          "OPERATING_DATA"
+        ]
+      },
+      "images": {
+        "maxCount": null,
+        "clientFileInputMultiple": false,
+        "dimensions": null,
+        "maxBytes": null,
+        "formats": null,
+        "projection": "UNVERIFIED"
+      },
+      "availability": {
+        "states": [
+          "READY",
+          "SALE",
+          "CLOSE",
+          "hidden",
+          "sold_out"
+        ],
+        "perOrderType": true,
+        "schedule": null,
+        "projection": "UNVERIFIED",
+        "evidence": [
+          "LIVE_UI",
+          "OPERATING_DATA"
+        ]
+      },
+      "deletion": {
+        "hiddenOrClosedLegacyRowsMayBeUndeletable": true,
+        "projection": "MANUAL",
+        "evidence": [
+          "USER_OBSERVED"
+        ]
+      },
+      "promotions": {
+        "dedicatedReviewEvent": null,
+        "projection": "UNVERIFIED"
+      }
+    },
+    "naverorder": {
+      "label": "네이버 주문",
+      "sessionAfterRestart": "deferred",
+      "currentAutomation": {
+        "read": {
+          "status": "skeleton_only",
+          "scope": []
+        },
+        "write": {
+          "status": "read_only",
+          "verifiedScope": [],
+          "blockedScope": [
+            "all"
+          ]
+        }
+      },
+      "integration": {
+        "publicGeneralApi": false,
+        "foodTechIntegrationRequest": true,
+        "approvalRequired": true,
+        "projection": "MANUAL"
+      },
+      "menu": {
+        "name": {
+          "maxChars": null,
+          "projection": "UNVERIFIED"
+        },
+        "fields": [
+          "spiciness",
+          "recommendation",
+          "origin",
+          "nutrition"
+        ],
+        "allCategoryExposedToOrder": false,
+        "franchiseHeadquartersMayBlockStoreEdit": true,
+        "allowedCharacterClasses": [
+          "korean",
+          "english",
+          "chinese",
+          "japanese",
+          "numbers"
+        ],
+        "allowedSpecialCharacters": "-_():&![],.%+~@*^'/?²℃※<>",
+        "emojiAllowed": false,
+        "projection": "EXACT",
+        "evidence": [
+          "OFFICIAL_HELP"
+        ]
+      },
+      "price": {
+        "model": "base_price_plus_order_options",
+        "channels": [
+          "pickup_order"
+        ],
+        "limits": null,
+        "projection": "UNVERIFIED"
+      },
+      "options": {
+        "orderOnly": true,
+        "reservationSupported": false,
+        "requiredGroupNeedsZeroPriceItem": true,
+        "selectionLimits": null,
+        "projection": "TRANSFORM",
+        "evidence": [
+          "OFFICIAL_HELP"
+        ]
+      },
+      "images": {
+        "menuImageRules": null,
+        "promotion": {
+          "formats": [
+            "jpg",
+            "jpeg",
+            "gif",
+            "png",
+            "bmp",
+            "heif"
+          ],
+          "maxBytesPerFile": 20971520,
+          "maxBytesPerUpload": 52428800
+        },
+        "projection": "UNVERIFIED",
+        "evidence": [
+          "OFFICIAL_HELP"
+        ]
+      },
+      "availability": {
+        "states": [
+          "visible",
+          "hidden",
+          "selling",
+          "not_selling"
+        ],
+        "perChannelVisibility": null,
+        "schedule": "reservation_schedule_is_separate_from_order_menu_options",
+        "projection": "UNVERIFIED",
+        "evidence": [
+          "OFFICIAL_HELP"
+        ]
+      },
+      "promotions": {
+        "types": [
+          "stamp",
+          "coupon"
+        ],
+        "pcOnlyConfiguration": true,
+        "internalNameChars": {
+          "min": 2,
+          "max": 20
+        },
+        "benefitNameChars": {
+          "min": 2,
+          "max": 18
+        },
+        "couponGuideChars": {
+          "min": 5,
+          "max": 100
+        },
+        "validityDays": {
+          "min": 30,
+          "max": 999
+        },
+        "noticeChars": {
+          "min": 5,
+          "max": 500
+        },
+        "overlappingSchedulesAllowed": false,
+        "freeGiftEqualsAmountDiscount": false,
+        "projection": "MANUAL",
+        "evidence": [
+          "OFFICIAL_HELP"
+        ]
+      }
+    }
+  }
+}

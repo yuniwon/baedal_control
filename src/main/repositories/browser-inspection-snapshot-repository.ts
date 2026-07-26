@@ -57,8 +57,12 @@ export class BrowserInspectionSnapshotRepository {
             input_hints_json,
             fields_json,
             api_events_json,
-            screenshot_data_url
-          ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            screenshot_data_url,
+            visible_password_input_count,
+            login_marker_detected,
+            logout_marker_detected,
+            management_marker_detected
+          ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           on conflict(snapshot_id) do update set
             platform_code = excluded.platform_code,
             source = excluded.source,
@@ -76,7 +80,11 @@ export class BrowserInspectionSnapshotRepository {
             input_hints_json = excluded.input_hints_json,
             fields_json = excluded.fields_json,
             api_events_json = excluded.api_events_json,
-            screenshot_data_url = excluded.screenshot_data_url
+            screenshot_data_url = excluded.screenshot_data_url,
+            visible_password_input_count = excluded.visible_password_input_count,
+            login_marker_detected = excluded.login_marker_detected,
+            logout_marker_detected = excluded.logout_marker_detected,
+            management_marker_detected = excluded.management_marker_detected
         `
       )
       .run(
@@ -97,7 +105,11 @@ export class BrowserInspectionSnapshotRepository {
         JSON.stringify(snapshot.inputHints ?? []),
         JSON.stringify(snapshot.fields ?? []),
         JSON.stringify(snapshot.apiEvents ?? []),
-        snapshot.screenshotDataUrl ?? null
+        snapshot.screenshotDataUrl ?? null,
+        snapshot.visiblePasswordInputCount ?? 0,
+        snapshot.loginMarkerDetected ? 1 : 0,
+        snapshot.logoutMarkerDetected ? 1 : 0,
+        snapshot.managementMarkerDetected ? 1 : 0
       )
   }
 
@@ -123,7 +135,11 @@ export class BrowserInspectionSnapshotRepository {
             input_hints_json as inputHintsJson,
             fields_json as fieldsJson,
             api_events_json as apiEventsJson,
-            screenshot_data_url as screenshotDataUrl
+            screenshot_data_url as screenshotDataUrl,
+            visible_password_input_count as visiblePasswordInputCount,
+            login_marker_detected as loginMarkerDetected,
+            logout_marker_detected as logoutMarkerDetected,
+            management_marker_detected as managementMarkerDetected
           from browser_inspection_snapshots
           order by captured_at desc, rowid desc
           limit ?
@@ -148,6 +164,10 @@ export class BrowserInspectionSnapshotRepository {
         fieldsJson: string
         apiEventsJson: string
         screenshotDataUrl?: string | null
+        visiblePasswordInputCount: number
+        loginMarkerDetected: number
+        logoutMarkerDetected: number
+        managementMarkerDetected: number
       }>
 
     return rows.map((row) => ({
@@ -168,7 +188,11 @@ export class BrowserInspectionSnapshotRepository {
       inputHints: parseStringArray(row.inputHintsJson),
       fields: parseObjectArray<BrowserInspectionField>(row.fieldsJson),
       apiEvents: parseObjectArray<BrowserInspectionApiEvent>(row.apiEventsJson),
-      screenshotDataUrl: row.screenshotDataUrl ?? null
+      screenshotDataUrl: row.screenshotDataUrl ?? null,
+      visiblePasswordInputCount: row.visiblePasswordInputCount,
+      loginMarkerDetected: Boolean(row.loginMarkerDetected),
+      logoutMarkerDetected: Boolean(row.logoutMarkerDetected),
+      managementMarkerDetected: Boolean(row.managementMarkerDetected)
     }))
   }
 }

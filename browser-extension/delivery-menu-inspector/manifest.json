@@ -7,8 +7,12 @@
   "host_permissions": [
     "http://127.0.0.1/*",
     "https://*.baemin.com/*",
+    "https://*.yogiyo.co.kr/*",
     "https://*.coupangeats.com/*",
-    "https://*.ddangyo.com/*"
+    "https://*.ddangyo.com/*",
+    "https://partner.payco.kr/*",
+    "https://*.specialdelivery.co.kr/*",
+    "https://*.smartplace.naver.com/*"
   ],
   "action": {
     "default_title": "배달앱 메뉴 검사기",
@@ -18,8 +22,12 @@
     {
       "matches": [
         "https://*.baemin.com/*",
+        "https://*.yogiyo.co.kr/*",
         "https://*.coupangeats.com/*",
-        "https://*.ddangyo.com/*"
+        "https://*.ddangyo.com/*",
+        "https://partner.payco.kr/*",
+        "https://*.specialdelivery.co.kr/*",
+        "https://*.smartplace.naver.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_start"

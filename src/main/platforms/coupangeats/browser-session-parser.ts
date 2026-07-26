@@ -293,12 +293,14 @@ export const parseCoupangEatsOptionGroupsFromBrowserSnapshot = (
         }
       ]
     })
+    const reportedMappingMenusCount =
+      typeof optionGroup.mappingDishCount === 'number' && Number.isFinite(optionGroup.mappingDishCount)
+        ? Math.max(optionGroup.mappingDishCount, 0)
+        : null
     const mappingMenusCount =
-      menus.length > 0
-        ? menus.length
-        : typeof optionGroup.mappingDishCount === 'number' && Number.isFinite(optionGroup.mappingDishCount)
-          ? Math.max(optionGroup.mappingDishCount, 0)
-          : null
+      reportedMappingMenusCount === null
+        ? menus.length || null
+        : Math.max(reportedMappingMenusCount, menus.length)
 
     return [
       {

@@ -1,4 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type {
+  CatalogBootstrapActivationInput,
+  CatalogBootstrapPreviewInput,
+  CatalogReviewResolutionInput,
+  PlatformCode
+} from '../shared/contracts'
 
 export const appApi = {
   menus: {
@@ -20,11 +26,42 @@ export const appApi = {
   platformMenus: {
     list: () => ipcRenderer.invoke('platformMenus:list')
   },
+  platformSessions: {
+    list: () => ipcRenderer.invoke('platformSessions:list'),
+    check: (platformCode: PlatformCode) =>
+      ipcRenderer.invoke('platformSessions:check', { platformCode }),
+    connect: (platformCode: PlatformCode) =>
+      ipcRenderer.invoke('platformSessions:connect', { platformCode }),
+    resumeAfterUserAction: (platformCode: PlatformCode) =>
+      ipcRenderer.invoke('platformSessions:resumeAfterUserAction', { platformCode })
+  },
+  platformAuthPreferences: {
+    list: () => ipcRenderer.invoke('platformAuthPreferences:list'),
+    setAutoClickConsent: (platformCode: PlatformCode, consented: boolean) =>
+      ipcRenderer.invoke('platformAuthPreferences:setAutoClickConsent', {
+        platformCode,
+        consented
+      })
+  },
   platformImportRuns: {
     list: () => ipcRenderer.invoke('platformImportRuns:list')
   },
   platformImportChanges: {
     listLatest: (limit?: number) => ipcRenderer.invoke('platformImportChanges:listLatest', limit)
+  },
+  catalogWorkspace: {
+    get: () => ipcRenderer.invoke('catalogWorkspace:get')
+  },
+  catalogBootstrap: {
+    preview: (payload: CatalogBootstrapPreviewInput) =>
+      ipcRenderer.invoke('catalogBootstrap:preview', payload),
+    activate: (payload: CatalogBootstrapActivationInput) =>
+      ipcRenderer.invoke('catalogBootstrap:activate', payload)
+  },
+  catalogReviews: {
+    listOpen: () => ipcRenderer.invoke('catalogReviews:listOpen'),
+    resolve: (payload: CatalogReviewResolutionInput) =>
+      ipcRenderer.invoke('catalogReviews:resolve', payload)
   },
   agentReports: {
     getNextActionPlan: (filters?: unknown) =>
@@ -40,7 +77,7 @@ export const appApi = {
       ipcRenderer.invoke('browserInspector:captureManagedChromeTab', payload),
     launchManagedChrome: (payload?: {
       url?: string
-      platformCode?: 'baemin' | 'coupangeats' | 'ddangyo'
+      platformCode?: PlatformCode
       autoLogin?: boolean
     }) =>
       ipcRenderer.invoke('browserInspector:launchManagedChrome', payload)
@@ -50,6 +87,10 @@ export const appApi = {
     listPlatformCredentials: () => ipcRenderer.invoke('settings:list-platform-credentials'),
     savePlatformCredential: (payload: { platformCode: string; username: string; password: string }) =>
       ipcRenderer.invoke('settings:save-platform-credential', payload),
+    getLegacyPlatformCredentialStatus: (platformCode: PlatformCode) =>
+      ipcRenderer.invoke('settings:get-legacy-platform-credential-status', { platformCode }),
+    clearLegacyPlatformCredential: (platformCode: PlatformCode) =>
+      ipcRenderer.invoke('settings:clear-legacy-platform-credential', { platformCode }),
     importPlatformMenus: (payload: { platformCode: string }) =>
       ipcRenderer.invoke('settings:import-platform-menus', payload)
   },

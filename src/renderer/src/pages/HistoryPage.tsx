@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { appApi } from '../lib/api'
 import { formatSyncSummary } from '../lib/format-sync-summary'
 import type {
-  PlatformCode,
   PlatformImportRunRecord,
   SyncRunItemRecord,
   SyncRunRecord
@@ -18,12 +17,6 @@ import {
 } from '../lib/platform-imports'
 
 type HistoryRun = SyncRunRecord
-
-const platformLabels: Record<PlatformCode, string> = {
-  baemin: '배민',
-  coupangeats: '쿠팡이츠',
-  ddangyo: '땡겨요'
-}
 
 const parseAfterValue = (value: string) => {
   try {
@@ -51,7 +44,7 @@ const summarizeItem = (item: SyncRunItemRecord) => {
     typeof next.name === 'string' &&
     item.beforeValue !== next.name
   const priceText = formatPrice(next.price)
-  const parts = [platformLabels[item.platformCode]]
+  const parts = [getPlatformLabel(item.platformCode)]
 
   if (nameChanged && next.name) {
     parts.push(`${item.beforeValue} -> ${next.name}`)

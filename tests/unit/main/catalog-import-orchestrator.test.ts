@@ -9,6 +9,9 @@ import { PlatformImportChangeRepository } from '../../../src/main/repositories/p
 import { PlatformImportRunRepository } from '../../../src/main/repositories/platform-import-run-repository'
 import { PlatformMenuRepository } from '../../../src/main/repositories/platform-menu-repository'
 import { PlatformOptionGroupRepository } from '../../../src/main/repositories/platform-option-group-repository'
+import { CatalogWorkspaceRepository } from '../../../src/main/repositories/catalog-workspace-repository'
+import { CatalogReviewRepository } from '../../../src/main/repositories/catalog-review-repository'
+import { CatalogIntentRuleRepository } from '../../../src/main/repositories/catalog-intent-rule-repository'
 
 const createInspection = () => ({
   platformCode: 'baemin' as const,
@@ -29,6 +32,9 @@ describe('CatalogImportOrchestrator', () => {
   let platformOptionGroupRepository: PlatformOptionGroupRepository
   let platformImportRunRepository: PlatformImportRunRepository
   let platformImportChangeRepository: PlatformImportChangeRepository
+  let catalogWorkspaceRepository: CatalogWorkspaceRepository
+  let catalogReviewRepository: CatalogReviewRepository
+  let catalogIntentRuleRepository: CatalogIntentRuleRepository
   let adapter: {
     capabilities?: {
       optionCatalog?: boolean
@@ -42,7 +48,21 @@ describe('CatalogImportOrchestrator', () => {
     new CatalogImportOrchestrator({
       db,
       adapterRegistry: {
-        get: () => adapter as never
+        getReader: () => ({
+          fetchCatalog: async () => {
+            const result = adapter.fetchMenusWithInspection
+              ? await adapter.fetchMenusWithInspection()
+              : { menus: await adapter.fetchMenus() }
+            if (result.optionCatalogFetched === true || !adapter.fetchOptionGroups) {
+              return result
+            }
+            return {
+              ...result,
+              optionGroups: await adapter.fetchOptionGroups(),
+              optionCatalogFetched: true
+            }
+          }
+        })
       },
       menuRepository,
       mappingRepository,
@@ -50,6 +70,9 @@ describe('CatalogImportOrchestrator', () => {
       platformOptionGroupRepository,
       platformImportRunRepository,
       platformImportChangeRepository,
+      catalogWorkspaceRepository,
+      catalogReviewRepository,
+      catalogIntentRuleRepository,
       createId: (() => {
         let next = 1
         return () => `run-${next++}`
@@ -65,12 +88,205 @@ describe('CatalogImportOrchestrator', () => {
     platformOptionGroupRepository = new PlatformOptionGroupRepository(db)
     platformImportRunRepository = new PlatformImportRunRepository(db)
     platformImportChangeRepository = new PlatformImportChangeRepository(db)
+    catalogWorkspaceRepository = new CatalogWorkspaceRepository(db)
+    catalogReviewRepository = new CatalogReviewRepository(db)
+    catalogIntentRuleRepository = new CatalogIntentRuleRepository(db)
     adapter = {
       fetchMenus: vi.fn()
     }
   })
 
+  const activateCatalog = () => {
+    catalogWorkspaceRepository.save({
+      ...catalogWorkspaceRepository.getDefault(),
+      lifecycleState: 'active',
+      seedMode: 'legacy',
+      canonicalVersion: 1,
+      activatedAt: '2026-07-25T00:00:00.000Z'
+    })
+  }
+
+  it('stores complete source data without creating canonical menus while the workspace is collecting', async () => {
+    adapter.fetchMenus.mockResolvedValue([
+      {
+        platformMenuId: 'platform-1',
+        platformMenuName: '감자피자',
+        currentPrice: 19900
+      }
+    ])
+
+    const result = await createOrchestrator().importPlatform('baemin')
+
+    expect(platformMenuRepository.listAll()).toEqual([
+      expect.objectContaining({
+        platformCode: 'baemin',
+        platformMenuId: 'platform-1',
+        platformMenuName: '감자피자'
+      })
+    ])
+    expect(menuRepository.list()).toEqual([])
+    expect(mappingRepository.listAll()).toEqual([])
+    expect(result.summary).toEqual({
+      platformCode: 'baemin',
+      fetchedCount: 1,
+      createdMenuCount: 0,
+      linkedMappingCount: 0,
+      verifiedMappingCount: 0
+    })
+  })
+
+  it('does not create or attach canonical menus for unmatched sources after activation', async () => {
+    activateCatalog()
+    adapter.fetchMenus.mockResolvedValue([
+      {
+        platformMenuId: 'platform-2',
+        platformMenuName: '새로 발견된 메뉴',
+        currentPrice: 22900
+      }
+    ])
+
+    const result = await createOrchestrator().importPlatform('baemin')
+
+    expect(platformMenuRepository.listAll()).toHaveLength(1)
+    expect(menuRepository.list()).toEqual([])
+    expect(mappingRepository.listAll()).toEqual([])
+    expect(result.summary).toEqual({
+      platformCode: 'baemin',
+      fetchedCount: 1,
+      createdMenuCount: 0,
+      linkedMappingCount: 0,
+      verifiedMappingCount: 0
+    })
+  })
+
+  it('refreshes explainable review items after a complete active import', async () => {
+    activateCatalog()
+    menuRepository.upsert({
+      menuId: 'menu-1',
+      baseName: '킹쉬림프피자',
+      basePrice: 25900,
+      isDirty: 0,
+      isManaged: 1
+    })
+    adapter.fetchMenus.mockResolvedValue([
+      {
+        platformMenuId: 'new-source',
+        platformMenuName: '감자피자',
+        currentPrice: 19900
+      }
+    ])
+
+    await createOrchestrator().importPlatform('coupangeats')
+
+    expect(catalogReviewRepository.listOpen('default')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'missing_on_platform',
+          canonicalMenuId: 'menu-1',
+          platformCode: 'coupangeats'
+        }),
+        expect.objectContaining({
+          kind: 'unmatched_platform_menu',
+          sourceEntityId: 'new-source',
+          platformCode: 'coupangeats'
+        })
+      ])
+    )
+  })
+
+  it('does not advance absence state when the menu catalog is explicitly incomplete', async () => {
+    platformMenuRepository.upsertSeenBatch('coupangeats', 'run-prev', [
+      {
+        platformCode: 'coupangeats',
+        platformMenuId: 'platform-1',
+        platformMenuName: '킹쉬림프피자'
+      }
+    ])
+    adapter.fetchMenusWithInspection = vi.fn().mockResolvedValue({
+      menus: [],
+      completeness: {
+        menuCatalog: 'incomplete',
+        optionCatalog: 'unknown',
+        optionBindings: 'unknown',
+        expectedMenuCount: 1,
+        collectedMenuCount: 0,
+        collectedOptionGroupCount: 0,
+        issues: ['menu_count_mismatch:0/1']
+      }
+    })
+
+    await expect(createOrchestrator().importPlatform('coupangeats')).rejects.toThrow(
+      'platform_menu_catalog_incomplete:menu_count_mismatch:0/1'
+    )
+
+    expect(platformMenuRepository.listAll()).toEqual([
+      expect.objectContaining({
+        platformMenuId: 'platform-1',
+        missingStreak: 0,
+        presenceStatus: 'present'
+      })
+    ])
+    expect(platformImportRunRepository.listLatest()).toEqual([
+      expect.objectContaining({
+        status: 'partial_failed',
+        menuFetchCompleted: 0
+      })
+    ])
+  })
+
+  it('rejects an option catalog whose reported menu bindings are incomplete', async () => {
+    adapter.fetchMenusWithInspection = vi.fn().mockResolvedValue({
+      menus: [
+        {
+          platformMenuId: 'platform-1',
+          platformMenuName: '킹쉬림프피자',
+          currentPrice: 25900
+        }
+      ],
+      optionGroups: [
+        {
+          optionGroupId: 'size',
+          optionGroupName: '사이즈 선택',
+          mappingMenusCount: 17,
+          options: [],
+          menus: [
+            {
+              platformMenuId: 'platform-1',
+              platformMenuName: '킹쉬림프피자'
+            }
+          ]
+        }
+      ],
+      optionCatalogFetched: true,
+      completeness: {
+        menuCatalog: 'complete',
+        optionCatalog: 'complete',
+        optionBindings: 'incomplete',
+        expectedMenuCount: 1,
+        collectedMenuCount: 1,
+        expectedOptionGroupCount: 1,
+        collectedOptionGroupCount: 1,
+        issues: ['option_binding_count_mismatch:size:1/17']
+      }
+    })
+
+    await expect(createOrchestrator().importPlatform('coupangeats')).rejects.toThrow(
+      'platform_option_bindings_incomplete:option_binding_count_mismatch:size:1/17'
+    )
+
+    expect(platformMenuRepository.listAll()).toEqual([])
+    expect(platformOptionGroupRepository.listAll()).toEqual([])
+    expect(platformImportRunRepository.listLatest()).toEqual([
+      expect.objectContaining({
+        status: 'partial_failed',
+        menuFetchCompleted: 0,
+        optionFetchCompleted: 0
+      })
+    ])
+  })
+
   it('marks the first miss as missing_suspected and keeps the mapping active', async () => {
+    activateCatalog()
     menuRepository.upsert({
       menuId: 'menu-1',
       baseName: '감자피자',
@@ -121,6 +337,7 @@ describe('CatalogImportOrchestrator', () => {
   })
 
   it('marks the second miss as absent_confirmed and deactivates the mapping', async () => {
+    activateCatalog()
     menuRepository.upsert({
       menuId: 'menu-1',
       baseName: '감자피자',
@@ -188,6 +405,7 @@ describe('CatalogImportOrchestrator', () => {
   })
 
   it('seeds legacy active mappings without catalog rows so the first miss becomes missing_suspected', async () => {
+    activateCatalog()
     menuRepository.upsert({
       menuId: 'menu-legacy',
       baseName: '숨김 테스트 피자',
@@ -240,6 +458,7 @@ describe('CatalogImportOrchestrator', () => {
   })
 
   it('promotes seeded legacy mappings to source_absent on the second consecutive miss', async () => {
+    activateCatalog()
     menuRepository.upsert({
       menuId: 'menu-legacy',
       baseName: '숨김 테스트 피자',
@@ -367,6 +586,7 @@ describe('CatalogImportOrchestrator', () => {
   })
 
   it('deduplicates menus, preserves binding metadata, and stores option signatures', async () => {
+    activateCatalog()
     menuRepository.upsert({
       menuId: 'menu-1',
       baseName: '감자피자',
@@ -459,8 +679,8 @@ describe('CatalogImportOrchestrator', () => {
       fetchedCount: 2,
       optionGroupCount: 1,
       duplicateMenuCount: 1,
-      createdMenuCount: 1,
-      linkedMappingCount: 1,
+      createdMenuCount: 0,
+      linkedMappingCount: 0,
       verifiedMappingCount: 1
     })
     expect(result.inspection).toEqual(
@@ -528,8 +748,8 @@ describe('CatalogImportOrchestrator', () => {
           fetchedCount: 2,
           optionGroupCount: 1,
           duplicateMenuCount: 1,
-          createdMenuCount: 1,
-          linkedMappingCount: 1,
+          createdMenuCount: 0,
+          linkedMappingCount: 0,
           verifiedMappingCount: 1
         })
       })
@@ -600,6 +820,7 @@ describe('CatalogImportOrchestrator', () => {
   })
 
   it('keeps source_absent mappings and does not auto-restore managed menus on resurfaced sources', async () => {
+    activateCatalog()
     menuRepository.upsert({
       menuId: 'menu-1',
       baseName: '감자피자',
@@ -731,8 +952,8 @@ describe('CatalogImportOrchestrator', () => {
         optionGroupCount: 1,
         duplicateMenuCount: 1,
         fetchMode: 'managed_browser',
-        createdMenuCount: 1,
-        linkedMappingCount: 1,
+        createdMenuCount: 0,
+        linkedMappingCount: 0,
         verifiedMappingCount: 0
       })
     )
@@ -745,7 +966,8 @@ describe('CatalogImportOrchestrator', () => {
     ])
   })
 
-  it('replaces invalid existing auto mappings instead of preserving loose partial-name matches', async () => {
+  it('preserves an existing source-id mapping even when names are no longer a safe automatic match', async () => {
+    activateCatalog()
     menuRepository.upsert({
       menuId: 'menu-cola',
       baseName: '콜라',
@@ -785,35 +1007,29 @@ describe('CatalogImportOrchestrator', () => {
     expect(result.summary).toEqual({
       platformCode: 'coupangeats',
       fetchedCount: 1,
-      createdMenuCount: 1,
-      linkedMappingCount: 1,
-      verifiedMappingCount: 0
+      createdMenuCount: 0,
+      linkedMappingCount: 0,
+      verifiedMappingCount: 1
     })
-    expect(mappingRepository.listForMenu('menu-cola')).toEqual([])
-    expect(menuRepository.list()).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          menuId: 'menu-cola',
-          baseName: '콜라'
-        }),
-        expect.objectContaining({
-          baseName: 'Set. 3(피자M 스파게티 훈제치킨 콜라)',
-          basePrice: 40000
-        })
-      ])
-    )
+    expect(menuRepository.list()).toEqual([
+      expect.objectContaining({
+        menuId: 'menu-cola',
+        baseName: '콜라'
+      })
+    ])
     expect(mappingRepository.listAll()).toEqual([
       expect.objectContaining({
+        menuId: 'menu-cola',
         platformCode: 'coupangeats',
         platformMenuId: 'set-3',
         platformMenuName: 'Set. 3(피자M 스파게티 훈제치킨 콜라)',
         matchedBy: 'auto'
       })
     ])
-    expect(mappingRepository.listAll()[0]?.menuId).not.toBe('menu-cola')
   })
 
   it('keeps existing auto mappings when names only differ by harmless trailing detail', async () => {
+    activateCatalog()
     menuRepository.upsert({
       menuId: 'menu-set-1',
       baseName: 'Set 1',
@@ -866,6 +1082,7 @@ describe('CatalogImportOrchestrator', () => {
   })
 
   it('does not force no-binding metadata when the platform never provides binding labels', async () => {
+    activateCatalog()
     menuRepository.upsert({
       menuId: 'menu-dd-1',
       baseName: '갈릭디핑',

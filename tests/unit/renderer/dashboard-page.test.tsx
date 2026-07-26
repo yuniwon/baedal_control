@@ -287,11 +287,22 @@ vi.mock('../../../src/renderer/src/lib/api', () => ({
 import { DashboardPage } from '../../../src/renderer/src/pages/DashboardPage'
 
 describe('DashboardPage', () => {
+  it('shows status rows for all six delivery platforms', async () => {
+    render(<DashboardPage />)
+
+    expect(await screen.findByText(/^배민 ·/)).toBeTruthy()
+    expect(screen.getByText(/^요기요 ·/)).toBeTruthy()
+    expect(screen.getByText(/^쿠팡이츠 ·/)).toBeTruthy()
+    expect(screen.getByText(/^땡겨요 ·/)).toBeTruthy()
+    expect(screen.getByText(/^배달특급 ·/)).toBeTruthy()
+    expect(screen.getByText(/^네이버주문 ·/)).toBeTruthy()
+  })
+
   it('keeps the home screen focused and opens recent import changes on demand', async () => {
     render(<DashboardPage />)
 
     expect(await screen.findByRole('heading', { name: '홈' })).toBeTruthy()
-    expect(await screen.findByText('1 / 3')).toBeTruthy()
+    expect(await screen.findByText('1 / 6')).toBeTruthy()
     expect(screen.getByText('2')).toBeTruthy()
     expect(screen.getByText('성공 1건, 실패 0건')).toBeTruthy()
     expect(screen.getByRole('button', { name: '반영 미리보기' })).toBeTruthy()

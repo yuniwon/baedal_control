@@ -1,5 +1,6 @@
 import type {
   PlatformCode,
+  PlatformCatalogCompleteness,
   PlatformMenuPriceVariantRecord,
   PlatformOptionGroupMenuRecord,
   PlatformOptionItemRecord,
@@ -33,6 +34,7 @@ export interface PlatformMenuFetchResult {
   optionCatalogFetched?: boolean
   rawMenuCount?: number
   fetchMode?: PlatformImportFetchMode
+  completeness?: PlatformCatalogCompleteness
   inspection?: PlatformInspectionReport
 }
 

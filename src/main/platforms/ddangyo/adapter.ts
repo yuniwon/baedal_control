@@ -19,6 +19,10 @@ import { buildDdangyoPriceRowSnapshots } from './price-row-snapshots'
 import { ddangyoSelectors } from './selectors'
 import { launchPlaywrightChromium } from '../../services/playwright-runtime'
 
+interface DdangyoAdapterOptions {
+  readManagedBrowserCatalog?: () => Promise<PlatformMenuSnapshot[]>
+}
+
 export class DdangyoAdapter implements PlatformAdapter {
   readonly platformCode = 'ddangyo' as const
   private readonly updateSuccessMessage = '적용 완료되었습니다.'
@@ -34,7 +38,8 @@ export class DdangyoAdapter implements PlatformAdapter {
 
   constructor(
     private readonly credentials: { username: string; password: string },
-    private readonly baseUrl = 'https://boss.ddangyo.com/'
+    private readonly baseUrl = 'https://boss.ddangyo.com/',
+    private readonly options: DdangyoAdapterOptions = {}
   ) {}
 
   async fetchMenus() {
@@ -44,6 +49,21 @@ export class DdangyoAdapter implements PlatformAdapter {
 
   async fetchMenusWithInspection(): Promise<PlatformMenuFetchResult> {
     const inspection = this.createInspectionReport()
+    if (this.options.readManagedBrowserCatalog) {
+      const menus = await this.options.readManagedBrowserCatalog()
+      if (menus.length === 0) throw new Error('ddangyo_managed_catalog_empty')
+      this.pushInspectionStep(inspection, {
+        kind: 'result',
+        title: '전용 크롬 메뉴 읽기',
+        detail: `로그인된 전용 크롬 세션에서 메뉴 ${menus.length}개를 읽었습니다.`
+      })
+      return {
+        menus,
+        rawMenuCount: menus.length,
+        fetchMode: 'managed_browser',
+        inspection
+      }
+    }
     const { browser, page } = await this.createAuthenticatedSession(inspection)
 
     try {

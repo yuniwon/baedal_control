@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { PlatformCode, PlatformMenuPriceVariantRecord } from '../../../shared/contracts'
 import { flattenPlatformMenuPriceVariants } from '../lib/platform-menu-price-variants'
+import { PLATFORM_CODES, getPlatformLabel } from '../../../shared/platforms'
 
 export interface MappingCandidate {
   currentMappingId?: string
@@ -33,10 +34,7 @@ export interface MappingReviewRow {
   duplicateNameCount?: number
 }
 
-const platformOrder: PlatformCode[] = ['baemin', 'coupangeats', 'ddangyo']
-
-const getPlatformLabel = (platformCode: PlatformCode) =>
-  platformCode === 'baemin' ? '배민' : platformCode === 'coupangeats' ? '쿠팡이츠' : '땡겨요'
+const platformOrder: readonly PlatformCode[] = PLATFORM_CODES
 
 const buildMetaItems = (input: {
   platformMenuStatus?: string

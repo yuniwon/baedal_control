@@ -193,6 +193,115 @@ export class ManagedChromeScriptRunner {
     }
   }
 
+  async getDocumentIdentity(tabId: string): Promise<{ tabId: string; loaderId: string }> {
+    const normalizedTabId = tabId.trim()
+    if (!normalizedTabId) {
+      throw new Error('managed_chrome_tab_id_required')
+    }
+
+    const target = await this.findTarget(normalizedTabId)
+    if (!target.webSocketDebuggerUrl) {
+      throw new Error(`managed_chrome_debugger_url_missing:${normalizedTabId}`)
+    }
+
+    const client = await DevtoolsClient.connect(
+      this.WebSocketImpl,
+      target.webSocketDebuggerUrl,
+      this.commandTimeoutMs
+    )
+
+    try {
+      const result = await client.send('Page.getFrameTree')
+      const frameTree = result.frameTree as { frame?: { loaderId?: unknown } } | undefined
+      const loaderId = frameTree?.frame?.loaderId
+      if (typeof loaderId !== 'string' || !loaderId.trim()) {
+        throw new Error(`managed_chrome_loader_id_missing:${normalizedTabId}`)
+      }
+      return { tabId: normalizedTabId, loaderId }
+    } finally {
+      client.close()
+    }
+  }
+
+  async clickSelector(tabId: string, selector: string): Promise<void> {
+    const normalizedTabId = tabId.trim()
+    const normalizedSelector = selector.trim()
+    if (!normalizedTabId) throw new Error('managed_chrome_tab_id_required')
+    if (!normalizedSelector) throw new Error('managed_chrome_click_selector_required')
+
+    const target = await this.findTarget(normalizedTabId)
+    if (!target.webSocketDebuggerUrl) {
+      throw new Error(`managed_chrome_debugger_url_missing:${normalizedTabId}`)
+    }
+    const client = await DevtoolsClient.connect(
+      this.WebSocketImpl,
+      target.webSocketDebuggerUrl,
+      this.commandTimeoutMs
+    )
+
+    try {
+      const expression = `
+JSON.stringify((() => {
+  const selector = ${JSON.stringify(normalizedSelector)}
+  const deepQuery = (root) => {
+    const direct = root.querySelector?.(selector)
+    if (direct) return direct
+    for (const element of root.querySelectorAll?.('*') ?? []) {
+      if (!element.shadowRoot) continue
+      const nested = deepQuery(element.shadowRoot)
+      if (nested) return nested
+    }
+    return null
+  }
+  const element = deepQuery(document)
+  if (!(element instanceof HTMLElement)) return { found: false }
+  element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' })
+  const rect = element.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return { found: false }
+  return {
+    found: true,
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2
+  }
+})())
+`.trim()
+      const result = await client.send('Runtime.evaluate', {
+        expression,
+        returnByValue: true
+      })
+      const point = JSON.parse(this.readStringResult(result)) as {
+        found?: boolean
+        x?: number
+        y?: number
+      }
+      if (!point.found || typeof point.x !== 'number' || typeof point.y !== 'number') {
+        throw new Error(`managed_chrome_click_target_not_found:${normalizedSelector}`)
+      }
+
+      await client.send('Input.dispatchMouseEvent', {
+        type: 'mouseMoved',
+        x: point.x,
+        y: point.y
+      })
+      await client.send('Input.dispatchMouseEvent', {
+        type: 'mousePressed',
+        x: point.x,
+        y: point.y,
+        button: 'left',
+        clickCount: 1
+      })
+      await client.send('Input.dispatchMouseEvent', {
+        type: 'mouseReleased',
+        x: point.x,
+        y: point.y,
+        button: 'left',
+        clickCount: 1
+      })
+    } finally {
+      client.close()
+    }
+  }
+
   private async findTarget(tabId: string) {
     const response = await this.fetchImpl(`${this.endpointUrl}/json/list`)
     if (!response.ok) {

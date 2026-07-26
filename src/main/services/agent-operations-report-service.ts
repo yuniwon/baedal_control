@@ -28,6 +28,7 @@ import type {
 } from '../../shared/contracts'
 import { summarizeSyncPreviewItemChange } from '../../shared/sync-preview-item-change'
 import { describeSyncFailure } from '../../shared/sync-error-catalog'
+import { PLATFORM_CODES, getPlatformLabel } from '../../shared/platforms'
 import { buildLogicalOptionGroups } from './logical-option-group-service'
 
 interface AgentOperationsReportDependencies {
@@ -51,11 +52,9 @@ const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 200
 const IMPORT_LOOKBACK_LIMIT = 200
 
-const PLATFORM_LABELS: Record<PlatformCode, string> = {
-  baemin: '배민',
-  coupangeats: '쿠팡이츠',
-  ddangyo: '땡겨요'
-}
+const PLATFORM_LABELS = Object.fromEntries(
+  PLATFORM_CODES.map((platformCode) => [platformCode, getPlatformLabel(platformCode)])
+) as Record<PlatformCode, string>
 
 const REVIEW_REASON_LABELS: Record<SyncPreviewNeedsReview['reason'], string> = {
   missing_mapping: '플랫폼 메뉴 연결 필요',
@@ -93,11 +92,9 @@ const buildEnvelope = <TData>(
 })
 
 const createEmptyPlatformCounts = () =>
-  ({
-    baemin: { executable: 0, needsReview: 0 },
-    coupangeats: { executable: 0, needsReview: 0 },
-    ddangyo: { executable: 0, needsReview: 0 }
-  }) satisfies AgentOverviewReport['previewCounts']['byPlatform']
+  Object.fromEntries(
+    PLATFORM_CODES.map((platformCode) => [platformCode, { executable: 0, needsReview: 0 }])
+  ) as AgentOverviewReport['previewCounts']['byPlatform']
 
 const createEmptyOptionStatusCounts = () =>
   ({

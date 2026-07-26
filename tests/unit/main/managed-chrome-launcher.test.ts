@@ -16,10 +16,22 @@ describe('ManagedChromeLauncher', () => {
         chromeAvailable: true,
         chromePath: 'C:\\Users\\WON2\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe',
         chromeProfilePath: 'C:\\Users\\WON2\\AppData\\Roaming\\delivery-menu-sync\\managed-chrome',
+        passwordManagerLoginReady: true,
         managedChromeRunning: false,
         chromeError: null
       })
     )
+  })
+
+  it('does not mark Chromium as ready for the Google Chrome password manager flow', () => {
+    const launcher = new ManagedChromeLauncher({
+      extensionPath: 'C:\\dev\\bedal\\browser-extension\\delivery-menu-inspector',
+      profileDir: 'C:\\Users\\WON2\\AppData\\Roaming\\delivery-menu-sync\\managed-chrome',
+      chromeCandidates: ['C:\\Chromium\\Application\\chrome.exe'],
+      existsSync: () => true
+    })
+
+    expect(launcher.getStatus().passwordManagerLoginReady).toBe(false)
   })
 
   it('launches chrome with extension and dedicated profile flags', () => {

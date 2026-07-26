@@ -64,6 +64,10 @@ export const formatPlatformImportError = (
     return '쿠팡이츠 로그인 화면이 오류로 멈췄습니다. 잠시 후 다시 시도해 주세요.'
   }
 
+  if (value === 'coupangeats_managed_session_unavailable') {
+    return '로그인된 쿠팡이츠 전용 Chrome 메뉴 화면을 읽지 못했습니다. 로그인 상태와 메뉴 화면을 확인해 주세요.'
+  }
+
   if (value === 'coupangeats_management_app_blank') {
     return '쿠팡이츠 관리 화면이 빈 페이지로 열렸습니다. 로그인 뒤 초기 데이터 호출에 실패했습니다.'
   }

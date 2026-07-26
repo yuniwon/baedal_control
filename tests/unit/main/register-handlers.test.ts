@@ -29,6 +29,390 @@ describe('registerHandlers', () => {
     electronMock.handle.mockClear()
   })
 
+  it('exposes validated platform session actions', async () => {
+    const ready = {
+      workspaceId: 'default',
+      platformCode: 'baemin' as const,
+      state: 'ready' as const,
+      detailCode: null
+    }
+    const list = vi.fn().mockReturnValue([ready])
+    const check = vi.fn().mockResolvedValue(ready)
+    const connect = vi.fn().mockResolvedValue(ready)
+    const resumeAfterUserAction = vi.fn().mockResolvedValue(ready)
+
+    registerHandlers({
+      menuRepository: { list: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      mappingRepository: { listAll: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      platformMenuRepository: { listAll: vi.fn().mockReturnValue([]) },
+      syncRunRepository: { list: vi.fn().mockReturnValue([]) },
+      credentialVault: { get: vi.fn(), set: vi.fn() } as never,
+      platformSessionOrchestrator: { list, check, connect, resumeAfterUserAction }
+    })
+
+    await expect(
+      electronMock.registeredHandlers.get('platformSessions:list')?.({})
+    ).resolves.toEqual([ready])
+    await expect(
+      electronMock.registeredHandlers.get('platformSessions:check')?.({}, { platformCode: 'baemin' })
+    ).resolves.toEqual(ready)
+    await expect(
+      electronMock.registeredHandlers.get('platformSessions:connect')?.({}, { platformCode: 'baemin' })
+    ).resolves.toEqual(ready)
+    await expect(
+      electronMock.registeredHandlers.get('platformSessions:resumeAfterUserAction')?.(
+        {},
+        { platformCode: 'baemin' }
+      )
+    ).resolves.toEqual(ready)
+
+    await expect(
+      electronMock.registeredHandlers.get('platformSessions:connect')?.(
+        {},
+        { platformCode: 'not-a-platform' }
+      )
+    ).rejects.toThrow('invalid_platform_code')
+    expect(check).toHaveBeenCalledWith('baemin')
+    expect(connect).toHaveBeenCalledWith('baemin')
+    expect(resumeAfterUserAction).toHaveBeenCalledWith('baemin')
+  })
+
+  it('does not import after credential submission until the session is ready', async () => {
+    const importPlatform = vi.fn()
+    const challenge = {
+      workspaceId: 'default',
+      platformCode: 'baemin' as const,
+      state: 'challenge_required' as const,
+      detailCode: 'credential_submitted_check_required'
+    }
+
+    registerHandlers({
+      menuRepository: { list: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      mappingRepository: { listAll: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      platformMenuRepository: { listAll: vi.fn().mockReturnValue([]) },
+      syncRunRepository: { list: vi.fn().mockReturnValue([]) },
+      credentialVault: {
+        get: vi.fn().mockReturnValue({ username: 'owner', password: 'secret' }),
+        set: vi.fn()
+      } as never,
+      platformMenuImporter: { importPlatform },
+      platformSessionOrchestrator: {
+        list: vi.fn().mockReturnValue([]),
+        check: vi.fn().mockResolvedValue(challenge),
+        connect: vi.fn().mockResolvedValue(challenge),
+        resumeAfterUserAction: vi.fn().mockResolvedValue(challenge)
+      }
+    })
+
+    await expect(
+      electronMock.registeredHandlers.get('settings:save-platform-credential')?.(
+        {},
+        { platformCode: 'baemin', username: 'owner', password: 'secret' }
+      )
+    ).resolves.toEqual({
+      ok: true,
+      sessionState: challenge,
+      importError: 'platform_session_not_ready:challenge_required'
+    })
+    expect(importPlatform).not.toHaveBeenCalled()
+  })
+
+  it('uses the guarded session connection path before a manual reread', async () => {
+    const connect = vi.fn().mockResolvedValue({
+      workspaceId: 'default',
+      platformCode: 'deliveryspecial',
+      state: 'ready',
+      detailCode: null
+    })
+    const importPlatform = vi.fn().mockResolvedValue({
+      summary: { platformCode: 'deliveryspecial', fetchedCount: 47 }
+    })
+    registerHandlers({
+      menuRepository: { list: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      mappingRepository: { listAll: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      platformMenuRepository: { listAll: vi.fn().mockReturnValue([]) },
+      syncRunRepository: { list: vi.fn().mockReturnValue([]) },
+      credentialVault: {
+        get: vi.fn().mockReturnValue({ username: 'owner', password: 'secret' }),
+        set: vi.fn()
+      } as never,
+      platformMenuImporter: { importPlatform } as never,
+      platformSessionOrchestrator: {
+        list: vi.fn(),
+        check: vi.fn(),
+        connect,
+        resumeAfterUserAction: vi.fn()
+      } as never
+    })
+
+    await electronMock.registeredHandlers.get('settings:import-platform-menus')?.(
+      {},
+      { platformCode: 'deliveryspecial' }
+    )
+
+    expect(connect).toHaveBeenCalledWith('deliveryspecial')
+    expect(importPlatform).toHaveBeenCalledWith('deliveryspecial')
+  })
+
+  it('continues the original Coupang import without reading an app credential', async () => {
+    const getCredential = vi.fn((platformCode: string) => {
+      if (platformCode === 'coupangeats') {
+        throw new Error('coupang credential must not be read')
+      }
+      return null
+    })
+    const connect = vi.fn().mockResolvedValue({
+      workspaceId: 'default',
+      platformCode: 'coupangeats',
+      state: 'ready',
+      detailCode: 'password_manager_login_verified'
+    })
+    const importPlatform = vi.fn().mockResolvedValue({
+      summary: { platformCode: 'coupangeats', fetchedCount: 38 }
+    })
+    registerHandlers({
+      menuRepository: { list: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      mappingRepository: { listAll: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      platformMenuRepository: { listAll: vi.fn().mockReturnValue([]) },
+      syncRunRepository: { list: vi.fn().mockReturnValue([]) },
+      credentialVault: { get: getCredential, set: vi.fn() } as never,
+      platformMenuImporter: { importPlatform } as never,
+      platformSessionOrchestrator: {
+        list: vi.fn(),
+        check: vi.fn(),
+        connect,
+        resumeAfterUserAction: vi.fn()
+      } as never
+    })
+
+    await expect(
+      electronMock.registeredHandlers.get('settings:import-platform-menus')?.(
+        {},
+        { platformCode: 'coupangeats' }
+      )
+    ).resolves.toMatchObject({
+      ok: true,
+      sessionState: { state: 'ready' },
+      importSummary: { platformCode: 'coupangeats', fetchedCount: 38 }
+    })
+    expect(connect).toHaveBeenCalledWith('coupangeats')
+    expect(importPlatform).toHaveBeenCalledWith('coupangeats')
+    expect(getCredential).not.toHaveBeenCalledWith('coupangeats')
+  })
+
+  it('lists Coupang credential fields without decrypting a legacy app entry', async () => {
+    const getCredential = vi.fn((platformCode: string) => {
+      if (platformCode === 'coupangeats') {
+        throw new Error('coupang credential must not be read')
+      }
+      return null
+    })
+    registerHandlers({
+      menuRepository: { list: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      mappingRepository: { listAll: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      platformMenuRepository: { listAll: vi.fn().mockReturnValue([]) },
+      syncRunRepository: { list: vi.fn().mockReturnValue([]) },
+      credentialVault: { get: getCredential, set: vi.fn() } as never
+    })
+
+    const rows = await electronMock.registeredHandlers.get('settings:list-platform-credentials')?.({})
+
+    expect(rows).toEqual(expect.arrayContaining([
+      {
+        platformCode: 'coupangeats',
+        connected: false,
+        username: '',
+        password: ''
+      }
+    ]))
+    expect(getCredential).not.toHaveBeenCalledWith('coupangeats')
+  })
+
+  it('persists explicit auto-click consent and validates the platform', async () => {
+    const preference = {
+      workspaceId: 'default',
+      platformCode: 'coupangeats' as const,
+      autoClickLoginButtonConsented: true,
+      consentUpdatedAt: '2026-07-26T10:00:00.000Z'
+    }
+    const get = vi.fn().mockReturnValue({ ...preference, autoClickLoginButtonConsented: false })
+    const setAutoClickConsent = vi.fn().mockReturnValue(preference)
+    registerHandlers({
+      menuRepository: { list: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      mappingRepository: { listAll: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      platformMenuRepository: { listAll: vi.fn().mockReturnValue([]) },
+      syncRunRepository: { list: vi.fn().mockReturnValue([]) },
+      credentialVault: { get: vi.fn(), set: vi.fn() } as never,
+      platformAuthPreferenceRepository: { get, setAutoClickConsent },
+      now: () => '2026-07-26T10:00:00.000Z'
+    } as never)
+
+    await expect(
+      electronMock.registeredHandlers.get('platformAuthPreferences:setAutoClickConsent')?.(
+        {},
+        { platformCode: 'coupangeats', consented: true }
+      )
+    ).resolves.toEqual(preference)
+    expect(setAutoClickConsent).toHaveBeenCalledWith(
+      'default',
+      'coupangeats',
+      true,
+      '2026-07-26T10:00:00.000Z'
+    )
+    await expect(
+      electronMock.registeredHandlers.get('platformAuthPreferences:setAutoClickConsent')?.(
+        {},
+        { platformCode: 'baemin', consented: true }
+      )
+    ).rejects.toThrow('password_manager_login_unsupported')
+  })
+
+  it('clears a legacy Coupang credential only after the explicit cleanup action', async () => {
+    const hasStoredEntry = vi.fn().mockReturnValue(true)
+    const clear = vi.fn()
+    registerHandlers({
+      menuRepository: { list: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      mappingRepository: { listAll: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      platformMenuRepository: { listAll: vi.fn().mockReturnValue([]) },
+      syncRunRepository: { list: vi.fn().mockReturnValue([]) },
+      credentialVault: { get: vi.fn(), set: vi.fn(), hasStoredEntry, clear } as never
+    })
+
+    await expect(
+      electronMock.registeredHandlers.get('settings:get-legacy-platform-credential-status')?.(
+        {},
+        { platformCode: 'coupangeats' }
+      )
+    ).resolves.toEqual({ stored: true })
+    expect(clear).not.toHaveBeenCalled()
+
+    await expect(
+      electronMock.registeredHandlers.get('settings:clear-legacy-platform-credential')?.(
+        {},
+        { platformCode: 'coupangeats' }
+      )
+    ).resolves.toEqual({ ok: true })
+    expect(clear).toHaveBeenCalledWith('coupangeats')
+  })
+
+  it('rejects attempts to save Coupang credentials in the app vault', async () => {
+    const set = vi.fn()
+    registerHandlers({
+      menuRepository: { list: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      mappingRepository: { listAll: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      platformMenuRepository: { listAll: vi.fn().mockReturnValue([]) },
+      syncRunRepository: { list: vi.fn().mockReturnValue([]) },
+      credentialVault: { get: vi.fn(), set } as never
+    })
+
+    await expect(
+      electronMock.registeredHandlers.get('settings:save-platform-credential')?.(
+        {},
+        { platformCode: 'coupangeats', username: 'owner', password: 'secret' }
+      )
+    ).rejects.toThrow('application_credential_not_supported')
+    expect(set).not.toHaveBeenCalled()
+  })
+
+  it('registers validated catalog onboarding and review handlers', async () => {
+    const workspace = {
+      workspaceId: 'default',
+      displayName: '기본 매장',
+      lifecycleState: 'collecting' as const,
+      seedMode: null,
+      seedPlatformCode: null,
+      canonicalVersion: 0
+    }
+    const preview = vi.fn().mockReturnValue({ workspaceId: 'default', draftMenus: [] })
+    const activate = vi.fn().mockReturnValue({ ...workspace, lifecycleState: 'active' })
+    const resolve = vi.fn()
+    const upsert = vi.fn()
+
+    registerHandlers({
+      menuRepository: { list: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      mappingRepository: { listAll: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      platformMenuRepository: { listAll: vi.fn().mockReturnValue([]) },
+      syncRunRepository: { list: vi.fn().mockReturnValue([]) },
+      credentialVault: { get: vi.fn(), set: vi.fn() } as never,
+      catalogWorkspaceRepository: { getDefault: vi.fn().mockReturnValue(workspace) },
+      catalogBootstrapService: { preview, activate },
+      catalogReviewRepository: {
+        listOpen: vi.fn().mockReturnValue([
+          {
+            reviewItemId: 'review-1',
+            workspaceId: 'default',
+            fingerprint: 'fingerprint-1',
+            kind: 'missing_on_platform',
+            state: 'open',
+            confidence: 1,
+            title: '누락 메뉴',
+            explanation: '결정 필요',
+            recommendation: 'add_to_platform',
+            evidenceJson: JSON.stringify({ fieldKey: 'presence', categoryKey: '피자' }),
+            canonicalMenuId: 'menu-1',
+            platformCode: 'coupangeats',
+            sourceEntityId: null,
+            intentRuleId: null
+          }
+        ]),
+        resolve,
+        setState: vi.fn()
+      },
+      catalogIntentRuleRepository: { upsert },
+      createId: () => 'intent-1'
+    })
+
+    expect(await electronMock.registeredHandlers.get('catalogWorkspace:get')?.({})).toEqual(workspace)
+
+    await electronMock.registeredHandlers.get('catalogBootstrap:preview')?.({}, {
+      workspaceId: 'default',
+      seedMode: 'blank',
+      seedPlatformCode: null
+    })
+    expect(preview).toHaveBeenCalledWith({
+      workspaceId: 'default',
+      seedMode: 'blank',
+      seedPlatformCode: null
+    })
+
+    await expect(
+      electronMock.registeredHandlers.get('catalogBootstrap:preview')?.({}, {
+        workspaceId: 'default',
+        seedMode: 'platform',
+        seedPlatformCode: 'unknown-platform'
+      })
+    ).rejects.toThrow('invalid_catalog_request')
+
+    await expect(
+      electronMock.registeredHandlers.get('catalogReviews:resolve')?.({}, {
+        reviewItemIds: ['review-1'],
+        resolution: 'exclude_platform',
+        remember: true,
+        scope: 'entity',
+        reason: ''
+      })
+    ).rejects.toThrow('invalid_catalog_request')
+
+    await electronMock.registeredHandlers.get('catalogReviews:resolve')?.({}, {
+      reviewItemIds: ['review-1'],
+      resolution: 'exclude_platform',
+      remember: true,
+      scope: 'entity',
+      reason: '이 플랫폼에는 판매하지 않음'
+    })
+
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      intentRuleId: 'intent-1',
+      workspaceId: 'default',
+      kind: 'missing_on_platform',
+      scope: 'entity',
+      resolution: 'exclude_platform',
+      platformCode: 'coupangeats',
+      canonicalMenuId: 'menu-1'
+    }))
+    expect(resolve).toHaveBeenCalledWith(['review-1'], 'intent-1')
+  })
+
   it('runs only selected items that are still executable in the latest preview', async () => {
     const run = vi.fn().mockResolvedValue({ syncRunId: 'run-1', summary: '성공 1건, 실패 0건' })
 
@@ -851,19 +1235,16 @@ describe('registerHandlers', () => {
     expect(captureManagedChromeTab).toHaveBeenCalledWith('tab-1')
   })
 
-  it('uses the saved coupangeats credentials for managed chrome auto-login when requested', async () => {
-    const launchManagedChrome = vi.fn().mockReturnValue({
-      chromeAvailable: true,
-      chromePath: 'C:\\Users\\WON2\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe',
-      chromeProfilePath: 'C:\\Users\\WON2\\AppData\\Roaming\\delivery-menu-sync\\managed-chrome',
-      managedChromeRunning: true,
-      lastLaunchUrl: 'https://store.coupangeats.com/merchant/login',
-      chromeError: null
+  it('routes Coupang managed Chrome login through the password-manager session path', async () => {
+    const getCredential = vi.fn(() => {
+      throw new Error('coupang credential must not be read')
     })
-    const autoLogin = vi.fn().mockResolvedValue({
+    const autoLogin = vi.fn()
+    const connect = vi.fn().mockResolvedValue({
+      workspaceId: 'default',
       platformCode: 'coupangeats',
-      status: 'submitted',
-      message: '저장된 쿠팡이츠 계정으로 로그인을 시도했습니다.'
+      state: 'ready',
+      detailCode: 'password_manager_login_verified'
     })
 
     registerHandlers({
@@ -885,11 +1266,7 @@ describe('registerHandlers', () => {
         listForRunIds: vi.fn().mockReturnValue([])
       },
       credentialVault: {
-        get: vi.fn().mockImplementation((platformCode: string) =>
-          platformCode === 'coupangeats'
-            ? { username: 'saved-id', password: 'saved-password' }
-            : null
-        ),
+        get: getCredential,
         set: vi.fn()
       } as never,
       managedChromeLauncher: {
@@ -897,15 +1274,22 @@ describe('registerHandlers', () => {
           chromeAvailable: true,
           chromePath: 'C:\\Users\\WON2\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe',
           chromeProfilePath: 'C:\\Users\\WON2\\AppData\\Roaming\\delivery-menu-sync\\managed-chrome',
-          managedChromeRunning: false,
-          lastLaunchUrl: null,
+          passwordManagerLoginReady: true,
+          managedChromeRunning: true,
+          lastLaunchUrl: 'https://store.coupangeats.com/merchant/login',
           chromeError: null
         }),
-        launch: launchManagedChrome
+        launch: vi.fn()
       },
       managedChromeLoginAutomator: {
         getLaunchUrl: vi.fn().mockReturnValue('https://store.coupangeats.com/merchant/login'),
         autoLogin
+      },
+      platformSessionOrchestrator: {
+        list: vi.fn(),
+        check: vi.fn(),
+        connect,
+        resumeAfterUserAction: vi.fn()
       }
     } as unknown as Parameters<typeof registerHandlers>[0])
 
@@ -918,16 +1302,14 @@ describe('registerHandlers', () => {
         chromeAvailable: true,
         managedChromeRunning: true,
         lastLaunchUrl: 'https://store.coupangeats.com/merchant/login',
-        managedChromeAutoLoginStatus: 'submitted',
-        managedChromeAutoLoginMessage: '저장된 쿠팡이츠 계정으로 로그인을 시도했습니다.'
+        managedChromeAutoLoginStatus: 'already_authenticated',
+        managedChromeAutoLoginMessage: '쿠팡이츠 로그인 상태를 확인했습니다.'
       })
     )
 
-    expect(launchManagedChrome).toHaveBeenCalledWith('https://store.coupangeats.com/merchant/login')
-    expect(autoLogin).toHaveBeenCalledWith('coupangeats', {
-      username: 'saved-id',
-      password: 'saved-password'
-    })
+    expect(connect).toHaveBeenCalledWith('coupangeats')
+    expect(getCredential).not.toHaveBeenCalled()
+    expect(autoLogin).not.toHaveBeenCalled()
   })
 
   it('exposes the next action planning report through IPC', async () => {

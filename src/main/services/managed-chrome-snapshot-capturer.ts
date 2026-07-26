@@ -1,6 +1,18 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { BrowserInspectionSnapshot } from '../../shared/contracts'
+import type { BrowserInspectionApiEvent, BrowserInspectionSnapshot } from '../../shared/contracts'
+import {
+  buildDeliverySpecialCatalogApiEvents,
+  buildDeliverySpecialCatalogCaptureExpression,
+  type DeliverySpecialCatalogCapturePayload
+} from '../platforms/deliveryspecial/managed-catalog'
+import {
+  buildYogiyoCatalogApiEvents,
+  countYogiyoPageEntities,
+  readYogiyoPageCursor
+} from '../platforms/yogiyo/managed-catalog'
+import { expandCoupangEatsOptionPayload } from '../platforms/coupangeats/managed-catalog'
+import { dismissSafeNoticeDialogsInDocument } from './safe-notice-dialog-dismissal'
 
 interface ManagedChromeSnapshotCapturerOptions {
   endpointUrl?: string
@@ -9,6 +21,7 @@ interface ManagedChromeSnapshotCapturerOptions {
   loadSnapshotScript?: () => Promise<string>
   now?: () => Date
   commandTimeoutMs?: number
+  sleep?: (ms: number) => Promise<void>
 }
 
 interface ManagedChromeSocket {
@@ -38,6 +51,17 @@ interface DevtoolsCommandFailure {
   error?: { message?: string }
 }
 
+interface DevtoolsEvent {
+  method: string
+  params?: Record<string, unknown>
+}
+
+interface YogiyoAuthenticatedRequest {
+  url: string
+  authorization: string
+  accept?: string
+}
+
 const defaultSnapshotScriptLoader = () =>
   readFile(join(process.cwd(), 'browser-extension', 'delivery-menu-inspector', 'dom-snapshot.mjs'), 'utf8')
 
@@ -46,6 +70,8 @@ const sanitizeSnapshotModuleSource = (value: string) => value.replace(/^export\s
 const buildCaptureExpression = (snapshotModuleSource: string) => `
 (async () => {
 ${sanitizeSnapshotModuleSource(snapshotModuleSource)}
+
+const dismissSafeNoticeDialogsInDocument = ${dismissSafeNoticeDialogsInDocument.toString()}
 
 const API_HOOK_FLAG = '__deliveryMenuInspectorHookInstalled'
 const API_EVENTS_KEY = '__deliveryMenuInspectorApiEvents'
@@ -110,6 +136,8 @@ const normalizeApiEvents = (events) => {
   return [...deduped.values()]
 }
 
+const expandCoupangEatsOptionPayload = ${expandCoupangEatsOptionPayload.toString()}
+
 const collectKnownPlatformApiEvents = async () => {
   const href = window.location.href
   const host = window.location.host
@@ -124,39 +152,68 @@ const collectKnownPlatformApiEvents = async () => {
   }
 
   const storeId = storeIdMatch[1]
-  const endpoints = [
-    \`/api/v1/merchant/web/stores/\${storeId}/all-menu-dishes\`,
-    \`/api/v1/merchant/web/stores/\${storeId}/all-options?fetchDish=true\`
-  ]
   const events = []
-
-  for (const endpoint of endpoints) {
+  const captureGet = async (endpoint) => {
     const url = new URL(endpoint, href).toString()
-
     try {
       const response = await fetch(endpoint, {
         method: 'GET',
         credentials: 'include'
       })
       const responsePreview = (await response.text()).slice(0, 500000)
-      events.push({
-        url,
-        method: 'GET',
-        status: response.status,
-        capturedAt: new Date().toISOString(),
+      return {
+        event: {
+          url,
+          method: 'GET',
+          status: response.status,
+          capturedAt: new Date().toISOString(),
+          responsePreview
+        },
         responsePreview
-      })
+      }
     } catch (error) {
-      events.push({
-        url,
-        method: 'GET',
-        status: null,
-        capturedAt: new Date().toISOString(),
-        requestPreview: error instanceof Error ? error.message : String(error),
+      return {
+        event: {
+          url,
+          method: 'GET',
+          status: null,
+          capturedAt: new Date().toISOString(),
+          requestPreview: error instanceof Error ? error.message : String(error),
+          responsePreview: null
+        },
         responsePreview: null
-      })
+      }
     }
   }
+
+  const menuEndpoint = \`/api/v1/merchant/web/stores/\${storeId}/all-menu-dishes\`
+  const menuCapture = await captureGet(menuEndpoint)
+  events.push(menuCapture.event)
+
+  const optionEndpoint = \`/api/v1/merchant/web/stores/\${storeId}/all-options?fetchDish=true\`
+  const optionCapture = await captureGet(optionEndpoint)
+  if (optionCapture.event.status === 200 && optionCapture.responsePreview) {
+    try {
+      const optionPayload = JSON.parse(optionCapture.responsePreview)
+      const optionGroups = Array.isArray(optionPayload?.data) ? optionPayload.data : []
+      const detailPayloads = []
+      for (const optionGroup of optionGroups) {
+        if (optionGroup?.optionId == null) continue
+        const detailCapture = await captureGet(
+          \`/api/v1/merchant/web/stores/\${storeId}/options/\${optionGroup.optionId}\`
+        )
+        if (detailCapture.event.status === 200 && detailCapture.responsePreview) {
+          detailPayloads.push(JSON.parse(detailCapture.responsePreview))
+        }
+      }
+      optionCapture.event.responsePreview = JSON.stringify(
+        expandCoupangEatsOptionPayload(optionPayload, detailPayloads)
+      ).slice(0, 500000)
+    } catch {
+      // Preserve the original all-options response when a detail cannot be expanded.
+    }
+  }
+  events.push(optionCapture.event)
 
   return events
 }
@@ -187,7 +244,7 @@ const injectApiHook = () => {
 
       const cloneText = async (response) => {
         try {
-          return (await response.clone().text()).slice(0, 2000)
+          return (await response.clone().text()).slice(0, 500000)
         } catch {
           return null
         }
@@ -225,7 +282,7 @@ const injectApiHook = () => {
             status: Number.isFinite(this.status) ? this.status : null,
             capturedAt: new Date().toISOString(),
             requestPreview: typeof body === 'string' ? body.slice(0, 1200) : null,
-            responsePreview: typeof this.responseText === 'string' ? this.responseText.slice(0, 2000) : null
+            responsePreview: typeof this.responseText === 'string' ? this.responseText.slice(0, 500000) : null
           })
         })
 
@@ -296,6 +353,7 @@ const getMaxScrollTop = (container) => {
   return Math.max((container.scrollHeight || 0) - clientHeight, 0)
 }
 
+dismissSafeNoticeDialogsInDocument(document)
 injectApiHook()
 const knownApiEvents = await collectKnownPlatformApiEvents()
 
@@ -346,6 +404,9 @@ class DevtoolsClient {
   private readonly socket: ManagedChromeSocket
   private readonly timeoutMs: number
   private nextCommandId = 1
+  private readonly eventListeners = new Set<
+    (method: string, params: Record<string, unknown>) => void
+  >()
   private readonly pending = new Map<
     number,
     {
@@ -422,9 +483,25 @@ class DevtoolsClient {
     this.socket.close()
   }
 
+  onEvent(listener: (method: string, params: Record<string, unknown>) => void) {
+    this.eventListeners.add(listener)
+    return () => this.eventListeners.delete(listener)
+  }
+
   private handleMessage(event: MessageEvent<string>) {
-    const payload = JSON.parse(String(event.data)) as DevtoolsCommandSuccess | DevtoolsCommandFailure
-    if (typeof payload.id !== 'number') {
+    const payload = JSON.parse(String(event.data)) as
+      | DevtoolsCommandSuccess
+      | DevtoolsCommandFailure
+      | DevtoolsEvent
+    if ('method' in payload && typeof payload.method === 'string') {
+      const params = payload.params && typeof payload.params === 'object' ? payload.params : {}
+      for (const listener of this.eventListeners) {
+        listener(payload.method, params)
+      }
+      return
+    }
+
+    if (!('id' in payload) || typeof payload.id !== 'number') {
       return
     }
 
@@ -468,6 +545,7 @@ export class ManagedChromeSnapshotCapturer {
   private readonly loadSnapshotScript: () => Promise<string>
   private readonly now: () => Date
   private readonly commandTimeoutMs: number
+  private readonly sleep: (ms: number) => Promise<void>
 
   constructor(options: ManagedChromeSnapshotCapturerOptions = {}) {
     this.endpointUrl = options.endpointUrl ?? 'http://127.0.0.1:39482'
@@ -477,6 +555,12 @@ export class ManagedChromeSnapshotCapturer {
     this.loadSnapshotScript = options.loadSnapshotScript ?? defaultSnapshotScriptLoader
     this.now = options.now ?? (() => new Date())
     this.commandTimeoutMs = options.commandTimeoutMs ?? 15000
+    this.sleep =
+      options.sleep ??
+      ((ms) =>
+        new Promise<void>((resolve) => {
+          setTimeout(resolve, ms)
+        }))
   }
 
   async captureTab(tabId: string): Promise<BrowserInspectionSnapshot> {
@@ -498,6 +582,13 @@ export class ManagedChromeSnapshotCapturer {
     )
 
     try {
+      await this.prepareCoupangEatsCatalogPage(client, target)
+      const yogiyoApiEvents = this.isYogiyoTarget(target)
+        ? await this.captureYogiyoCatalog(client)
+        : []
+      const deliverySpecialApiEvents = this.isDeliverySpecialTarget(target)
+        ? await this.captureDeliverySpecialCatalog(client)
+        : []
       const evaluateResult = await client.send('Runtime.evaluate', {
         expression: buildCaptureExpression(snapshotModuleSource),
         awaitPromise: true,
@@ -530,6 +621,11 @@ export class ManagedChromeSnapshotCapturer {
 
       return {
         ...parsedSnapshot,
+        apiEvents: [
+          ...(parsedSnapshot.apiEvents ?? []),
+          ...yogiyoApiEvents,
+          ...deliverySpecialApiEvents
+        ],
         snapshotId: `managed-${normalizedTabId}-${this.now().toISOString()}`,
         source: 'manual_browser',
         screenshotDataUrl
@@ -552,6 +648,237 @@ export class ManagedChromeSnapshotCapturer {
     }
 
     return target
+  }
+
+  private isYogiyoTarget(target: DevtoolsListEntry) {
+    try {
+      return new URL(target.url ?? '').hostname === 'ceo.yogiyo.co.kr'
+    } catch {
+      return false
+    }
+  }
+
+  private async prepareCoupangEatsCatalogPage(
+    client: DevtoolsClient,
+    target: DevtoolsListEntry
+  ) {
+    let url: URL
+    try {
+      url = new URL(target.url ?? '')
+    } catch {
+      return
+    }
+
+    if (url.hostname !== 'store.coupangeats.com') return
+    const storeId = url.pathname.match(
+      /^\/merchant\/management\/(?:home|menu)\/(\d+)(?:\/|$)/
+    )?.[1]
+    if (!storeId || url.pathname.startsWith('/merchant/management/menu/')) return
+
+    const menuUrl = new URL(`/merchant/management/menu/${storeId}`, url).toString()
+    await client.send('Page.navigate', { url: menuUrl })
+
+    const marker = 'coupangeats_catalog_page_ready'
+    const expectedPath = new URL(menuUrl).pathname
+    const attempts = Math.max(1, Math.ceil(this.commandTimeoutMs / 100))
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        const result = await client.send('Runtime.evaluate', {
+          expression: `window.location.pathname === ${JSON.stringify(expectedPath)} ? '${marker}' : ''`,
+          returnByValue: true
+        })
+        const nestedResult =
+          result.result && typeof result.result === 'object'
+            ? (result.result as Record<string, unknown>)
+            : null
+        if (nestedResult?.value === marker) return
+      } catch {
+        // Navigation can replace the JavaScript context between readiness checks.
+      }
+      await this.sleep(100)
+    }
+
+    throw new Error('coupangeats_catalog_page_not_ready')
+  }
+
+  private isDeliverySpecialTarget(target: DevtoolsListEntry) {
+    try {
+      const url = new URL(target.url ?? '')
+      return (
+        url.hostname === 'partner.payco.kr' &&
+        (url.pathname.startsWith('/shop/') || url.pathname.startsWith('/product/'))
+      )
+    } catch {
+      return false
+    }
+  }
+
+  private async captureDeliverySpecialCatalog(
+    client: DevtoolsClient
+  ): Promise<BrowserInspectionApiEvent[]> {
+    await client.send('Page.navigate', {
+      url: 'https://partner.payco.kr/product/menuBoard/shop/detail'
+    })
+    await this.waitForDeliverySpecialCatalogPage(client)
+
+    const result = await client.send('Runtime.evaluate', {
+      expression: buildDeliverySpecialCatalogCaptureExpression(),
+      awaitPromise: true,
+      returnByValue: true
+    })
+    const payload = JSON.parse(this.readStringResult(result)) as DeliverySpecialCatalogCapturePayload
+
+    return buildDeliverySpecialCatalogApiEvents({
+      capturedAt: this.now().toISOString(),
+      payload
+    })
+  }
+
+  private async waitForDeliverySpecialCatalogPage(client: DevtoolsClient) {
+    const marker = 'deliveryspecial_catalog_page_ready'
+    const attempts = Math.max(1, Math.ceil(this.commandTimeoutMs / 100))
+
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        const result = await client.send('Runtime.evaluate', {
+          expression: `document.querySelector('#shopId')?.value ? '${marker}' : ''`,
+          returnByValue: true
+        })
+        const nestedResult =
+          result.result && typeof result.result === 'object'
+            ? (result.result as Record<string, unknown>)
+            : null
+        if (nestedResult?.value === marker) return
+      } catch {
+        // Navigation can replace the JavaScript context between readiness checks.
+      }
+
+      await this.sleep(100)
+    }
+
+    throw new Error('deliveryspecial_catalog_page_not_ready')
+  }
+
+  private async captureYogiyoCatalog(client: DevtoolsClient): Promise<BrowserInspectionApiEvent[]> {
+    const requests = new Map<'menu' | 'option', YogiyoAuthenticatedRequest>()
+    const unsubscribe = client.onEvent((method, params) => {
+      if (method !== 'Network.requestWillBeSent') return
+      const request =
+        params.request && typeof params.request === 'object'
+          ? (params.request as Record<string, unknown>)
+          : null
+      if (!request || request.method !== 'GET' || typeof request.url !== 'string') return
+
+      const collection = /\/products\//i.test(request.url)
+        ? 'menu'
+        : /\/options\//i.test(request.url)
+          ? 'option'
+          : null
+      if (!collection || !request.url.includes('ceo-api.yogiyo.co.kr')) return
+
+      const headers =
+        request.headers && typeof request.headers === 'object'
+          ? (request.headers as Record<string, unknown>)
+          : {}
+      const authorizationEntry = Object.entries(headers).find(
+        ([key, value]) => key.toLowerCase() === 'authorization' && typeof value === 'string'
+      )
+      if (!authorizationEntry || typeof authorizationEntry[1] !== 'string') return
+      const acceptEntry = Object.entries(headers).find(
+        ([key, value]) => key.toLowerCase() === 'accept' && typeof value === 'string'
+      )
+
+      requests.set(collection, {
+        url: request.url,
+        authorization: authorizationEntry[1],
+        ...(typeof acceptEntry?.[1] === 'string' ? { accept: acceptEntry[1] } : {})
+      })
+    })
+
+    try {
+      await client.send('Network.enable', {
+        maxTotalBufferSize: 20_000_000,
+        maxResourceBufferSize: 2_000_000
+      })
+
+      await client.send('Page.navigate', { url: 'https://ceo.yogiyo.co.kr/menu/set' })
+      const menuRequest = await this.waitForYogiyoRequest(requests, 'menu')
+      const menuPages = await this.fetchYogiyoPages('menu', menuRequest)
+
+      await client.send('Page.navigate', { url: 'https://ceo.yogiyo.co.kr/option/group' })
+      const optionRequest = await this.waitForYogiyoRequest(requests, 'option')
+      const optionPages = await this.fetchYogiyoPages('option', optionRequest)
+      await this.sleep(400)
+
+      return buildYogiyoCatalogApiEvents({
+        capturedAt: this.now().toISOString(),
+        menuUrl: menuRequest.url,
+        optionUrl: optionRequest.url,
+        menuPages,
+        optionPages
+      })
+    } finally {
+      unsubscribe()
+    }
+  }
+
+  private async waitForYogiyoRequest(
+    requests: Map<'menu' | 'option', YogiyoAuthenticatedRequest>,
+    collection: 'menu' | 'option'
+  ) {
+    const attempts = Math.max(1, Math.ceil(this.commandTimeoutMs / 100))
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const request = requests.get(collection)
+      if (request) return request
+      await this.sleep(100)
+    }
+    throw new Error(`yogiyo_${collection}_authenticated_request_missing`)
+  }
+
+  private async fetchYogiyoPages(
+    collection: 'menu' | 'option',
+    request: YogiyoAuthenticatedRequest
+  ): Promise<unknown[]> {
+    const baseUrl = new URL(request.url)
+    baseUrl.searchParams.delete('cursor')
+    baseUrl.searchParams.delete('size')
+    const pages: unknown[] = []
+    const seenCursors = new Set<string>()
+    let cursor: string | null = null
+
+    for (let pageIndex = 0; pageIndex < 100; pageIndex += 1) {
+      const pageUrl = new URL(baseUrl)
+      if (cursor) {
+        pageUrl.searchParams.set('cursor', cursor)
+        pageUrl.searchParams.set('size', '50')
+      }
+      const response = await this.fetchImpl(pageUrl, {
+        method: 'GET',
+        headers: {
+          Authorization: request.authorization,
+          ...(request.accept ? { Accept: request.accept } : {})
+        }
+      })
+      if (!response.ok) {
+        throw new Error(`yogiyo_${collection}_catalog_http_${response.status}`)
+      }
+
+      const page = (await response.json()) as unknown
+      pages.push(page)
+      if (countYogiyoPageEntities(page, collection) === 0) return pages
+
+      const nextCursor = readYogiyoPageCursor(page)
+      if (!nextCursor) {
+        throw new Error(`yogiyo_${collection}_cursor_missing`)
+      }
+      if (seenCursors.has(nextCursor)) {
+        throw new Error(`yogiyo_${collection}_cursor_repeated`)
+      }
+      seenCursors.add(nextCursor)
+      cursor = nextCursor
+    }
+
+    throw new Error(`yogiyo_${collection}_pagination_limit`)
   }
 
   private readStringResult(result: Record<string, unknown>) {

@@ -73,4 +73,40 @@ describe('ManagedChromeSessionProbe', () => {
       tabs: []
     })
   })
+
+  it('recognizes Yogiyo, Delivery Special, and Naver Order management tabs', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          id: 'yogiyo-tab',
+          type: 'page',
+          title: '요기요 메뉴 관리',
+          url: 'https://ceo.yogiyo.co.kr/self-service/menu'
+        },
+        {
+          id: 'deliveryspecial-tab',
+          type: 'page',
+          title: '배달특급 메뉴 관리',
+          url: 'https://partner.payco.kr/menu'
+        },
+        {
+          id: 'naver-tab',
+          type: 'page',
+          title: '네이버주문 메뉴 관리',
+          url: 'https://new.smartplace.naver.com/bizes/123/order/menu'
+        }
+      ]
+    })
+
+    const tabs = await new ManagedChromeSessionProbe({
+      fetch: fetchMock as never
+    }).inspect().then((session) => session.tabs)
+
+    expect(tabs.map(({ platformCode, pageKind }) => ({ platformCode, pageKind }))).toEqual([
+      { platformCode: 'yogiyo', pageKind: 'menu_list' },
+      { platformCode: 'deliveryspecial', pageKind: 'menu_list' },
+      { platformCode: 'naverorder', pageKind: 'menu_list' }
+    ])
+  })
 })
