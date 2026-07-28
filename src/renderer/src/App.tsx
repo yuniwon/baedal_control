@@ -4,87 +4,41 @@ import './App.css'
 import { DashboardPage } from './pages/DashboardPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { MappingPage } from './pages/MappingPage'
-import { MenuPage } from './pages/MenuPage'
-import { OptionPage } from './pages/OptionPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { CatalogOnboardingPage } from './pages/CatalogOnboardingPage'
+import { ReviewInboxPage } from './pages/ReviewInboxPage'
+import { UnifiedMenuPage } from './pages/UnifiedMenuPage'
 import { appApi } from './lib/api'
+import type { AppRoute } from './app/routes'
+import { AppShell } from './components/AppShell'
 
-const primaryTabs = ['home', 'menus', 'options', 'imports'] as const
-const advancedTabs = ['mapping', 'history'] as const
+const WorkspaceShell = ({ workspace }: { workspace: CatalogWorkspaceRecord }) => {
+  const [route, setRoute] = useState<AppRoute>('home')
+  const [reviewCount, setReviewCount] = useState(0)
+  const [latestImportAt, setLatestImportAt] = useState<string | null>(null)
 
-type AppTab = (typeof primaryTabs)[number] | (typeof advancedTabs)[number]
-
-const getTabLabel = (tab: AppTab) => {
-  switch (tab) {
-    case 'home':
-      return '홈'
-    case 'menus':
-      return '메뉴'
-    case 'options':
-      return '옵션'
-    case 'imports':
-      return '가져오기'
-    case 'mapping':
-      return '연결'
-    case 'history':
-      return '기록'
-  }
-}
-
-const WorkspaceShell = () => {
-  const [tab, setTab] = useState<AppTab>('home')
-  const [showAdvancedNav, setShowAdvancedNav] = useState(false)
-
-  const renderNavButton = (value: AppTab) => (
-    <button
-      key={value}
-      className={value === tab ? 'nav-button active' : 'nav-button'}
-      onClick={() => setTab(value)}
-      type="button"
-    >
-      {getTabLabel(value)}
-    </button>
-  )
+  useEffect(() => {
+    void Promise.all([
+      appApi.catalogReviews?.listOpen?.() ?? Promise.resolve([]),
+      appApi.platformImportRuns?.list?.() ?? Promise.resolve([])
+    ]).then(([reviews, imports]) => {
+      setReviewCount(reviews.length)
+      const latest = [...imports]
+        .filter((item) => item.status === 'completed')
+        .sort((left, right) => (right.finishedAt ?? right.startedAt).localeCompare(left.finishedAt ?? left.startedAt))[0]
+      setLatestImportAt(latest?.finishedAt ?? latest?.startedAt ?? null)
+    }).catch(() => undefined)
+  }, [])
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <strong>배달앱 메뉴 동기화</strong>
-          <span>한 곳에서 수정하고 한번에 반영</span>
-        </div>
-        <nav className="nav">
-          <div className="nav-section">{primaryTabs.map(renderNavButton)}</div>
-          <div className="nav-section">
-            <button
-              className="nav-button nav-secondary-toggle"
-              onClick={() =>
-                setShowAdvancedNav((current) => {
-                  const nextValue = !current
-                  if (!nextValue && advancedTabs.includes(tab as (typeof advancedTabs)[number])) {
-                    setTab('home')
-                  }
-                  return nextValue
-                })
-              }
-              type="button"
-            >
-              {showAdvancedNav ? '고급 기능 숨기기' : '고급 기능 보기'}
-            </button>
-            {showAdvancedNav ? advancedTabs.map(renderNavButton) : null}
-          </div>
-        </nav>
-      </aside>
-      <main className="content">
-        {tab === 'home' && <DashboardPage />}
-        {tab === 'menus' && <MenuPage />}
-        {tab === 'options' && <OptionPage />}
-        {tab === 'mapping' && <MappingPage />}
-        {tab === 'imports' && <SettingsPage />}
-        {tab === 'history' && <HistoryPage />}
-      </main>
-    </div>
+    <AppShell workspaceName={workspace.displayName} catalogVersion={workspace.canonicalVersion} reviewCount={reviewCount} latestImportAt={latestImportAt} route={route} onNavigate={setRoute}>
+        {route === 'home' && <DashboardPage />}
+        {route === 'catalog' && <UnifiedMenuPage />}
+        {route === 'reviews' && <ReviewInboxPage />}
+        {route === 'mappings' && <MappingPage />}
+        {route === 'imports' && <SettingsPage />}
+        {route === 'history' && <HistoryPage />}
+    </AppShell>
   )
 }
 
@@ -108,5 +62,5 @@ export default function App() {
     return <CatalogOnboardingPage workspace={workspace} onActivated={setWorkspace} />
   }
 
-  return <WorkspaceShell />
+  return <WorkspaceShell workspace={workspace} />
 }

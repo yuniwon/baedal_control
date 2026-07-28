@@ -24,6 +24,14 @@ vi.mock('../../../src/renderer/src/pages/MenuPage', () => ({
   MenuPage: () => <h1>메뉴 관리</h1>
 }))
 
+vi.mock('../../../src/renderer/src/pages/UnifiedMenuPage', () => ({
+  UnifiedMenuPage: () => <h1>통합메뉴 관리</h1>
+}))
+
+vi.mock('../../../src/renderer/src/pages/ReviewInboxPage', () => ({
+  ReviewInboxPage: () => <h1>검토함</h1>
+}))
+
 vi.mock('../../../src/renderer/src/pages/OptionPage', () => ({
   OptionPage: () => <h1>옵션 관리</h1>
 }))
@@ -47,10 +55,17 @@ describe('App navigation', () => {
     render(<App />)
 
     expect(await screen.findByRole('button', { name: '홈' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '메뉴' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '옵션' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '통합메뉴' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '검토함' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '가져오기' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '옵션' })).toBeNull()
     expect(screen.queryByRole('button', { name: '연결' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '통합메뉴' }))
+    expect(await screen.findByRole('heading', { name: '통합메뉴 관리' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '검토함' }))
+    expect(await screen.findByRole('heading', { name: '검토함' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '고급 기능 보기' }))
     fireEvent.click(await screen.findByRole('button', { name: '연결' }))
