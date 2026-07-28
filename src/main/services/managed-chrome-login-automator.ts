@@ -145,6 +145,10 @@ const buildDeepFormLoginExpression = ({
     if (!(element instanceof HTMLInputElement) && !(element instanceof HTMLTextAreaElement)) {
       return
     }
+    const component = element.id
+      ? element.ownerDocument?.defaultView?.[element.id]
+      : null
+    component?.setValue?.(value)
     const descriptor =
       Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value') ??
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value') ??

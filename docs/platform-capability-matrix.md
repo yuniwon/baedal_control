@@ -210,6 +210,17 @@
 - 옵션명에서 `#`는 화면 메시지와 실제 정규식이 충돌하므로 금지한다.
 - 이미지 업로드와 메뉴 텍스트 저장을 분리하고, 승인 대기 중 재시도하지 않는다.
 - 스케줄은 메뉴 상태 덮어쓰기가 아니라 별도 엔터티로 보존한다.
+- 현재 앱은 메뉴와 다중 채널 가격까지만 수집하며 옵션 원장은 아직 수집하지 않는다.
+- 옵션 그룹 목록은 `SMWME01T200.xml`의 `dma_optEdit`로 조회하며, 서버 조회 작업은
+  `me/requestListOptionEdit`이다. 그룹 ID·이름·옵션 요약·옵션 수·연결 메뉴명을 돌려준다.
+- 그룹별 옵션 원장은 `SMWME01T210.xml`의 `dma_optionList`로 조회하며, 서버 조회 작업은
+  `me/requestListOtsOption`이다. 옵션 ID·이름·가격·판매/품절/숨김 상태·정렬순서와 그룹의
+  필수 여부 및 최소·최대 선택 수를 함께 돌려준다.
+- 메뉴 연결 화면 `SMWME01T120P08.xml`은 메뉴별 옵션 그룹 ID와 정렬순서를 보유한다.
+  그룹 목록의 연결 메뉴명만으로는 동명 메뉴를 구분할 수 없으므로, 최종 수집기는 이 메뉴별
+  연결 정보를 함께 읽어 플랫폼 메뉴 ID에 결합해야 한다.
+- 옵션 쓰기는 목록 조회와 분리한다. 생성은 `me/requestRegOptionGrp`, 삭제는
+  `me/requestDelOptionGrp`·`me/requestDelOption`을 사용하지만 라이브 저장 검증 전에는 호출하지 않는다.
 
 ### 10.5 배달특급
 
@@ -353,6 +364,8 @@ interface PlatformBinding {
 - [메뉴명·가격 입력 화면 소스](https://boss.ddangyo.com/shop/me/SMWME01T120P01.xml)
 - [메뉴 구성·설명 입력 화면 소스](https://boss.ddangyo.com/shop/me/SMWME01T120P05.xml)
 - [메뉴 옵션 그룹 연결 화면 소스](https://boss.ddangyo.com/shop/me/SMWME01T120P08.xml)
+- [옵션 그룹 목록 화면 소스](https://boss.ddangyo.com/shop/me/SMWME01T200.xml)
+- [그룹별 옵션 원장 화면 소스](https://boss.ddangyo.com/shop/me/SMWME01T210.xml)
 - [옵션 입력 화면 소스](https://boss.ddangyo.com/shop/me/SMWME01T200P10.xml)
 - [옵션 선택수 화면 소스](https://boss.ddangyo.com/shop/me/SMWME01T200P20.xml)
 - [메뉴 이미지 등록 가이드 이미지](https://boss.ddangyo.com/cm/images/img_ME05T100.jpg)

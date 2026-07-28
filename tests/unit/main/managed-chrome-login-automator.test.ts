@@ -205,4 +205,43 @@ describe('ManagedChromeLoginAutomator', () => {
     )
     expect(clickSelector).toHaveBeenCalledWith('payco-login', '#loginButton')
   })
+
+  it('recognizes the current and legacy Ddangyo encrypted login fields', async () => {
+    const inspect = vi.fn().mockResolvedValue({
+      endpointUrl: 'http://127.0.0.1:39482',
+      connected: true,
+      error: null,
+      tabs: [
+        {
+          tabId: 'ddangyo-login',
+          title: '땡겨요 사장님라운지',
+          url: 'https://boss.ddangyo.com/',
+          type: 'page',
+          host: 'boss.ddangyo.com',
+          platformCode: 'ddangyo',
+          pageKind: 'unknown'
+        }
+      ]
+    })
+    const evaluateJson = vi.fn().mockResolvedValue({ status: 'submitted' })
+    const clickSelector = vi.fn().mockResolvedValue(undefined)
+    const automator = new ManagedChromeLoginAutomator({
+      managedChromeSessionProbe: { inspect },
+      managedChromeScriptRunner: { evaluateJson, clickSelector },
+      maxAttempts: 1
+    })
+
+    await expect(
+      automator.autoLogin('ddangyo', {
+        username: 'saved-ddangyo-id',
+        password: 'saved-ddangyo-password'
+      })
+    ).resolves.toMatchObject({ status: 'submitted' })
+
+    const expression = evaluateJson.mock.calls[0]?.[1] as string
+    expect(expression).toContain('#mf_encrypted_id, #mf_ibx_mbrId')
+    expect(expression).toContain('#mf_encrypted_pwd, #mf_sct_pwd')
+    expect(expression).toContain('component?.setValue?.(value)')
+    expect(clickSelector).toHaveBeenCalledWith('ddangyo-login', '#mf_btn_webLogin')
+  })
 })

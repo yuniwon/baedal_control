@@ -1,6 +1,6 @@
 export const ddangyoSelectors = {
-  username: '#mf_ibx_mbrId',
-  password: '#mf_sct_pwd',
+  username: '#mf_encrypted_id, #mf_ibx_mbrId',
+  password: '#mf_encrypted_pwd, #mf_sct_pwd',
   loginButton: '#mf_btn_webLogin',
   groupList: '#mf_wfm_contents_wfm_tabcontents_gen_menuGrp > li',
   groupLink: '#mf_wfm_contents_wfm_tabcontents_gen_menuGrp > li a',
