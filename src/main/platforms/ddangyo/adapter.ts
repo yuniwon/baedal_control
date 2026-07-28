@@ -20,11 +20,12 @@ import { ddangyoSelectors } from './selectors'
 import { launchPlaywrightChromium } from '../../services/playwright-runtime'
 
 interface DdangyoAdapterOptions {
-  readManagedBrowserCatalog?: () => Promise<PlatformMenuSnapshot[]>
+  readManagedBrowserCatalog?: () => Promise<PlatformMenuFetchResult>
 }
 
 export class DdangyoAdapter implements PlatformAdapter {
   readonly platformCode = 'ddangyo' as const
+  readonly capabilities = { optionCatalog: true }
   private readonly updateSuccessMessage = '적용 완료되었습니다.'
   private readonly menuInfoFramePrefix = 'mf_wfm_contents_wfm_tabcontents_SMWME01T120P40_wframe'
   private readonly priceInputIdPattern = /_gen_menuPrc_(\d+)_ibx_menuPrc(\d+)$/
@@ -50,17 +51,18 @@ export class DdangyoAdapter implements PlatformAdapter {
   async fetchMenusWithInspection(): Promise<PlatformMenuFetchResult> {
     const inspection = this.createInspectionReport()
     if (this.options.readManagedBrowserCatalog) {
-      const menus = await this.options.readManagedBrowserCatalog()
+      const catalog = await this.options.readManagedBrowserCatalog()
+      const menus = catalog.menus
       if (menus.length === 0) throw new Error('ddangyo_managed_catalog_empty')
       this.pushInspectionStep(inspection, {
         kind: 'result',
         title: '전용 크롬 메뉴 읽기',
-        detail: `로그인된 전용 크롬 세션에서 메뉴 ${menus.length}개를 읽었습니다.`
+        detail: `로그인된 전용 크롬 세션에서 메뉴 ${menus.length}개와 옵션 그룹 ${catalog.optionGroups?.length ?? 0}개를 읽었습니다.`
       })
       return {
-        menus,
-        rawMenuCount: menus.length,
-        fetchMode: 'managed_browser',
+        ...catalog,
+        rawMenuCount: catalog.rawMenuCount ?? menus.length,
+        fetchMode: catalog.fetchMode ?? 'managed_browser',
         inspection
       }
     }

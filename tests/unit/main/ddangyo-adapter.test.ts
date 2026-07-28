@@ -17,13 +17,24 @@ describe('DdangyoAdapter', () => {
   })
 
   it('reads from the authenticated managed Chrome session without replaying credentials', async () => {
-    const readManagedBrowserCatalog = vi.fn().mockResolvedValue([
-      {
-        platformMenuId: '10000001',
-        platformMenuName: '콰트로피자',
-        currentPrice: 23900
-      }
-    ])
+    const readManagedBrowserCatalog = vi.fn().mockResolvedValue({
+      menus: [
+        {
+          platformMenuId: '10000001',
+          platformMenuName: '콰트로피자',
+          currentPrice: 23900
+        }
+      ],
+      optionGroups: [
+        {
+          optionGroupId: 'group-1',
+          optionGroupName: '사이즈 변경',
+          options: [],
+          menus: []
+        }
+      ],
+      optionCatalogFetched: true
+    })
     const adapter = new DdangyoAdapter(
       { username: 'owner-id', password: 'secret' },
       undefined,
@@ -32,6 +43,8 @@ describe('DdangyoAdapter', () => {
 
     await expect(adapter.fetchMenusWithInspection()).resolves.toMatchObject({
       menus: [{ platformMenuId: '10000001', platformMenuName: '콰트로피자' }],
+      optionGroups: [{ optionGroupId: 'group-1', optionGroupName: '사이즈 변경' }],
+      optionCatalogFetched: true,
       rawMenuCount: 1,
       fetchMode: 'managed_browser'
     })

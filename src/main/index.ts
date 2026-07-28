@@ -227,7 +227,7 @@ app.whenReady().then(async () => {
       }),
     ddangyo: (credential) =>
       new DdangyoAdapter(credential, undefined, {
-        readManagedBrowserCatalog: () => ddangyoManagedCatalogReader.read()
+        readManagedBrowserCatalog: () => ddangyoManagedCatalogReader.readCatalog()
       }),
     yogiyo: (credential) =>
       new YogiyoAdapter(credential, {

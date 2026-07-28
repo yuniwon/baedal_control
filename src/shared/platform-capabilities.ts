@@ -85,7 +85,7 @@ export const PLATFORM_CAPABILITIES: Record<PlatformCode, PlatformCapabilityManif
   ),
   ddangyo: manifest(
     { read: true, project: true, write: true, verify: true },
-    { menus: true, optionGroups: false, optionBindings: false, images: false, promotions: false }
+    { menus: true, optionGroups: true, optionBindings: true, images: false, promotions: false }
   ),
   deliveryspecial: manifest(
     { read: true, project: true, write: false, verify: true },
