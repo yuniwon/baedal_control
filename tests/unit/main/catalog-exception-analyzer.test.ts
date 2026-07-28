@@ -181,4 +181,100 @@ describe('analyzeCatalogExceptions', () => {
   it('produces stable fingerprints and ordering for the same evidence', () => {
     expect(analyze()).toEqual(analyze())
   })
+
+  it('accepts a size-specific source price that exists in the canonical variants', () => {
+    const items = analyze({
+      menus: [menu({
+        basePriceVariants: [
+          { variantLabel: 'M', channels: [{ channelCode: 'delivery', channelLabel: '배달', amount: 19900, amountText: '19,900원' }] },
+          { variantLabel: 'L', channels: [{ channelCode: 'delivery', channelLabel: '배달', amount: 25900, amountText: '25,900원' }] }
+        ]
+      })],
+      platformMenus: [source({
+        platformCode: 'yogiyo',
+        platformMenuId: 'shrimp-m',
+        platformMenuName: '킹쉬림프피자 M',
+        platformMenuCurrentPrice: 19900
+      })],
+      mappings: [mapping({
+        mappingId: 'menu-1:yogiyo:m',
+        menuId: 'menu-1',
+        platformCode: 'yogiyo',
+        platformMenuId: 'shrimp-m',
+        platformMenuName: '킹쉬림프피자 M',
+        platformMenuCurrentPrice: 19900
+      })]
+    })
+
+    expect(items.some((candidate) => candidate.kind === 'price_outlier')).toBe(false)
+  })
+
+  it('treats separate M and L platform rows as size variants when M matches the base price', () => {
+    const items = analyze({
+      menus: [menu()],
+      platformMenus: [
+        source({ platformCode: 'yogiyo', platformMenuId: 'shrimp-m', platformMenuName: '킹쉬림프피자 M', platformMenuCurrentPrice: 25900 }),
+        source({ platformCode: 'yogiyo', platformMenuId: 'shrimp-l', platformMenuName: '킹쉬림프피자 L', platformMenuCurrentPrice: 29900 })
+      ],
+      mappings: [
+        mapping({ mappingId: 'menu-1:yogiyo:m', menuId: 'menu-1', platformCode: 'yogiyo', platformMenuId: 'shrimp-m', platformMenuName: '킹쉬림프피자 M', platformMenuCurrentPrice: 25900 }),
+        mapping({ mappingId: 'menu-1:yogiyo:l', menuId: 'menu-1', platformCode: 'yogiyo', platformMenuId: 'shrimp-l', platformMenuName: '킹쉬림프피자 L', platformMenuCurrentPrice: 29900 })
+      ]
+    })
+
+    expect(items.some((candidate) => candidate.kind === 'price_outlier')).toBe(false)
+  })
+
+  it('keeps a price decision fingerprint stable when a Ddangyo heading capture changes', () => {
+    const analyzeCategory = (categoryName: string) => analyze({
+      menus: [menu()],
+      platformMenus: [source({
+        platformCode: 'ddangyo',
+        platformMenuId: 'shrimp-1',
+        platformMenuName: '킹쉬림프피자',
+        platformMenuCurrentPrice: 29900,
+        platformMenuGroupName: categoryName
+      })],
+      mappings: [mapping({
+        mappingId: 'menu-1:ddangyo',
+        menuId: 'menu-1',
+        platformCode: 'ddangyo',
+        platformMenuId: 'shrimp-1',
+        platformMenuName: '킹쉬림프피자',
+        platformMenuCurrentPrice: 29900,
+        platformMenuGroupName: categoryName
+      })]
+    }).find((candidate) => candidate.kind === 'price_outlier')
+
+    const oldCapture = analyzeCategory('선택에 실패 없는 알뜰피자 15')
+    const currentCapture = analyzeCategory(
+      '선택에 실패 없는 알뜰피자15성인식권아이콘메뉴할인아이콘'
+    )
+
+    expect(currentCapture?.fingerprint).toBe(oldCapture?.fingerprint)
+    expect(JSON.parse(currentCapture?.evidenceJson ?? '{}').categoryKey)
+      .toBe('선택에 실패 없는 알뜰피자')
+  })
+
+  it('does not create missing or price reviews for menus excluded from management', () => {
+    const items = analyze({
+      menus: [menu({ isManaged: 0 })],
+      platformMenus: [source({
+        platformMenuId: 'shrimp-1',
+        platformMenuName: '킹쉬림프피자',
+        platformMenuCurrentPrice: 29900
+      })],
+      mappings: [mapping({
+        mappingId: 'menu-1:coupangeats',
+        menuId: 'menu-1',
+        platformMenuId: 'shrimp-1',
+        platformMenuName: '킹쉬림프피자',
+        platformMenuCurrentPrice: 29900
+      })]
+    })
+
+    expect(items.filter((item) =>
+      item.canonicalMenuId === 'menu-1' && ['missing_on_platform', 'price_outlier'].includes(item.kind)
+    )).toEqual([])
+  })
 })

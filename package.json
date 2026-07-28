@@ -10,6 +10,7 @@
     "dev": "npm run setup:electron && npm run setup:playwright && electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
+    "catalog:maintenance": "vite-node scripts/catalog-maintenance.ts",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
     "lint:types": "tsc --noEmit"

@@ -64,6 +64,26 @@ describe('safe notice dialog dismissal', () => {
     expect(expression).toContain('보지\\s*않기')
   })
 
+  it('dismisses a single informational confirmation but not a state-changing confirmation', () => {
+    const dom = new JSDOM(`
+      <div role="dialog" id="notice"><p>서비스 이용 안내</p><button id="notice-confirm">확인</button></div>
+      <div role="dialog" id="change"><p>메뉴 변경을 적용하시겠습니까?</p><button id="change-confirm">확인</button></div>
+    `)
+    const noticeDialog = dom.window.document.querySelector('#notice')!
+    const changeDialog = dom.window.document.querySelector('#change')!
+    const notice = dom.window.document.querySelector('#notice-confirm')!
+    const change = dom.window.document.querySelector('#change-confirm')!
+    ;[noticeDialog, changeDialog, notice, change].forEach(makeVisible)
+    const noticeClick = vi.fn()
+    const changeClick = vi.fn()
+    notice.addEventListener('click', noticeClick)
+    change.addEventListener('click', changeClick)
+
+    expect(dismissSafeNoticeDialogsInDocument(dom.window.document)).toEqual(['확인'])
+    expect(noticeClick).toHaveBeenCalledTimes(1)
+    expect(changeClick).not.toHaveBeenCalled()
+  })
+
   it('dismisses only a confirmed save-success dialog', () => {
     const dom = new JSDOM(`
       <div class="save-result-modal" id="success"><p>메뉴 저장이 완료되었습니다.</p><button>확인</button></div>

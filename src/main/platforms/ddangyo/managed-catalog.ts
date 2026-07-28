@@ -3,6 +3,7 @@ import type { PlatformMenuSnapshot } from '../base/types'
 import { parseDdangyoMenus } from './parser'
 import { ddangyoSelectors } from './selectors'
 import { dismissSafeNoticeDialogsInDocument } from '../../services/safe-notice-dialog-dismissal'
+import { cleanCatalogCategoryName } from '../../../shared/catalog-normalization'
 
 interface DdangyoManagedCatalogPreparation {
   groupCount: number
@@ -157,7 +158,7 @@ export class DdangyoManagedCatalogReader {
       )
     }
     const menus = groups.flatMap((group) =>
-      parseDdangyoMenus(group.html, group.groupName.trim() || undefined)
+      parseDdangyoMenus(group.html, cleanCatalogCategoryName(group.groupName) || undefined)
     )
     const uniqueMenus = new Map<string, PlatformMenuSnapshot>()
     for (const menu of menus) {

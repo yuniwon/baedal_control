@@ -142,7 +142,8 @@ export const buildLogicalOptionGroups = (
 
   return logicalGroups.map((group) => {
     const key = `${group.platformCode}:${group.displayName}`
-    const hasShapeConflict = (displayNameCounts.get(key) ?? 0) > 1
+    const isPerMenuGenericGroup = group.displayName === '가격'
+    const hasShapeConflict = !isPerMenuGenericGroup && (displayNameCounts.get(key) ?? 0) > 1
 
     if (!hasShapeConflict) {
       return group

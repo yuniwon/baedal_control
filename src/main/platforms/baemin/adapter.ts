@@ -1167,7 +1167,10 @@ export class BaeminAdapter implements PlatformAdapter {
       })
       await this.dismissCollectionOverlays(page)
 
-      await this.waitFor(() => pages.has(0), 30000)
+      await this.waitFor(async () => {
+        if (!pages.has(0)) await this.dismissCollectionOverlays(page)
+        return pages.has(0)
+      }, 30000)
       const firstPage = pages.get(0)
 
       if (!firstPage) {
@@ -1240,7 +1243,10 @@ export class BaeminAdapter implements PlatformAdapter {
       await this.selectOptionCatalogTab(page)
       await this.dismissCollectionOverlays(page)
 
-      await this.waitFor(() => pages.has(0), 30000)
+      await this.waitFor(async () => {
+        if (!pages.has(0)) await this.dismissCollectionOverlays(page)
+        return pages.has(0)
+      }, 30000)
       const firstPage = pages.get(0)
 
       if (!firstPage) {
@@ -1280,9 +1286,9 @@ export class BaeminAdapter implements PlatformAdapter {
     await optionTab.click({ timeout: 15000, force: true })
   }
 
-  private async waitFor(check: () => boolean, timeoutMs: number) {
+  private async waitFor(check: () => boolean | Promise<boolean>, timeoutMs: number) {
     const startedAt = Date.now()
-    while (!check()) {
+    while (!(await check())) {
       if (Date.now() - startedAt >= timeoutMs) {
         throw new Error('baemin_menu_page_timeout')
       }
@@ -1300,6 +1306,7 @@ export class BaeminAdapter implements PlatformAdapter {
     const dismissButtons = [
       page.getByRole('button', { name: /오늘 하루 보지 않기|오늘 하루 보지않기/ }).first(),
       page.getByRole('button', { name: /오늘 하루 닫기|오늘만 닫기/ }).first(),
+      page.getByRole('button', { name: /^확인$/ }).first(),
       page.getByRole('button', { name: /닫기/ }).first()
     ]
 

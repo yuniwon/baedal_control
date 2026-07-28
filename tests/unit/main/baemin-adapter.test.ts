@@ -35,6 +35,32 @@ const createMenuResponse = (pageNumber: number, totalPages: number, items: Array
 })
 
 describe('BaeminAdapter', () => {
+  it('dismisses a single confirmation notice before collecting menu data', async () => {
+    const confirmButton = {
+      first: vi.fn().mockReturnThis(),
+      isVisible: vi.fn().mockResolvedValue(true),
+      click: vi.fn().mockResolvedValue(undefined)
+    }
+    const hiddenButton = {
+      first: vi.fn().mockReturnThis(),
+      isVisible: vi.fn().mockResolvedValue(false),
+      click: vi.fn().mockResolvedValue(undefined)
+    }
+    const page = {
+      evaluate: vi.fn().mockResolvedValue([]),
+      getByRole: vi.fn().mockImplementation((_role: string, options?: { name?: RegExp }) =>
+        options?.name?.test('확인') ? confirmButton : hiddenButton
+      ),
+      waitForTimeout: vi.fn().mockResolvedValue(undefined)
+    }
+    const adapter = new BaeminAdapter({ username: 'owner-id', password: 'secret' })
+
+    await (adapter as unknown as { dismissCollectionOverlays: (target: unknown) => Promise<void> })
+      .dismissCollectionOverlays(page)
+
+    expect(confirmButton.click).toHaveBeenCalledTimes(1)
+  })
+
   it('selects the visible option tab by its tab role instead of a duplicate text node', async () => {
     const adapter = new BaeminAdapter({ username: 'owner-id', password: 'secret' }) as any
     const optionTab = {

@@ -22,6 +22,8 @@ export const dismissSafeNoticeDialogsInDocument = (documentRef: Document) => {
   ].join(', ')
   const safeLabelPattern = /^(?:오늘\s*(?:하루\s*)?보지\s*않기|일주일\s*보지\s*않기|다시\s*보지\s*않기|나중에|닫기)$/u
   const doNotShowPattern = /보지\s*않기/u
+  const informationalPattern = /공지|안내|알림|업데이트|이벤트/u
+  const stateChangingPattern = /저장|수정|변경|삭제|해지|탈퇴|주문|결제|적용/u
   const dismissedLabels: string[] = []
   const dismissedRoots = new Set<Element>()
   const controls = Array.from(
@@ -37,6 +39,13 @@ export const dismissSafeNoticeDialogsInDocument = (documentRef: Document) => {
       return { element, label, root: element.closest(modalSelector) ?? element }
     })
     .filter(({ element, label }) => {
+      if (label === '확인') {
+        const root = element.closest(modalSelector)
+        const dialogText = normalize(root?.textContent)
+        return Boolean(
+          root && informationalPattern.test(dialogText) && !stateChangingPattern.test(dialogText)
+        )
+      }
       if (!safeLabelPattern.test(label)) return false
       return doNotShowPattern.test(label) || Boolean(element.closest(modalSelector))
     })

@@ -8,6 +8,9 @@ import type {
   CatalogBootstrapPreviewInput,
   CatalogReviewItem,
   CatalogReviewResolutionInput,
+  CatalogMaintenanceApplyInput,
+  CatalogMaintenancePreview,
+  CatalogMaintenanceResult,
   CatalogWorkspaceRecord,
   LogicalOptionGroupRecord,
   ManagedChromeSessionStatus,
@@ -111,6 +114,10 @@ declare global {
           ok: true
           resolvedCount: number
         }>
+      }
+      catalogMaintenance: {
+        preview: (referencePlatformCode: PlatformCode) => Promise<CatalogMaintenancePreview>
+        apply: (payload: CatalogMaintenanceApplyInput) => Promise<CatalogMaintenanceResult>
       }
       agentReports: {
         getNextActionPlan: (filters?: unknown) => Promise<AgentReportEnvelope<AgentActionPlanReport>>
@@ -242,6 +249,26 @@ export const appApi: AppApi = window.appApi ?? {
   catalogReviews: {
     listOpen: () => noopPromise([] as CatalogReviewItem[]),
     resolve: (payload) => noopPromise({ ok: true as const, resolvedCount: payload.reviewItemIds.length })
+  },
+  catalogMaintenance: {
+    preview: (referencePlatformCode) =>
+      globalThis.window?.appApi?.catalogMaintenance.preview(referencePlatformCode)
+      ?? noopPromise({
+        referencePlatformCode,
+        menuCount: 0,
+        safeMerges: [],
+        hiddenMenuIds: []
+      } as CatalogMaintenancePreview),
+    apply: (payload) =>
+      globalThis.window?.appApi?.catalogMaintenance.apply(payload)
+      ?? noopPromise({
+        backupPath: null,
+        mergedMenuCount: 0,
+        excludedMenuCount: 0,
+        normalizedCategoryCount: 0,
+        refreshedReferencePriceCount: 0,
+        remainingMenuCount: 0
+      } as CatalogMaintenanceResult)
   },
   agentReports: {
     getNextActionPlan: () =>

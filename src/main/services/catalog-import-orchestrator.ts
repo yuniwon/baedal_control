@@ -11,6 +11,7 @@ import type {
   PlatformOptionGroupRecord,
   CatalogWorkspaceRecord
 } from '../../shared/contracts'
+import { cleanCatalogCategoryName } from '../../shared/catalog-normalization'
 import type { CatalogIntentRule, CatalogReviewItem } from '../../shared/contracts'
 import type { DatabaseConnection } from '../db/connection'
 import type { PlatformCatalogReader } from '../platforms/base/plugin'
@@ -341,7 +342,13 @@ export class CatalogImportOrchestrator {
   private normalizePlatformMenus(platformMenus: PlatformMenuSnapshot[]) {
     const uniqueMenus = new Map<string, PlatformMenuSnapshot>()
 
-    for (const platformMenu of platformMenus) {
+    for (const rawPlatformMenu of platformMenus) {
+      const platformMenu = {
+        ...rawPlatformMenu,
+        platformMenuGroupName: rawPlatformMenu.platformMenuGroupName
+          ? cleanCatalogCategoryName(rawPlatformMenu.platformMenuGroupName)
+          : rawPlatformMenu.platformMenuGroupName
+      }
       if (!platformMenu.platformMenuId.trim() || !platformMenu.platformMenuName.trim()) {
         continue
       }
@@ -385,7 +392,12 @@ export class CatalogImportOrchestrator {
       maxOrderQuantity: optionGroup.maxOrderQuantity ?? null,
       mappingMenusCount: optionGroup.mappingMenusCount ?? null,
       options: optionGroup.options,
-      menus: optionGroup.menus,
+      menus: optionGroup.menus.map((menu) => ({
+        ...menu,
+        platformMenuGroupName: menu.platformMenuGroupName
+          ? cleanCatalogCategoryName(menu.platformMenuGroupName)
+          : menu.platformMenuGroupName
+      })),
       signatureKey: buildOptionSignature({
         optionGroupName: optionGroup.optionGroupName,
         minOrderQuantity: optionGroup.minOrderQuantity ?? null,

@@ -10,6 +10,10 @@ import type {
   PlatformMenuCatalogRecord,
   PlatformMenuMappingRecord
 } from '../../shared/contracts'
+import {
+  catalogCategoryIdentity,
+  cleanCatalogCategoryName
+} from '../../shared/catalog-normalization'
 import { isSafeAutoLinkMatch, scoreMenuMatch } from './menu-matcher'
 
 export interface CatalogExceptionAnalysisInput {
@@ -23,6 +27,20 @@ export interface CatalogExceptionAnalysisInput {
 const stableFingerprint = (parts: unknown[]) =>
   createHash('sha256').update(JSON.stringify(parts)).digest('hex')
 
+const normalizeReviewEvidence = (evidence: Record<string, unknown>) => {
+  const categoryKey = typeof evidence.categoryKey === 'string'
+    ? cleanCatalogCategoryName(evidence.categoryKey)
+    : evidence.categoryKey
+  return { ...evidence, categoryKey }
+}
+
+const fingerprintEvidence = (evidence: Record<string, unknown>) => ({
+  ...evidence,
+  ...(typeof evidence.categoryKey === 'string'
+    ? { categoryKey: catalogCategoryIdentity(evidence.categoryKey) }
+    : {})
+})
+
 const createReviewItem = (input: {
   workspaceId: string
   kind: CatalogReviewKind
@@ -35,13 +53,14 @@ const createReviewItem = (input: {
   platformCode?: PlatformCode | null
   sourceEntityId?: string | null
 }) => {
+  const evidence = normalizeReviewEvidence(input.evidence)
   const fingerprint = stableFingerprint([
     input.workspaceId,
     input.kind,
     input.canonicalMenuId ?? null,
     input.platformCode ?? null,
     input.sourceEntityId ?? null,
-    input.evidence
+    fingerprintEvidence(evidence)
   ])
 
   return {
@@ -54,7 +73,7 @@ const createReviewItem = (input: {
     title: input.title,
     explanation: input.explanation,
     recommendation: input.recommendation,
-    evidenceJson: JSON.stringify(input.evidence),
+    evidenceJson: JSON.stringify(evidence),
     canonicalMenuId: input.canonicalMenuId ?? null,
     platformCode: input.platformCode ?? null,
     sourceEntityId: input.sourceEntityId ?? null,
@@ -103,6 +122,7 @@ const analyzeMissingAndUnmatched = (
   input: CatalogExceptionAnalysisInput
 ): CatalogReviewItem[] => {
   const items: CatalogReviewItem[] = []
+  const managedMenus = input.menus.filter((menu) => (menu.isManaged ?? 1) === 1)
   const platforms = [...new Set(input.platformMenus.map((menu) => menu.platformCode))].sort()
   const activeMappingKeys = new Set(
     input.mappings
@@ -119,7 +139,7 @@ const analyzeMissingAndUnmatched = (
         source.platformCode === platformCode && source.presenceStatus !== 'absent_confirmed'
     )
 
-    for (const canonicalMenu of input.menus) {
+    for (const canonicalMenu of managedMenus) {
       if (activeMappingKeys.has(`${canonicalMenu.menuId}:${platformCode}`)) {
         continue
       }
@@ -165,7 +185,7 @@ const analyzeMissingAndUnmatched = (
       continue
     }
 
-    const match = classifyMatch(input.menus, platformMenu.platformMenuName)
+    const match = classifyMatch(managedMenus, platformMenu.platformMenuName)
     items.push(createReviewItem({
       workspaceId: input.workspaceId,
       kind: 'unmatched_platform_menu',
@@ -201,6 +221,32 @@ const analyzePrices = (input: CatalogExceptionAnalysisInput): CatalogReviewItem[
     ])
   )
   const menuById = new Map(input.menus.map((menu) => [menu.menuId, menu]))
+  const sizeFamilyKeys = new Set<string>()
+  const mappingsByMenuPlatform = new Map<string, typeof input.mappings>()
+  for (const mapping of input.mappings) {
+    if (mapping.mappingStatus === 'source_absent') continue
+    const key = `${mapping.menuId}:${mapping.platformCode}`
+    const rows = mappingsByMenuPlatform.get(key) ?? []
+    rows.push(mapping)
+    mappingsByMenuPlatform.set(key, rows)
+  }
+  for (const [key, mappings] of mappingsByMenuPlatform) {
+    const canonicalMenu = menuById.get(mappings[0].menuId)
+    if (!canonicalMenu) continue
+    const sizes = new Set(
+      mappings.flatMap((mapping) => {
+        const name = sourceByKey.get(`${mapping.platformCode}:${mapping.platformMenuId}`)
+          ?.platformMenuName ?? mapping.platformMenuName
+        const match = name.match(/[\s(（]([ML])(?:[)）])?\s*$/iu)
+        return match ? [match[1].toUpperCase()] : []
+      })
+    )
+    const hasBasePrice = mappings.some((mapping) => {
+      const source = sourceByKey.get(`${mapping.platformCode}:${mapping.platformMenuId}`)
+      return (source?.platformMenuCurrentPrice ?? mapping.platformMenuCurrentPrice) === canonicalMenu.basePrice
+    })
+    if (sizes.size >= 2 && hasBasePrice) sizeFamilyKeys.add(key)
+  }
 
   return input.mappings.flatMap((mapping) => {
     if (mapping.mappingStatus === 'source_absent') {
@@ -210,7 +256,20 @@ const analyzePrices = (input: CatalogExceptionAnalysisInput): CatalogReviewItem[
     const canonicalMenu = menuById.get(mapping.menuId)
     const source = sourceByKey.get(`${mapping.platformCode}:${mapping.platformMenuId}`)
     const platformPrice = source?.platformMenuCurrentPrice ?? mapping.platformMenuCurrentPrice
-    if (!canonicalMenu || platformPrice == null || platformPrice === canonicalMenu.basePrice) {
+    const canonicalVariantPrices = new Set(
+      canonicalMenu?.basePriceVariants
+        ?.flatMap((variant) => variant.channels)
+        .flatMap((channel) => typeof channel.amount === 'number' ? [channel.amount] : [])
+      ?? []
+    )
+    if (
+      !canonicalMenu ||
+      (canonicalMenu.isManaged ?? 1) !== 1 ||
+      platformPrice == null ||
+      platformPrice === canonicalMenu.basePrice ||
+      canonicalVariantPrices.has(platformPrice) ||
+      sizeFamilyKeys.has(`${mapping.menuId}:${mapping.platformCode}`)
+    ) {
       return []
     }
 

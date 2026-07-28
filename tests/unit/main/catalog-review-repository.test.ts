@@ -90,4 +90,37 @@ describe('CatalogReviewRepository', () => {
         .get('same-fingerprint')
     ).toEqual({ state: 'resolved' })
   })
+
+  it('does not reopen a resolved decision when only the captured category label changed', () => {
+    const priceItem = reviewItem({
+      fingerprint: 'old-price-fingerprint',
+      kind: 'price_outlier',
+      platformCode: 'ddangyo',
+      sourceEntityId: 'source-1',
+      evidenceJson: JSON.stringify({
+        fieldKey: 'base_price',
+        categoryKey: '가성비 최고의 알뜰세트 7',
+        canonicalPrice: 39000,
+        platformPrice: 38000
+      })
+    })
+    repository.replaceOpen('default', [priceItem])
+    repository.resolve(['review-1'])
+
+    repository.replaceOpen('default', [reviewItem({
+      ...priceItem,
+      reviewItemId: 'review-2',
+      fingerprint: 'new-price-fingerprint',
+      evidenceJson: JSON.stringify({
+        fieldKey: 'base_price',
+        categoryKey: '가성비 최고의 알뜰세트7성인식권아이콘메뉴할인아이콘',
+        canonicalPrice: 39000,
+        platformPrice: 38000
+      })
+    })])
+
+    expect(repository.listOpen('default')).toEqual([])
+    expect(db.prepare("select state from catalog_review_items where fingerprint='new-price-fingerprint'").get())
+      .toEqual({ state: 'resolved' })
+  })
 })

@@ -14,6 +14,9 @@ import type {
   CatalogIntentRule,
   CatalogReviewItem,
   CatalogReviewResolutionInput,
+  CatalogMaintenanceApplyInput,
+  CatalogMaintenancePreview,
+  CatalogMaintenanceResult,
   CatalogWorkspaceRecord,
   PlatformImportResult,
   MenuRecord,
@@ -124,6 +127,14 @@ const catalogReviewResolutionSchema = z.object({
   scope: z.enum(['entity', 'platform', 'category', 'field', 'workspace']),
   reason: z.string().trim().min(1),
   expiresAt: z.string().datetime().nullable().optional()
+}).strict()
+const catalogMaintenancePreviewSchema = z.object({
+  referencePlatformCode: platformCodeSchema
+}).strict()
+const catalogMaintenanceApplySchema = z.object({
+  referencePlatformCode: platformCodeSchema,
+  acceptedCandidateIds: z.array(z.string().trim().min(1)),
+  excludeHiddenOnlyMenus: z.boolean()
 }).strict()
 
 const parseCatalogPayload = <T>(schema: z.ZodType<T>, payload: unknown): T => {
@@ -238,6 +249,10 @@ interface HandlerDependencies {
     ) => void
   }
   catalogIntentRuleRepository?: { upsert: (record: CatalogIntentRule) => void }
+  catalogMaintenanceService?: {
+    preview: (referencePlatformCode: PlatformCode) => CatalogMaintenancePreview
+    apply: (input: CatalogMaintenanceApplyInput) => CatalogMaintenanceResult
+  }
   syncEngine?: { run: (items: SyncPreviewItem[]) => Promise<unknown> }
   onCredentialSaved?: (platformCode: PlatformCode) => void
   createId?: () => string
@@ -269,6 +284,7 @@ export const registerHandlers = ({
   catalogBootstrapService,
   catalogReviewRepository,
   catalogIntentRuleRepository,
+  catalogMaintenanceService,
   syncEngine,
   onCredentialSaved,
   createId,
@@ -517,6 +533,16 @@ export const registerHandlers = ({
     }
 
     return { ok: true as const, resolvedCount: selectedItems.length }
+  })
+  register('catalogMaintenance:preview', async (_event, payload: unknown) => {
+    if (!catalogMaintenanceService) throw new Error('catalog_maintenance_unavailable')
+    const input = parseCatalogPayload(catalogMaintenancePreviewSchema, payload)
+    return catalogMaintenanceService.preview(input.referencePlatformCode)
+  })
+  register('catalogMaintenance:apply', async (_event, payload: unknown) => {
+    if (!catalogMaintenanceService) throw new Error('catalog_maintenance_unavailable')
+    const input = parseCatalogPayload(catalogMaintenanceApplySchema, payload)
+    return catalogMaintenanceService.apply(input)
   })
   register('agentReports:getNextActionPlan', async (_event, filters?: Record<string, unknown>) =>
     agentOperationsReportService?.getNextActionPlan(filters ?? {}) ?? {

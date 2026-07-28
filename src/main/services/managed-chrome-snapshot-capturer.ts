@@ -371,6 +371,7 @@ for (let index = 0; index < steps; index += 1) {
     steps === 1 ? initialScrollTop : Math.round((maxScrollTop / Math.max(steps - 1, 1)) * index)
   setScrollTop(container, nextScrollTop)
   await delay(220)
+  dismissSafeNoticeDialogsInDocument(document)
   const apiEvents = await requestApiEvents()
   snapshots.push(
     collectDomSnapshot({

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, safeStorage } from 'electron'
+import { copyFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { BrowserInspectionSnapshot, PlatformCode } from '../shared/contracts'
 import { createConnection } from './db/connection'
@@ -38,6 +39,9 @@ import { BrowserPlatformAuthDriver } from './services/browser-platform-auth-driv
 import { BrowserInspectorBridge } from './services/browser-inspector-bridge'
 import { createCatalogImportOrchestrator } from './services/catalog-import-orchestrator'
 import { CatalogBootstrapService } from './services/catalog-bootstrap-service'
+import { CatalogMaintenanceService } from './services/catalog-maintenance-service'
+import { analyzeCatalogExceptions } from './services/catalog-exception-analyzer'
+import { applyIntentRules } from './services/catalog-intent-policy'
 import { AgentOperationsReportService } from './services/agent-operations-report-service'
 import { CliTaskRunner } from './services/cli-task-runner'
 import { buildLogicalOptionGroups } from './services/logical-option-group-service'
@@ -93,7 +97,8 @@ const createWindow = () => {
 }
 
 app.whenReady().then(async () => {
-  const db = createConnection(join(app.getPath('userData'), 'delivery-menu-sync.db'))
+  const databasePath = join(app.getPath('userData'), 'delivery-menu-sync.db')
+  const db = createConnection(databasePath)
   migrate(db)
 
   const menuRepository = new MenuRepository(db)
@@ -112,6 +117,33 @@ app.whenReady().then(async () => {
   const syncRunRepository = new SyncRunRepository(db)
   const syncRunItemRepository = new SyncRunItemRepository(db)
   const credentialVault = new CredentialVault(join(app.getPath('userData'), 'credentials.json'), safeStorage)
+  const refreshCatalogReviews = () => {
+    const workspaceId = 'default'
+    const generatedItems = analyzeCatalogExceptions({
+      workspaceId,
+      menus: menuRepository.list(),
+      platformMenus: platformMenuRepository.listAll(),
+      mappings: mappingRepository.listAll(),
+      logicalOptionGroups: buildLogicalOptionGroups(platformOptionGroupRepository.listAll())
+    })
+    catalogReviewRepository.replaceOpen(
+      workspaceId,
+      applyIntentRules(generatedItems, catalogIntentRuleRepository.listActive(workspaceId))
+    )
+  }
+  const catalogMaintenanceService = new CatalogMaintenanceService({
+    db,
+    backupDatabase: () => {
+      db.exec('pragma wal_checkpoint(full)')
+      const backupDirectory = join(app.getPath('userData'), 'backups')
+      mkdirSync(backupDirectory, { recursive: true })
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const backupPath = join(backupDirectory, `delivery-menu-sync-${timestamp}.db`)
+      copyFileSync(databasePath, backupPath)
+      return backupPath
+    },
+    refreshReviews: refreshCatalogReviews
+  })
   const browserInspectorBridge = new BrowserInspectorBridge(browserInspectionSnapshotRepository, {
     extensionPath: join(process.cwd(), 'browser-extension', 'delivery-menu-inspector')
   })
@@ -372,6 +404,7 @@ app.whenReady().then(async () => {
     catalogBootstrapService,
     catalogReviewRepository,
     catalogIntentRuleRepository,
+    catalogMaintenanceService,
     syncEngine,
     onCredentialSaved: registerPlatformAdapter
   })

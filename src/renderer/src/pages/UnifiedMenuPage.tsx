@@ -1,5 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
-import type { MenuRecord, PlatformMenuCatalogRecord, PlatformMenuMappingRecord } from '../../../shared/contracts'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type {
+  CatalogMaintenancePreview,
+  CatalogMaintenanceResult,
+  MenuRecord,
+  PlatformMenuCatalogRecord,
+  PlatformMenuMappingRecord
+} from '../../../shared/contracts'
 import type { MenuRow } from '../components/MenuTable'
 import { CategoryRail } from '../components/menu-workspace/CategoryRail'
 import { MenuDetailPane } from '../components/menu-workspace/MenuDetailPane'
@@ -78,15 +84,27 @@ export const UnifiedMenuPage = () => {
   const [creating, setCreating] = useState(false)
   const [detailDirty, setDetailDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [maintenancePreview, setMaintenancePreview] = useState<CatalogMaintenancePreview | null>(null)
+  const [maintenanceResult, setMaintenanceResult] = useState<CatalogMaintenanceResult | null>(null)
+  const [maintenanceState, setMaintenanceState] = useState<'idle' | 'loading' | 'applying'>('idle')
+  const [maintenanceError, setMaintenanceError] = useState<string | null>(null)
+
+  const loadCatalog = useCallback(async () => {
+    const [menus, mappings, platformMenus] = await Promise.all([
+      appApi.menus.list(),
+      appApi.mappings.list(),
+      appApi.platformMenus.list()
+    ])
+    setItems(deriveCatalogMenuItems(assembleMenuRows(
+      menus as MenuRecord[], mappings as PlatformMenuMappingRecord[], platformMenus as PlatformMenuCatalogRecord[]
+    )))
+  }, [])
 
   useEffect(() => {
-    void Promise.all([appApi.menus.list(), appApi.mappings.list(), appApi.platformMenus.list()])
-      .then(([menus, mappings, platformMenus]) => setItems(deriveCatalogMenuItems(assembleMenuRows(
-        menus as MenuRecord[], mappings as PlatformMenuMappingRecord[], platformMenus as PlatformMenuCatalogRecord[]
-      ))))
+    void loadCatalog()
       .catch((reason) => setError(reason instanceof Error ? reason.message : '메뉴를 불러오지 못했습니다.'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [loadCatalog])
 
   const categories = useMemo(() => getCatalogCategories(items), [items])
   const visible = useMemo(() => filterCatalogMenuItems(items, search, category, filter), [items, search, category, filter])
@@ -112,13 +130,61 @@ export const UnifiedMenuPage = () => {
   const changeView = (next: 'menus' | 'options') => {
     if (next === view || canLeaveDraft()) setView(next)
   }
+  const previewMaintenance = async () => {
+    setMaintenanceState('loading')
+    setMaintenanceError(null)
+    setMaintenanceResult(null)
+    try {
+      setMaintenancePreview(await appApi.catalogMaintenance.preview('baemin'))
+    } catch (reason) {
+      setMaintenanceError(reason instanceof Error ? reason.message : '정리할 데이터를 확인하지 못했습니다.')
+    } finally {
+      setMaintenanceState('idle')
+    }
+  }
+  const applyMaintenance = async () => {
+    if (!maintenancePreview) return
+    setMaintenanceState('applying')
+    setMaintenanceError(null)
+    try {
+      const result = await appApi.catalogMaintenance.apply({
+        referencePlatformCode: maintenancePreview.referencePlatformCode,
+        acceptedCandidateIds: maintenancePreview.safeMerges.map((candidate) => candidate.candidateId),
+        excludeHiddenOnlyMenus: true
+      })
+      setMaintenanceResult(result)
+      await loadCatalog()
+    } catch (reason) {
+      setMaintenanceError(reason instanceof Error ? reason.message : '데이터 정리를 적용하지 못했습니다.')
+    } finally {
+      setMaintenanceState('idle')
+    }
+  }
 
   return (
     <section className="page catalog-page">
       <header className="catalog-header">
         <div><span className="eyebrow">메뉴 운영의 기준</span><h1>통합메뉴</h1><p>한 번 정리한 메뉴를 각 배달앱과 비교하고 안전하게 관리합니다.</p></div>
-        <div className="catalog-header-actions"><button className="secondary-button" disabled title="백업 및 내보내기 단계에서 제공됩니다." type="button">내보내기 준비 중</button><button className="primary-button" onClick={() => { if (canLeaveDraft()) { setSelectedId(null); setCreating(true) } }} type="button">+ 새 메뉴</button></div>
+        <div className="catalog-header-actions"><button className="secondary-button" disabled={maintenanceState !== 'idle'} onClick={() => void previewMaintenance()} type="button">{maintenanceState === 'loading' ? '확인 중…' : '데이터 정리'}</button><button className="primary-button" onClick={() => { if (canLeaveDraft()) { setSelectedId(null); setCreating(true) } }} type="button">+ 새 메뉴</button></div>
       </header>
+      {maintenancePreview && (
+        <section className="catalog-maintenance-panel" aria-label="통합메뉴 데이터 정리">
+          <header>
+            <div><span className="eyebrow">안전 정리 미리보기</span><h2>통합메뉴 데이터 정리</h2></div>
+            <button aria-label="데이터 정리 닫기" className="icon-button" onClick={() => setMaintenancePreview(null)} type="button">×</button>
+          </header>
+          <p>배민을 기준으로 확실히 같은 메뉴만 합칩니다. 각 플랫폼에서 가져온 원본은 삭제하지 않으며, 변경 전에 데이터베이스를 백업합니다.</p>
+          <div className="maintenance-summary">
+            <strong>확정 병합 {maintenancePreview.safeMerges.length}개</strong>
+            <strong>숨김 메뉴 제외 {maintenancePreview.hiddenMenuIds.length}개</strong>
+          </div>
+          {maintenancePreview.safeMerges.length > 0 && <ul className="maintenance-candidates">{maintenancePreview.safeMerges.map((candidate) => <li key={candidate.candidateId}><span>{candidate.sourceName}</span><b aria-hidden="true">→</b><span>{candidate.targetName}</span><small>{candidate.platformCode}</small></li>)}</ul>}
+          {maintenanceError && <p className="maintenance-error" role="alert">{maintenanceError}</p>}
+          {maintenanceResult ? <p className="maintenance-success" role="status">통합메뉴 {maintenanceResult.remainingMenuCount}개로 정리했습니다.</p> : (
+            <footer><span>판단이 애매한 메뉴는 자동으로 합치지 않고 확인 대상으로 남깁니다.</span><button className="primary-button" disabled={maintenanceState !== 'idle'} onClick={() => void applyMaintenance()} type="button">{maintenanceState === 'applying' ? '백업 및 정리 중…' : '백업 후 정리 적용'}</button></footer>
+          )}
+        </section>
+      )}
       <div className="view-switch" aria-label="통합메뉴 보기 방식"><button className={view === 'menus' ? 'active' : ''} onClick={() => changeView('menus')} type="button">메뉴 보기</button><button className={view === 'options' ? 'active' : ''} onClick={() => changeView('options')} type="button">옵션 보기</button></div>
       {view === 'options' ? <div className="embedded-options"><OptionPage /></div> : (
         <>

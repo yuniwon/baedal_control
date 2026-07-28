@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   CatalogBootstrapActivationInput,
   CatalogBootstrapPreviewInput,
+  CatalogMaintenanceApplyInput,
   CatalogReviewResolutionInput,
   PlatformCode
 } from '../shared/contracts'
@@ -62,6 +63,12 @@ export const appApi = {
     listOpen: () => ipcRenderer.invoke('catalogReviews:listOpen'),
     resolve: (payload: CatalogReviewResolutionInput) =>
       ipcRenderer.invoke('catalogReviews:resolve', payload)
+  },
+  catalogMaintenance: {
+    preview: (referencePlatformCode: PlatformCode) =>
+      ipcRenderer.invoke('catalogMaintenance:preview', { referencePlatformCode }),
+    apply: (payload: CatalogMaintenanceApplyInput) =>
+      ipcRenderer.invoke('catalogMaintenance:apply', payload)
   },
   agentReports: {
     getNextActionPlan: (filters?: unknown) =>

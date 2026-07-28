@@ -303,4 +303,22 @@ describe('buildLogicalOptionGroups', () => {
     expect(groups).toHaveLength(2)
     expect(groups.every((group) => group.status === 'shape_conflict')).toBe(true)
   })
+
+  it('does not treat per-menu generic price groups as a global shape conflict', () => {
+    const groups = buildLogicalOptionGroups([
+      {
+        platformCode: 'deliveryspecial', optionGroupId: 'price-drink', optionGroupName: '가격',
+        options: [{ optionId: 'large', optionName: '1.25L', optionPrice: 1000 }],
+        menus: [{ platformMenuId: 'cola', platformMenuName: '코카콜라' }], presenceStatus: 'present'
+      },
+      {
+        platformCode: 'deliveryspecial', optionGroupId: 'price-sauce', optionGroupName: '가격',
+        options: [{ optionId: 'one', optionName: '1개', optionPrice: 0 }],
+        menus: [{ platformMenuId: 'sauce', platformMenuName: '갈릭디핑' }], presenceStatus: 'present'
+      }
+    ])
+
+    expect(groups).toHaveLength(2)
+    expect(groups.every((group) => group.status === 'single')).toBe(true)
+  })
 })

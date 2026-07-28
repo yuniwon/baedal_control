@@ -14,6 +14,7 @@ export const appApiKeys = [
   'catalogWorkspace',
   'catalogBootstrap',
   'catalogReviews',
+  'catalogMaintenance',
   'agentReports',
   'browserInspectionSnapshots',
   'browserInspector',
@@ -58,6 +59,39 @@ export interface CatalogWorkspaceRecord {
   activatedAt?: string | null
   createdAt?: string
   updatedAt?: string
+}
+
+export interface CatalogMergeCandidate {
+  candidateId: string
+  sourceMenuId: string
+  sourceName: string
+  targetMenuId: string
+  targetName: string
+  platformCode: PlatformCode
+  reason: string
+  mergeKind?: 'reference_match' | 'size_sibling'
+}
+
+export interface CatalogMaintenancePreview {
+  referencePlatformCode: PlatformCode
+  menuCount: number
+  safeMerges: CatalogMergeCandidate[]
+  hiddenMenuIds: string[]
+}
+
+export interface CatalogMaintenanceApplyInput {
+  referencePlatformCode: PlatformCode
+  acceptedCandidateIds: string[]
+  excludeHiddenOnlyMenus: boolean
+}
+
+export interface CatalogMaintenanceResult {
+  backupPath: string | null
+  mergedMenuCount: number
+  excludedMenuCount: number
+  normalizedCategoryCount: number
+  refreshedReferencePriceCount: number
+  remainingMenuCount: number
 }
 
 export interface CatalogReviewItem {

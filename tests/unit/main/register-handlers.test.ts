@@ -413,6 +413,41 @@ describe('registerHandlers', () => {
     expect(resolve).toHaveBeenCalledWith(['review-1'], 'intent-1')
   })
 
+  it('validates and forwards catalog maintenance preview and apply requests', async () => {
+    const preview = vi.fn().mockReturnValue({ safeMerges: [], hiddenMenuIds: [] })
+    const apply = vi.fn().mockReturnValue({ mergedMenuCount: 1, excludedMenuCount: 0 })
+    registerHandlers({
+      menuRepository: { list: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      mappingRepository: { listAll: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      platformMenuRepository: { listAll: vi.fn().mockReturnValue([]) },
+      syncRunRepository: { list: vi.fn().mockReturnValue([]) },
+      credentialVault: { get: vi.fn(), set: vi.fn() } as never,
+      catalogMaintenanceService: { preview, apply }
+    })
+
+    await electronMock.registeredHandlers.get('catalogMaintenance:preview')?.({}, {
+      referencePlatformCode: 'baemin'
+    })
+    expect(preview).toHaveBeenCalledWith('baemin')
+
+    await electronMock.registeredHandlers.get('catalogMaintenance:apply')?.({}, {
+      referencePlatformCode: 'baemin',
+      acceptedCandidateIds: ['merge:source:target'],
+      excludeHiddenOnlyMenus: true
+    })
+    expect(apply).toHaveBeenCalledWith({
+      referencePlatformCode: 'baemin',
+      acceptedCandidateIds: ['merge:source:target'],
+      excludeHiddenOnlyMenus: true
+    })
+
+    await expect(electronMock.registeredHandlers.get('catalogMaintenance:apply')?.({}, {
+      referencePlatformCode: 'unknown',
+      acceptedCandidateIds: [],
+      excludeHiddenOnlyMenus: true
+    })).rejects.toThrow('invalid_catalog_request')
+  })
+
   it('runs only selected items that are still executable in the latest preview', async () => {
     const run = vi.fn().mockResolvedValue({ syncRunId: 'run-1', summary: '성공 1건, 실패 0건' })
 

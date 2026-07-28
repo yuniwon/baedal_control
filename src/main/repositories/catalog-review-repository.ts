@@ -1,12 +1,54 @@
 import type { CatalogReviewItem } from '../../shared/contracts'
+import { catalogCategoryIdentity } from '../../shared/catalog-normalization'
 import type { DatabaseConnection } from '../db/connection'
 import { withSavepoint } from '../db/savepoint'
+
+const stableValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(stableValue)
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => [
+        key,
+        key === 'categoryKey' && typeof entry === 'string'
+          ? catalogCategoryIdentity(entry)
+          : stableValue(entry)
+      ])
+  )
+}
+
+const reviewDecisionIdentity = (item: Pick<
+  CatalogReviewItem,
+  'kind' | 'canonicalMenuId' | 'platformCode' | 'sourceEntityId' | 'evidenceJson'
+>) => {
+  let evidence: unknown = item.evidenceJson
+  try {
+    evidence = JSON.parse(item.evidenceJson)
+  } catch {
+    // Preserve malformed historical evidence as a raw value.
+  }
+  return JSON.stringify([
+    item.kind,
+    item.canonicalMenuId ?? null,
+    item.platformCode ?? null,
+    item.sourceEntityId ?? null,
+    stableValue(evidence)
+  ])
+}
 
 export class CatalogReviewRepository {
   constructor(private readonly db: DatabaseConnection) {}
 
   replaceOpen(workspaceId: string, items: CatalogReviewItem[]) {
     const uniqueItems = [...new Map(items.map((item) => [item.fingerprint, item])).values()]
+    const resolvedRows = this.db.prepare(`
+      select kind, canonical_menu_id as canonicalMenuId, platform_code as platformCode,
+             source_entity_id as sourceEntityId, evidence_json as evidenceJson
+      from catalog_review_items
+      where workspace_id = ? and state = 'resolved'
+    `).all(workspaceId) as unknown as CatalogReviewItem[]
+    const resolvedDecisionIdentities = new Set(resolvedRows.map(reviewDecisionIdentity))
 
     withSavepoint(this.db, () => {
       if (uniqueItems.length === 0) {
@@ -27,6 +69,9 @@ export class CatalogReviewRepository {
       }
 
       for (const item of uniqueItems) {
+        const generatedState = resolvedDecisionIdentities.has(reviewDecisionIdentity(item))
+          ? 'resolved'
+          : item.state
         this.db.prepare(`
           insert into catalog_review_items (
             review_item_id,
@@ -66,7 +111,7 @@ export class CatalogReviewRepository {
           workspaceId,
           item.fingerprint,
           item.kind,
-          item.state,
+          generatedState,
           item.confidence,
           item.title,
           item.explanation,

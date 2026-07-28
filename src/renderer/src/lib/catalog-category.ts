@@ -1,12 +1,11 @@
-const PLATFORM_HEADING_NOISE = /\d+\s*성인식권아이콘메뉴할인아이콘\s*$/u
+import {
+  catalogCategoryIdentity,
+  cleanCatalogCategoryName
+} from '../../../shared/catalog-normalization'
 
-export const cleanCatalogCategoryName = (name: string) =>
-  name.replace(PLATFORM_HEADING_NOISE, '').trim()
+export { cleanCatalogCategoryName } from '../../../shared/catalog-normalization'
 
-const categoryKey = (name: string) => cleanCatalogCategoryName(name)
-  .normalize('NFKC')
-  .toLocaleLowerCase('ko-KR')
-  .replace(/[^\p{L}\p{N}]/gu, '')
+const categoryKey = (name: string) => catalogCategoryIdentity(name)
 
 export type ReferenceCategoryIndex = ReadonlyMap<string, string>
 
