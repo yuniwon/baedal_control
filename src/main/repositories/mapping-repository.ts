@@ -1,5 +1,6 @@
 import type { PlatformMappingStatus, PlatformMenuMappingRecord } from '../../shared/contracts'
 import type { DatabaseConnection } from '../db/connection'
+import { withSavepoint } from '../db/savepoint'
 import {
   parsePlatformMenuPriceVariants,
   stringifyPlatformMenuPriceVariants
@@ -16,7 +17,13 @@ export class MappingRepository {
   }
 
   upsert(record: PlatformMenuMappingRecord) {
-    this.db.prepare(`
+    withSavepoint(this.db, () => {
+      this.db.prepare(`
+        delete from platform_menu_mappings
+        where platform_code = ? and platform_menu_id = ? and mapping_id <> ?
+      `).run(record.platformCode, record.platformMenuId, record.mappingId)
+
+      this.db.prepare(`
       insert into platform_menu_mappings (
         mapping_id,
         menu_id,
@@ -36,6 +43,8 @@ export class MappingRepository {
         is_confirmed
       ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, coalesce(?, 'active'), ?, ?)
       on conflict(mapping_id) do update set
+        menu_id = excluded.menu_id,
+        platform_code = excluded.platform_code,
         platform_menu_id = excluded.platform_menu_id,
         platform_menu_name = excluded.platform_menu_name,
         platform_menu_current_price = excluded.platform_menu_current_price,
@@ -53,25 +62,26 @@ export class MappingRepository {
         matched_by = excluded.matched_by,
         is_confirmed = excluded.is_confirmed,
         last_verified_at = current_timestamp
-    `).run(
-      record.mappingId,
-      record.menuId,
-      record.platformCode,
-      record.platformMenuId,
-      record.platformMenuName,
-      record.platformMenuCurrentPrice ?? null,
-      record.platformMenuPriceCount ?? null,
-      record.platformMenuGroupName ?? null,
-      record.platformMenuStatus ?? null,
-      record.platformMenuPriceSummary ?? null,
-      stringifyPlatformMenuPriceVariants(record.platformMenuPriceVariants),
-      record.platformMenuBindingSummary ?? null,
-      record.platformMenuBindingStatus ?? null,
-      record.mappingStatus ?? null,
-      record.matchedBy,
-      record.isConfirmed,
-      record.mappingStatus ?? null
-    )
+      `).run(
+        record.mappingId,
+        record.menuId,
+        record.platformCode,
+        record.platformMenuId,
+        record.platformMenuName,
+        record.platformMenuCurrentPrice ?? null,
+        record.platformMenuPriceCount ?? null,
+        record.platformMenuGroupName ?? null,
+        record.platformMenuStatus ?? null,
+        record.platformMenuPriceSummary ?? null,
+        stringifyPlatformMenuPriceVariants(record.platformMenuPriceVariants),
+        record.platformMenuBindingSummary ?? null,
+        record.platformMenuBindingStatus ?? null,
+        record.mappingStatus ?? null,
+        record.matchedBy,
+        record.isConfirmed,
+        record.mappingStatus ?? null
+      )
+    })
   }
 
   setMappingStatus(mappingId: string, mappingStatus: PlatformMappingStatus) {

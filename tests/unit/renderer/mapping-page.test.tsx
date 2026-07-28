@@ -203,10 +203,10 @@ describe('MappingPage', () => {
     )
 
     await waitFor(() => {
-      expect(deleteMapping).toHaveBeenCalledWith('m2:baemin')
+      expect(deleteMapping).not.toHaveBeenCalled()
       expect(saveMapping).toHaveBeenCalledWith(
         expect.objectContaining({
-          mappingId: 'm1:baemin',
+          mappingId: 'm1:baemin:p-22',
           menuId: 'm1',
           platformCode: 'baemin',
           platformMenuId: 'p-22',
@@ -238,7 +238,7 @@ describe('MappingPage', () => {
     await waitFor(() => {
       expect(saveMapping).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          mappingId: 'm1:baemin',
+          mappingId: 'm1:baemin:p-11',
           menuId: 'm1',
           platformCode: 'baemin',
           platformMenuId: 'p-11',
@@ -268,10 +268,63 @@ describe('MappingPage', () => {
 
     render(<MappingPage />)
 
-    fireEvent.click(await screen.findByLabelText('m1-baemin-clear'))
+    fireEvent.click(await screen.findByLabelText('m1:baemin-clear'))
 
     await waitFor(() => {
       expect(deleteMapping).toHaveBeenCalledWith('m1:baemin')
+    })
+  })
+
+  it('shows and clears each source when one platform has multiple menus linked to one menu', async () => {
+    listMappings.mockResolvedValue([
+      {
+        mappingId: 'm1:yogiyo:medium',
+        menuId: 'm1',
+        platformCode: 'yogiyo',
+        platformMenuId: 'y-medium',
+        platformMenuName: '콤비네이션 피자 M',
+        matchedBy: 'manual',
+        isConfirmed: 1
+      },
+      {
+        mappingId: 'm1:yogiyo:large',
+        menuId: 'm1',
+        platformCode: 'yogiyo',
+        platformMenuId: 'y-large',
+        platformMenuName: '콤비네이션 피자 L',
+        matchedBy: 'manual',
+        isConfirmed: 1
+      }
+    ])
+    listPlatformMenus.mockResolvedValue([
+      {
+        platformCode: 'yogiyo',
+        platformMenuId: 'y-medium',
+        platformMenuName: '콤비네이션 피자 M'
+      },
+      {
+        platformCode: 'yogiyo',
+        platformMenuId: 'y-large',
+        platformMenuName: '콤비네이션 피자 L'
+      }
+    ])
+
+    render(<MappingPage />)
+
+    const row = (await screen.findByLabelText('m1-yogiyo-search')).closest(
+      '[data-platform-row="m1:yogiyo"]'
+    )
+    const currentConnections = row?.querySelector('.current-connection-card')
+
+    expect(currentConnections).toBeTruthy()
+    expect(within(currentConnections as HTMLElement).getByText('콤비네이션 피자 M')).toBeTruthy()
+    expect(within(currentConnections as HTMLElement).getByText('콤비네이션 피자 L')).toBeTruthy()
+
+    fireEvent.click(
+      within(currentConnections as HTMLElement).getByLabelText('m1:yogiyo:large-clear')
+    )
+    await waitFor(() => {
+      expect(deleteMapping).toHaveBeenCalledWith('m1:yogiyo:large')
     })
   })
 

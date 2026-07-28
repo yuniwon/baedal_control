@@ -28,4 +28,13 @@ describe('menu matcher', () => {
     expect(isSafeAutoLinkMatch('콜라', 'Set. 3(피자M 스파게티 훈제치킨 콜라)')).toBe(false)
     expect(isSafeAutoLinkMatch('국산 피클 1개', '피클')).toBe(false)
   })
+
+  it('matches harmless platform naming variants without merging distinct menu names', () => {
+    expect(isSafeAutoLinkMatch('왕새우갈비', '(추천) 왕새우갈비')).toBe(true)
+    expect(isSafeAutoLinkMatch('페퍼로니피자', '페페로니 피자')).toBe(true)
+    expect(isSafeAutoLinkMatch('고구마베이컨', '고구마베이컨 피자')).toBe(true)
+    expect(isSafeAutoLinkMatch('매콤디핑소스', '매콤디핑소스추가')).toBe(true)
+    expect(isSafeAutoLinkMatch('고구마피자', '달콤고구마피자')).toBe(false)
+    expect(isSafeAutoLinkMatch('반반피자', '꾸버스반반피자')).toBe(false)
+  })
 })

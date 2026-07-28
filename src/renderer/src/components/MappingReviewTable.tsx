@@ -32,6 +32,7 @@ export interface MappingReviewRow {
   platformMenuBindingSummary?: string
   platformMenuBindingStatus?: string
   duplicateNameCount?: number
+  currentMappings?: MappingCandidate[]
 }
 
 const platformOrder: readonly PlatformCode[] = PLATFORM_CODES
@@ -156,7 +157,7 @@ export const MappingReviewTable = ({
     platformCode: PlatformCode,
     candidate: MappingCandidate
   ) => void
-  onClear: (menuId: string, platformCode: PlatformCode) => void
+  onClear: (mappingId: string) => void
 }) => {
   const [drafts, setDrafts] = useState<Record<string, string>>(() => buildSearchDrafts(rows))
 
@@ -178,6 +179,21 @@ export const MappingReviewTable = ({
           <div className="mapping-platform-list">
             {group.rows.map((row) => {
               const rowKey = `${row.menuId}:${row.platformCode}`
+              const currentMappings = row.currentMappings ?? (row.platformMenuId ? [{
+                currentMappingId: rowKey,
+                currentMenuId: row.menuId,
+                currentBaseName: row.baseName,
+                platformCode: row.platformCode,
+                platformMenuId: row.platformMenuId,
+                platformMenuName: row.platformMenuName ?? '',
+                platformMenuGroupName: row.platformMenuGroupName,
+                platformMenuStatus: row.platformMenuStatus,
+                platformMenuPriceSummary: row.platformMenuPriceSummary,
+                platformMenuPriceVariants: row.platformMenuPriceVariants,
+                platformMenuBindingSummary: row.platformMenuBindingSummary,
+                platformMenuBindingStatus: row.platformMenuBindingStatus,
+                duplicateNameCount: row.duplicateNameCount
+              }] : [])
               const query = drafts[rowKey] ?? ''
               const candidates = catalog[row.platformCode]
                 .map((candidate) => ({
@@ -191,7 +207,7 @@ export const MappingReviewTable = ({
 
               return (
                 <article
-                  className={`mapping-platform-row${row.platformMenuId ? ' has-current' : ''}`}
+                  className={`mapping-platform-row${currentMappings.length ? ' has-current' : ''}`}
                   data-platform-row={rowKey}
                   key={rowKey}
                 >
@@ -216,7 +232,7 @@ export const MappingReviewTable = ({
                       {candidates.length ? (
                         <div className="candidate-list">
                           {candidates.map((candidate) => {
-                            const isCurrent = candidate.currentMappingId === rowKey
+                            const isCurrent = candidate.currentMenuId === row.menuId
                             const metaItems = buildMetaItems({
                               platformMenuStatus: candidate.platformMenuStatus,
                               platformMenuBindingStatus: candidate.platformMenuBindingStatus,
@@ -285,50 +301,54 @@ export const MappingReviewTable = ({
                   </section>
 
                   <section
-                    className={`mapping-column current-connection-card${row.platformMenuId ? '' : ' empty'}`}
+                    className={`mapping-column current-connection-card${currentMappings.length ? '' : ' empty'}`}
                   >
                     <strong className="mapping-column-title">현재 연결</strong>
-                    {row.platformMenuId ? (
+                    {currentMappings.length ? (
                       <div className="source-list">
-                        <div className="source-header">
-                          <p className="source-line">{getPlatformLabel(row.platformCode)}</p>
-                          <p className="source-title">{row.platformMenuName}</p>
-                        </div>
-                        <div className="meta-chip-list">
-                          {buildMetaItems({
-                            platformMenuStatus: row.platformMenuStatus,
-                            platformMenuBindingStatus: row.platformMenuBindingStatus,
-                            platformMenuGroupName: row.platformMenuGroupName,
-                            platformMenuPriceSummary: row.platformMenuPriceSummary,
-                            duplicateNameCount: row.duplicateNameCount
-                          }).map((item) => (
-                            <span className="meta-chip" key={`${rowKey}:${item}`}>
-                              {item}
-                            </span>
-                          ))}
-                        </div>
-                        {showDetails && row.platformMenuBindingSummary ? (
-                          <p className="source-note">{row.platformMenuBindingSummary}</p>
-                        ) : null}
-                        {showDetails && row.platformMenuPriceVariants?.length ? (
-                          <div className="source-price-variant-list">
-                            {flattenPlatformMenuPriceVariants(row.platformMenuPriceVariants)
-                              .slice(0, 4)
-                              .map((line) => (
-                                <p className="source-price-variant-line" key={`${rowKey}:${line}`}>
-                                  {line}
-                                </p>
+                        {currentMappings.map((mapping) => (
+                          <div className="source-item current-connection-item" key={mapping.currentMappingId}>
+                            <div className="source-header">
+                              <p className="source-line">{getPlatformLabel(row.platformCode)}</p>
+                              <p className="source-title">{mapping.platformMenuName}</p>
+                            </div>
+                            <div className="meta-chip-list">
+                              {buildMetaItems({
+                                platformMenuStatus: mapping.platformMenuStatus,
+                                platformMenuBindingStatus: mapping.platformMenuBindingStatus,
+                                platformMenuGroupName: mapping.platformMenuGroupName,
+                                platformMenuPriceSummary: mapping.platformMenuPriceSummary,
+                                duplicateNameCount: mapping.duplicateNameCount
+                              }).map((item) => (
+                                <span className="meta-chip" key={`${mapping.currentMappingId}:${item}`}>
+                                  {item}
+                                </span>
                               ))}
+                            </div>
+                            {showDetails && mapping.platformMenuBindingSummary ? (
+                              <p className="source-note">{mapping.platformMenuBindingSummary}</p>
+                            ) : null}
+                            {showDetails && mapping.platformMenuPriceVariants?.length ? (
+                              <div className="source-price-variant-list">
+                                {flattenPlatformMenuPriceVariants(mapping.platformMenuPriceVariants)
+                                  .slice(0, 4)
+                                  .map((line) => (
+                                    <p className="source-price-variant-line" key={`${mapping.currentMappingId}:${line}`}>
+                                      {line}
+                                    </p>
+                                  ))}
+                              </div>
+                            ) : null}
+                            <button
+                              aria-label={`${mapping.currentMappingId}-clear`}
+                              className="secondary-button table-button"
+                              onClick={() => onClear(mapping.currentMappingId ?? rowKey)}
+                              type="button"
+                            >
+                              연결 해제
+                            </button>
                           </div>
-                        ) : null}
-                        <button
-                          aria-label={`${row.menuId}-${row.platformCode}-clear`}
-                          className="secondary-button table-button"
-                          onClick={() => onClear(row.menuId, row.platformCode)}
-                          type="button"
-                        >
-                          연결 해제
-                        </button>
+                        ))}
                       </div>
                     ) : (
                       <span className="source-empty">아직 저장된 상세 정보가 없습니다.</span>

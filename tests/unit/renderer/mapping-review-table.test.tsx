@@ -115,7 +115,7 @@ describe('MappingReviewTable', () => {
     fireEvent.change(screen.getByLabelText('m1-baemin-search'), {
       target: { value: '콤비네이션피자' }
     })
-    fireEvent.click(screen.getByLabelText('m1-baemin-clear'))
+    fireEvent.click(screen.getByLabelText('m1:baemin-clear'))
 
     expect(onSelectCandidate).toHaveBeenCalledWith(
       'm1',
@@ -131,7 +131,7 @@ describe('MappingReviewTable', () => {
         .className
     ).toContain('active')
     expect(screen.getAllByText(/현재 연결/).length).toBeGreaterThan(0)
-    expect(onClear).toHaveBeenCalledWith('m1', 'baemin')
+    expect(onClear).toHaveBeenCalledWith('m1:baemin')
     expect(screen.queryByText(/ID p-11/)).toBeNull()
     expect(screen.getAllByText(/숨김 메뉴/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/연결 정상/).length).toBeGreaterThan(0)

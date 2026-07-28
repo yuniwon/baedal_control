@@ -123,9 +123,10 @@ const buildMappingRows = (
     .filter((menu) => (menu.isManaged ?? 1) === 1)
     .flatMap((menu) =>
       platforms.map((platformCode) => {
-        const mapping = mappings.find(
+        const currentMappings = mappings.filter(
           (entry) => entry.menuId === menu.menuId && entry.platformCode === platformCode
         )
+        const mapping = currentMappings[0]
 
         return {
           menuId: menu.menuId,
@@ -141,7 +142,23 @@ const buildMappingRows = (
           platformMenuBindingStatus: mapping?.platformMenuBindingStatus ?? undefined,
           duplicateNameCount: mapping
             ? duplicateCounts[`${mapping.platformCode}:${mapping.platformMenuName.trim()}`]
-            : undefined
+            : undefined,
+          currentMappings: currentMappings.map((current) => ({
+            currentMappingId: current.mappingId,
+            currentMenuId: current.menuId,
+            currentBaseName: menu.baseName,
+            platformCode: current.platformCode,
+            platformMenuId: current.platformMenuId,
+            platformMenuName: current.platformMenuName,
+            platformMenuGroupName: current.platformMenuGroupName ?? undefined,
+            platformMenuStatus: current.platformMenuStatus ?? undefined,
+            platformMenuPriceSummary: current.platformMenuPriceSummary ?? undefined,
+            platformMenuPriceVariants: current.platformMenuPriceVariants ?? undefined,
+            platformMenuBindingSummary: current.platformMenuBindingSummary ?? undefined,
+            platformMenuBindingStatus: current.platformMenuBindingStatus ?? undefined,
+            duplicateNameCount:
+              duplicateCounts[`${current.platformCode}:${current.platformMenuName.trim()}`]
+          }))
         }
       })
     )
@@ -204,16 +221,13 @@ export const MappingPage = () => {
     platformCode: PlatformCode,
     candidate: MappingCandidate
   ) => {
-    const mappingId = `${menuId}:${platformCode}`
+    if (candidate.currentMenuId === menuId) {
+      return
+    }
+
+    const mappingId = `${menuId}:${platformCode}:${candidate.platformMenuId}`
 
     void Promise.resolve()
-      .then(() => {
-        if (candidate.currentMappingId && candidate.currentMappingId !== mappingId) {
-          return appApi.mappings.delete(candidate.currentMappingId)
-        }
-
-        return undefined
-      })
       .then(() =>
         appApi.mappings.save({
           mappingId,
@@ -234,9 +248,9 @@ export const MappingPage = () => {
       .then(() => reload())
   }
 
-  const handleClear = (menuId: string, platformCode: PlatformCode) => {
+  const handleClear = (mappingId: string) => {
     void appApi.mappings
-      .delete(`${menuId}:${platformCode}`)
+      .delete(mappingId)
       .then(() => reload())
   }
 
@@ -256,6 +270,7 @@ export const MappingPage = () => {
             row.platformMenuStatus,
             row.platformMenuBindingStatus,
             row.platformMenuPriceSummary,
+            ...(row.currentMappings ?? []).map((mapping) => mapping.platformMenuName),
             ...flattenPlatformMenuPriceVariants(row.platformMenuPriceVariants)
           ].join(' ')
         )
@@ -266,8 +281,8 @@ export const MappingPage = () => {
   )
   const filteredRows = rows.filter((row) => visibleMenuIds.has(row.menuId))
   const menuCount = new Set(filteredRows.map((row) => row.menuId)).size
-  const connectedCount = filteredRows.filter((row) => row.platformMenuId).length
-  const pendingCount = filteredRows.filter((row) => !row.platformMenuId).length
+  const connectedCount = filteredRows.filter((row) => (row.currentMappings?.length ?? 0) > 0).length
+  const pendingCount = filteredRows.filter((row) => (row.currentMappings?.length ?? 0) === 0).length
 
   return (
     <section className="page">

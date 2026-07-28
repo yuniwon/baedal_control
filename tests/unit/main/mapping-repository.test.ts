@@ -92,6 +92,35 @@ describe('MappingRepository', () => {
     expect(repository.listForMenu('m1')).toEqual([])
   })
 
+  it('moves one platform source atomically instead of leaving it linked to two menus', () => {
+    menuRepository.upsert({ menuId: 'm1', baseName: '기존 메뉴', basePrice: 22900, isDirty: 0 })
+    menuRepository.upsert({ menuId: 'm2', baseName: '새 메뉴', basePrice: 22900, isDirty: 0 })
+    repository.upsert({
+      mappingId: 'map-old',
+      menuId: 'm1',
+      platformCode: 'yogiyo',
+      platformMenuId: 'source-1',
+      platformMenuName: '플랫폼 메뉴',
+      matchedBy: 'manual',
+      isConfirmed: 1
+    })
+
+    repository.upsert({
+      mappingId: 'map-new',
+      menuId: 'm2',
+      platformCode: 'yogiyo',
+      platformMenuId: 'source-1',
+      platformMenuName: '플랫폼 메뉴',
+      matchedBy: 'manual',
+      isConfirmed: 1
+    })
+
+    expect(repository.listForMenu('m1')).toEqual([])
+    expect(repository.listForMenu('m2')).toEqual([
+      expect.objectContaining({ mappingId: 'map-new', platformMenuId: 'source-1' })
+    ])
+  })
+
   it('persists an explicit source_absent mapping status', () => {
     menuRepository.upsert({ menuId: 'm1', baseName: '콤비네이션', basePrice: 22900, isDirty: 0 })
 

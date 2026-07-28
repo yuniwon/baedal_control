@@ -1,3 +1,5 @@
+import { catalogMenuIdentity } from '../../shared/catalog-normalization'
+
 export const normalizeMenuName = (value: string) =>
   value.toLowerCase().replace(/[\s().\-_/]/g, '')
 
@@ -41,7 +43,13 @@ export const isSafeAutoLinkMatch = (left: string, right: string) => {
   const leftKey = buildAutoLinkKey(left)
   const rightKey = buildAutoLinkKey(right)
 
-  return leftKey.length > 0 && leftKey === rightKey
+  if (leftKey.length > 0 && leftKey === rightKey) {
+    return true
+  }
+
+  const leftCatalogIdentity = catalogMenuIdentity(left)
+  const rightCatalogIdentity = catalogMenuIdentity(right)
+  return leftCatalogIdentity.length > 0 && leftCatalogIdentity === rightCatalogIdentity
 }
 
 export const scoreMenuMatch = (left: string, right: string) => {
