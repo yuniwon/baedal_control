@@ -13,36 +13,52 @@ import {
   type CatalogMenuListItem
 } from '../lib/catalog-workspace-view'
 import { appApi } from '../lib/api'
+import { buildReferenceCategoryIndex, resolveCatalogCategory } from '../lib/catalog-category'
 import { OptionPage } from './OptionPage'
 
 const assembleMenuRows = (
   menus: MenuRecord[],
   mappings: PlatformMenuMappingRecord[],
   platformMenus: PlatformMenuCatalogRecord[]
-): MenuRow[] => menus.map((menu) => {
-  const sources = mappings.filter((mapping) => mapping.menuId === menu.menuId).map((mapping) => {
-    const source = platformMenus.find((candidate) => candidate.platformCode === mapping.platformCode && candidate.platformMenuId === mapping.platformMenuId)
-    return {
-      platformCode: mapping.platformCode,
-      platformMenuId: mapping.platformMenuId,
-      platformMenuName: mapping.platformMenuName,
-      mappingStatus: mapping.mappingStatus,
-      presenceStatus: source?.presenceStatus,
-      lastSeenAt: source?.lastSeenAt,
-      platformMenuGroupName: source?.platformMenuGroupName ?? mapping.platformMenuGroupName ?? undefined,
-      platformMenuStatus: source?.platformMenuStatus ?? mapping.platformMenuStatus ?? undefined,
-      platformMenuPriceSummary: source?.platformMenuPriceSummary ?? mapping.platformMenuPriceSummary ?? undefined,
-      platformMenuPriceVariants: source?.platformMenuPriceVariants ?? mapping.platformMenuPriceVariants ?? undefined,
-      platformMenuBindingSummary: source?.platformMenuBindingSummary ?? mapping.platformMenuBindingSummary ?? undefined,
-      platformMenuBindingStatus: source?.platformMenuBindingStatus ?? mapping.platformMenuBindingStatus ?? undefined,
-      optionGroups: []
-    }
+): MenuRow[] => {
+  const referenceCategories = buildReferenceCategoryIndex(
+    platformMenus
+      .filter((menu) => menu.platformCode === 'baemin' && menu.presenceStatus !== 'absent_confirmed')
+      .map((menu) => menu.platformMenuGroupName)
+  )
+
+  return menus.map((menu) => {
+    const sources = mappings.filter((mapping) => mapping.menuId === menu.menuId).map((mapping) => {
+      const source = platformMenus.find((candidate) => candidate.platformCode === mapping.platformCode && candidate.platformMenuId === mapping.platformMenuId)
+      return {
+        platformCode: mapping.platformCode,
+        platformMenuId: mapping.platformMenuId,
+        platformMenuName: mapping.platformMenuName,
+        mappingStatus: mapping.mappingStatus,
+        presenceStatus: source?.presenceStatus,
+        lastSeenAt: source?.lastSeenAt,
+        platformMenuGroupName: source?.platformMenuGroupName ?? mapping.platformMenuGroupName ?? undefined,
+        platformMenuStatus: source?.platformMenuStatus ?? mapping.platformMenuStatus ?? undefined,
+        platformMenuPriceSummary: source?.platformMenuPriceSummary ?? mapping.platformMenuPriceSummary ?? undefined,
+        platformMenuPriceVariants: source?.platformMenuPriceVariants ?? mapping.platformMenuPriceVariants ?? undefined,
+        platformMenuBindingSummary: source?.platformMenuBindingSummary ?? mapping.platformMenuBindingSummary ?? undefined,
+        platformMenuBindingStatus: source?.platformMenuBindingStatus ?? mapping.platformMenuBindingStatus ?? undefined,
+        optionGroups: []
+      }
+    })
+    const activeSources = sources.filter((source) =>
+      source.mappingStatus !== 'source_absent' && source.presenceStatus !== 'absent_confirmed'
+    )
+    const referenceSource = activeSources.find((source) =>
+      source.platformCode === 'baemin' && source.platformMenuGroupName
+    )
+    const categoryName = resolveCatalogCategory(
+      [referenceSource?.platformMenuGroupName, ...activeSources.map((source) => source.platformMenuGroupName)],
+      referenceCategories
+    )
+    return { ...menu, categoryName, sources }
   })
-  const categoryName = sources.find((source) => source.platformCode === 'baemin' && source.platformMenuGroupName)?.platformMenuGroupName
-    ?? sources.find((source) => source.platformMenuGroupName)?.platformMenuGroupName
-    ?? '미분류'
-  return { ...menu, categoryName, sources }
-})
+}
 
 const filterLabels: Array<{ value: CatalogMenuFilter; label: string }> = [
   { value: 'all', label: '전체' },
