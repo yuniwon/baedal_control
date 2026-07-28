@@ -71,6 +71,31 @@ describe('analyzeCatalogExceptions', () => {
     })
   })
 
+  it('does not fan out platform-only canonical rows as missing when a reference platform is set', () => {
+    const items = analyze({
+      referencePlatformCode: 'baemin',
+      menus: [
+        menu({ menuId: 'reference-menu', baseName: '기준 메뉴' }),
+        menu({ menuId: 'platform-only', baseName: '요기요 전용 메뉴' })
+      ],
+      platformMenus: [
+        source({ platformCode: 'baemin', platformMenuId: 'b-1', platformMenuName: '기준 메뉴' }),
+        source({ platformCode: 'yogiyo', platformMenuId: 'y-1', platformMenuName: '요기요 전용 메뉴' })
+      ],
+      mappings: [
+        mapping({ mappingId: 'reference-menu:baemin', menuId: 'reference-menu', platformCode: 'baemin', platformMenuId: 'b-1', platformMenuName: '기준 메뉴' }),
+        mapping({ mappingId: 'platform-only:yogiyo', menuId: 'platform-only', platformCode: 'yogiyo', platformMenuId: 'y-1', platformMenuName: '요기요 전용 메뉴', isConfirmed: 0 })
+      ]
+    })
+
+    expect(items.filter((item) =>
+      item.kind === 'missing_on_platform' && item.canonicalMenuId === 'platform-only'
+    )).toEqual([])
+    expect(items.some((item) =>
+      item.kind === 'missing_on_platform' && item.canonicalMenuId === 'reference-menu'
+    )).toBe(true)
+  })
+
   it('marks a mapped price outlier as a decision instead of silently aligning it', () => {
     const item = analyze({
       menus: [menu()],

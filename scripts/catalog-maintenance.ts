@@ -7,6 +7,7 @@ import { PlatformMenuRepository } from '../src/main/repositories/platform-menu-r
 import { PlatformOptionGroupRepository } from '../src/main/repositories/platform-option-group-repository'
 import { CatalogIntentRuleRepository } from '../src/main/repositories/catalog-intent-rule-repository'
 import { CatalogReviewRepository } from '../src/main/repositories/catalog-review-repository'
+import { CatalogWorkspaceRepository } from '../src/main/repositories/catalog-workspace-repository'
 import { analyzeCatalogExceptions } from '../src/main/services/catalog-exception-analyzer'
 import { applyIntentRules } from '../src/main/services/catalog-intent-policy'
 import { CatalogMaintenanceService } from '../src/main/services/catalog-maintenance-service'
@@ -36,8 +37,12 @@ try {
   const catalogIntentRuleRepository = new CatalogIntentRuleRepository(db)
   const refreshReviews = () => {
     const workspaceId = 'default'
+    const workspace = new CatalogWorkspaceRepository(db).getDefault()
     const reviews = analyzeCatalogExceptions({
       workspaceId,
+      referencePlatformCode: workspace.seedMode === 'platform'
+        ? workspace.seedPlatformCode
+        : null,
       menus: menuRepository.list(),
       platformMenus: platformMenuRepository.listAll(),
       mappings: mappingRepository.listAll(),

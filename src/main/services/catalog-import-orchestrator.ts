@@ -705,8 +705,12 @@ export class CatalogImportOrchestrator {
   }
 
   private refreshCatalogReviewItems(workspaceId: string) {
+    const workspace = this.deps.catalogWorkspaceRepository.getDefault()
     const generatedItems = analyzeCatalogExceptions({
       workspaceId,
+      referencePlatformCode: workspace.seedMode === 'platform'
+        ? workspace.seedPlatformCode
+        : null,
       menus: this.deps.menuRepository.list(),
       platformMenus: this.deps.platformMenuRepository.listAll(),
       mappings: this.deps.mappingRepository.listAll(),

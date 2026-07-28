@@ -119,8 +119,12 @@ app.whenReady().then(async () => {
   const credentialVault = new CredentialVault(join(app.getPath('userData'), 'credentials.json'), safeStorage)
   const refreshCatalogReviews = () => {
     const workspaceId = 'default'
+    const workspace = catalogWorkspaceRepository.getDefault()
     const generatedItems = analyzeCatalogExceptions({
       workspaceId,
+      referencePlatformCode: workspace.seedMode === 'platform'
+        ? workspace.seedPlatformCode
+        : null,
       menus: menuRepository.list(),
       platformMenus: platformMenuRepository.listAll(),
       mappings: mappingRepository.listAll(),

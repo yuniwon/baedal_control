@@ -18,6 +18,7 @@ import { isSafeAutoLinkMatch, scoreMenuMatch } from './menu-matcher'
 
 export interface CatalogExceptionAnalysisInput {
   workspaceId: string
+  referencePlatformCode?: PlatformCode | null
   menus: MenuRecord[]
   platformMenus: PlatformMenuCatalogRecord[]
   mappings: PlatformMenuMappingRecord[]
@@ -122,7 +123,22 @@ const analyzeMissingAndUnmatched = (
   input: CatalogExceptionAnalysisInput
 ): CatalogReviewItem[] => {
   const items: CatalogReviewItem[] = []
-  const managedMenus = input.menus.filter((menu) => (menu.isManaged ?? 1) === 1)
+  const referenceMenuIds = input.referencePlatformCode
+    ? new Set(
+        input.mappings
+          .filter(
+            (mapping) =>
+              mapping.platformCode === input.referencePlatformCode &&
+              mapping.mappingStatus !== 'source_absent'
+          )
+          .map((mapping) => mapping.menuId)
+      )
+    : null
+  const managedMenus = input.menus.filter(
+    (menu) =>
+      (menu.isManaged ?? 1) === 1 &&
+      (!referenceMenuIds || referenceMenuIds.has(menu.menuId))
+  )
   const platforms = [...new Set(input.platformMenus.map((menu) => menu.platformCode))].sort()
   const activeMappingKeys = new Set(
     input.mappings

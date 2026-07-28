@@ -1,0 +1,568 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "배달 플랫폼 메뉴 수집·통합 품질 점검",
+    "description": "배달의민족을 기준으로 메뉴·가격·옵션 수집과 플랫폼 간 매칭 상태를 점검한 보고서",
+    "generatedAt": "2026-07-28T12:44:46Z",
+    "cards": [
+      {
+        "id": "reference_card",
+        "description": "현재 배민 원본에 연결된 기준 메뉴 수",
+        "dataset": "summary",
+        "sourceId": "coverage_sql",
+        "metrics": [
+          {
+            "label": "배민 기준 메뉴",
+            "field": "baemin_reference_count",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "missing_card",
+        "description": "배민 기준 메뉴 중 대상 플랫폼 연결이 없는 플랫폼별 합계",
+        "dataset": "summary",
+        "sourceId": "review_sql",
+        "metrics": [
+          {
+            "label": "실제 누락 검토",
+            "field": "missing_review_count",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "platform_only_card",
+        "description": "배민 원본 없이 다른 플랫폼 원본만 연결된 통합메뉴",
+        "dataset": "summary",
+        "sourceId": "platform_only_sql",
+        "metrics": [
+          {
+            "label": "플랫폼 전용 후보",
+            "field": "platform_only_count",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "price_card",
+        "description": "기준 가격과 다른 상태로 남은 검토 항목",
+        "dataset": "summary",
+        "sourceId": "review_sql",
+        "metrics": [
+          {
+            "label": "가격 차이 검토",
+            "field": "price_review_count",
+            "format": "number"
+          }
+        ]
+      }
+    ],
+    "charts": [
+      {
+        "id": "coverage_chart",
+        "title": "플랫폼별 배민 기준 메뉴 연결률",
+        "subtitle": "요기요는 M/L이 별도 행이어서 1:N 연결을 보존해야 합니다.",
+        "type": "bar",
+        "dataset": "coverage",
+        "sourceId": "coverage_sql",
+        "valueFormat": "percent",
+        "encodings": {
+          "x": {
+            "field": "platform_name",
+            "type": "nominal",
+            "label": "플랫폼"
+          },
+          "y": {
+            "field": "match_rate",
+            "type": "quantitative",
+            "label": "연결률"
+          },
+          "tooltip": [
+            {
+              "field": "matched_count",
+              "type": "quantitative",
+              "label": "연결 메뉴"
+            },
+            {
+              "field": "one_to_many_count",
+              "type": "quantitative",
+              "label": "1:N 메뉴"
+            },
+            {
+              "field": "missing_count",
+              "type": "quantitative",
+              "label": "미연결 메뉴"
+            }
+          ]
+        }
+      }
+    ],
+    "tables": [],
+    "sources": [
+      {
+        "id": "coverage_sql",
+        "label": "배민 기준 플랫폼 매칭 집계"
+      },
+      {
+        "id": "review_sql",
+        "label": "현재 열린 검토 항목"
+      },
+      {
+        "id": "platform_only_sql",
+        "label": "배민 원본이 없는 통합메뉴"
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# 배달 플랫폼 메뉴 수집·통합 품질 점검"
+      },
+      {
+        "id": "executive_summary",
+        "type": "markdown",
+        "sourceId": "coverage_sql",
+        "body": "## Executive Summary\n\n수집 원장은 구조적으로 완전합니다. 배민 46개, 쿠팡이츠 38개, 땡겨요 44개, 배달특급 47개, 요기요 71개를 보유하며 모든 옵션 연결 수가 원장 선언 수와 일치합니다. 현재 위험은 수집 누락보다 잘못 확장된 검토 큐와 플랫폼별 모델 차이입니다."
+      },
+      {
+        "id": "metrics",
+        "type": "metric-strip",
+        "cardIds": [
+          "reference_card",
+          "missing_card",
+          "platform_only_card",
+          "price_card"
+        ]
+      },
+      {
+        "id": "mapping_heading",
+        "type": "markdown",
+        "body": "## Mapping Coverage\n\n배민 메뉴를 그대로 한 행에 대응할 수 있는 플랫폼과, 사이즈를 별도 메뉴로 유지해야 하는 플랫폼을 구분했습니다."
+      },
+      {
+        "id": "coverage_chart_block",
+        "type": "chart",
+        "chartId": "coverage_chart"
+      },
+      {
+        "id": "findings",
+        "type": "markdown",
+        "body": "## Critical Findings\n\n- 쿠팡이츠·땡겨요·배달특급은 연결된 배민 메뉴가 모두 1:1입니다.\n- 요기요는 배민 메뉴 17개가 M/L 두 행으로 분리된 1:2 구조입니다. 이름과 가격을 한 행처럼 덮어쓰면 안 됩니다.\n- 배민 원본이 없는 27개 통합메뉴에는 고구마/반반 M·L, 소스 별칭, 음료 용량 분리처럼 합칠 가능성이 높은 항목과 요기요 전용 스파게티처럼 실제 전용 메뉴가 함께 있습니다.\n- 자동 정리는 정확 일치·구조 일치만 수행하고, 별칭·가격 전략·M/L 병합은 승인형 후보로 제시해야 합니다."
+      },
+      {
+        "id": "price_heading",
+        "type": "markdown",
+        "body": "## Price and Option Exceptions\n\n가격 차이 7건은 모두 수집 오류로 단정할 수 없습니다. 배달특급의 소스·사이드 가격과 요기요 두판 메뉴 가격은 플랫폼 전략일 수 있어 검토 후 정책으로 저장해야 합니다. 배달특급의 동일한 M/L 가격 옵션 그룹 2개는 통합뷰에서 하나로 합쳐 보여줄 수 있습니다."
+      },
+      {
+        "id": "platform_only_heading",
+        "type": "markdown",
+        "body": "## Platform-only and Alias Candidates\n\n갈릭소스↔갈릭디핑, 피클↔국산피클, 치즈가루↔파마산 치즈가루, 수제요거트소스↔요거트소스, 요기요 고구마/반반 M·L은 우선 검토 후보입니다. 자동 적용 전 한 번 확인하면 이후 같은 별칭은 의도 규칙으로 재사용할 수 있습니다."
+      },
+      {
+        "id": "recommendations",
+        "type": "markdown",
+        "body": "## Recommendations\n\n1. 배민 기준 누락 검토만 생성하고 플랫폼 전용 메뉴는 별도 승인 큐로 유지합니다.\n2. 매칭은 1:1, 1:N 사이즈, 별칭 후보, 플랫폼 전용의 네 상태로 표시합니다.\n3. 옵션은 원본 그룹을 삭제하지 않고 통합뷰에서만 논리 병합하며, 선택 슬롯 1/2는 별도 유지합니다.\n4. 현재 쓰기 자동화는 배민·쿠팡이츠·땡겨요의 메뉴명·가격 중심입니다. 옵션 생성/편집과 요기요·배달특급 쓰기는 아직 자동 적용 대상으로 보면 안 됩니다.\n5. 수집 완료 플래그와 메뉴/옵션/연결 계수가 모두 맞을 때만 최신 원장으로 승격합니다."
+      },
+      {
+        "id": "caveats",
+        "type": "markdown",
+        "body": "## Caveats and Reproducibility\n\n배민과 땡겨요는 2026-07-28 실수집으로 재확인했습니다. 쿠팡이츠·요기요·배달특급은 로그인 갱신 요구로 재시도를 중단했으며 마지막 완전 수집본을 사용했습니다. 네이버주문은 아직 수집 미지원입니다. 분석 계산은 동봉된 Jupyter 노트북에서 재현할 수 있습니다."
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-07-28T12:44:46Z",
+    "status": "ready",
+    "datasets": {
+      "summary": [
+        {
+          "baemin_reference_count": 46,
+          "collected_platform_count": 5,
+          "missing_review_count": 34,
+          "platform_only_count": 27,
+          "price_review_count": 7,
+          "duplicate_option_review_count": 1
+        }
+      ],
+      "coverage": [
+        {
+          "platform_code": "coupangeats",
+          "baemin_reference_count": 46,
+          "matched_count": 34,
+          "one_to_one_count": 34,
+          "one_to_many_count": 0,
+          "missing_count": 12,
+          "match_rate": 0.7391,
+          "platform_name": "쿠팡이츠",
+          "catalog_menu_count": 38,
+          "option_group_count": 11,
+          "option_binding_count": 135,
+          "last_seen_at": "2026-07-26 03:20:34"
+        },
+        {
+          "platform_code": "ddangyo",
+          "baemin_reference_count": 46,
+          "matched_count": 41,
+          "one_to_one_count": 41,
+          "one_to_many_count": 0,
+          "missing_count": 5,
+          "match_rate": 0.8913,
+          "platform_name": "땡겨요",
+          "catalog_menu_count": 44,
+          "option_group_count": 11,
+          "option_binding_count": 171,
+          "last_seen_at": "2026-07-28 12:14:56"
+        },
+        {
+          "platform_code": "deliveryspecial",
+          "baemin_reference_count": 46,
+          "matched_count": 45,
+          "one_to_one_count": 45,
+          "one_to_many_count": 0,
+          "missing_count": 1,
+          "match_rate": 0.9783,
+          "platform_name": "배달특급",
+          "catalog_menu_count": 47,
+          "option_group_count": 24,
+          "option_binding_count": 186,
+          "last_seen_at": "2026-07-28 08:12:06"
+        },
+        {
+          "platform_code": "yogiyo",
+          "baemin_reference_count": 46,
+          "matched_count": 30,
+          "one_to_one_count": 13,
+          "one_to_many_count": 17,
+          "missing_count": 16,
+          "match_rate": 0.6522,
+          "platform_name": "요기요",
+          "catalog_menu_count": 71,
+          "option_group_count": 18,
+          "option_binding_count": 285,
+          "last_seen_at": "2026-07-28 08:09:42"
+        }
+      ],
+      "price_reviews": [
+        {
+          "kind": "price_outlier",
+          "platform_code": "deliveryspecial",
+          "title": "갈릭디핑 가격이 플랫폼과 다릅니다",
+          "recommendation": "manual_review",
+          "canonical_price": 500,
+          "platform_price": 300,
+          "difference": -200
+        },
+        {
+          "kind": "price_outlier",
+          "platform_code": "deliveryspecial",
+          "title": "국산피클 가격이 플랫폼과 다릅니다",
+          "recommendation": "manual_review",
+          "canonical_price": 500,
+          "platform_price": 300,
+          "difference": -200
+        },
+        {
+          "kind": "price_outlier",
+          "platform_code": "deliveryspecial",
+          "title": "왕새우갈비 가격이 플랫폼과 다릅니다",
+          "recommendation": "manual_review",
+          "canonical_price": 24900,
+          "platform_price": 23900,
+          "difference": -1000
+        },
+        {
+          "kind": "price_outlier",
+          "platform_code": "deliveryspecial",
+          "title": "치즈가루 가격이 플랫폼과 다릅니다",
+          "recommendation": "manual_review",
+          "canonical_price": 300,
+          "platform_price": 200,
+          "difference": -100
+        },
+        {
+          "kind": "price_outlier",
+          "platform_code": "deliveryspecial",
+          "title": "치즈볼 8개 가격이 플랫폼과 다릅니다",
+          "recommendation": "manual_review",
+          "canonical_price": 7000,
+          "platform_price": 6000,
+          "difference": -1000
+        },
+        {
+          "kind": "price_outlier",
+          "platform_code": "deliveryspecial",
+          "title": "핫소스 가격이 플랫폼과 다릅니다",
+          "recommendation": "manual_review",
+          "canonical_price": 200,
+          "platform_price": 100,
+          "difference": -100
+        },
+        {
+          "kind": "price_outlier",
+          "platform_code": "yogiyo",
+          "title": "치즈크러스트피자 라지 두판 가격이 플랫폼과 다릅니다",
+          "recommendation": "manual_review",
+          "canonical_price": 51900,
+          "platform_price": 50900,
+          "difference": -1000
+        }
+      ],
+      "platform_only": [
+        {
+          "base_name": "갈릭소스",
+          "base_price": 500,
+          "sources": "coupangeats:갈릭소스",
+          "platform_count": 1,
+          "source_platforms": "coupangeats"
+        },
+        {
+          "base_name": "고구마 피자",
+          "base_price": 21900,
+          "sources": "yogiyo:고구마 피자 M | yogiyo:고구마 피자 L",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "고르곤졸라씬피자 L",
+          "base_price": 23900,
+          "sources": "yogiyo:고르곤졸라씬피자 L",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "로제 오븐 스파게티",
+          "base_price": 10000,
+          "sources": "yogiyo:로제 오븐 스파게티",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "리치골드피자  L＋L",
+          "base_price": 47900,
+          "sources": "yogiyo:리치골드피자  L＋L",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "반반피자",
+          "base_price": 20900,
+          "sources": "yogiyo:반반피자 M | yogiyo:반반피자 L",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "베이컨 토마토 오븐스파게티",
+          "base_price": 10000,
+          "sources": "yogiyo:베이컨 토마토 오븐스파게티",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "불고기  토마토오븐 스파게티",
+          "base_price": 10000,
+          "sources": "yogiyo:불고기  토마토오븐 스파게티",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "불고기 아라비아따 오븐 스파게티",
+          "base_price": 11000,
+          "sources": "yogiyo:불고기 아라비아따 오븐 스파게티",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "불고기 크림 오븐 스파게티",
+          "base_price": 10000,
+          "sources": "yogiyo:불고기 크림 오븐 스파게티",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "사이다 1.25L",
+          "base_price": 2800,
+          "sources": "yogiyo:사이다 1.25L",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "사이다(500ml/1.25L)",
+          "base_price": 1800,
+          "sources": "coupangeats:사이다(500ml/1.25L) | yogiyo:사이다 500mL",
+          "platform_count": 2,
+          "source_platforms": "coupangeats, yogiyo"
+        },
+        {
+          "base_name": "수제요거트소스",
+          "base_price": 500,
+          "sources": "ddangyo:수제요거트소스",
+          "platform_count": 1,
+          "source_platforms": "ddangyo"
+        },
+        {
+          "base_name": "슈퍼불고기 피자 L（하프앤하프）",
+          "base_price": 21000,
+          "sources": "yogiyo:슈퍼불고기 피자 L（하프앤하프）",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "슈퍼불고기 피자 M（하프앤하프）",
+          "base_price": 18000,
+          "sources": "yogiyo:슈퍼불고기 피자 M（하프앤하프）",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "스파게티",
+          "base_price": 7000,
+          "sources": "yogiyo:스파게티",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "아라비아따 오븐 스파게티",
+          "base_price": 9500,
+          "sources": "yogiyo:아라비아따 오븐 스파게티",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "일반피자 M＋M",
+          "base_price": 36900,
+          "sources": "yogiyo:일반피자 M＋M",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "치즈가루",
+          "base_price": 300,
+          "sources": "ddangyo:치즈가루 | deliveryspecial:치즈가루",
+          "platform_count": 2,
+          "source_platforms": "ddangyo, deliveryspecial"
+        },
+        {
+          "base_name": "칠리불새피자",
+          "base_price": 24900,
+          "sources": "deliveryspecial:칠리불새피자",
+          "platform_count": 1,
+          "source_platforms": "deliveryspecial"
+        },
+        {
+          "base_name": "콜라 1.25L",
+          "base_price": 2800,
+          "sources": "yogiyo:콜라 1.25L",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "콜라(500ml/1.25L)",
+          "base_price": 1800,
+          "sources": "coupangeats:콜라(500ml/1.25L) | yogiyo:콜라 500mL",
+          "platform_count": 2,
+          "source_platforms": "coupangeats, yogiyo"
+        },
+        {
+          "base_name": "크림오븐 스파게티",
+          "base_price": 9000,
+          "sources": "yogiyo:크림오븐 스파게티",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "토마토 미트 오븐 스파게티",
+          "base_price": 9000,
+          "sources": "yogiyo:토마토 미트 오븐 스파게티",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "통마늘 바베큐 토마토 오븐 스파게티",
+          "base_price": 11000,
+          "sources": "yogiyo:통마늘 바베큐 토마토 오븐 스파게티",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "포테이토  토마토 오븐 스파게티",
+          "base_price": 10000,
+          "sources": "yogiyo:포테이토  토마토 오븐 스파게티",
+          "platform_count": 1,
+          "source_platforms": "yogiyo"
+        },
+        {
+          "base_name": "피클",
+          "base_price": 500,
+          "sources": "ddangyo:피클 | coupangeats:피클",
+          "platform_count": 2,
+          "source_platforms": "coupangeats, ddangyo"
+        }
+      ]
+    },
+    "accessIssues": []
+  },
+  "sources": [
+    {
+      "id": "coverage_sql",
+      "label": "배민 기준 플랫폼 매칭 집계",
+      "query": {
+        "engine": "sqlite",
+        "language": "sql",
+        "sql": "with baemin_menus as (\n  select distinct menu_id\n  from platform_menu_mappings\n  where platform_code = 'baemin' and mapping_status = 'active'\n), target_counts as (\n  select b.menu_id, p.platform_code, count(m.platform_menu_id) as target_count\n  from baemin_menus b\n  cross join (\n    select 'coupangeats' platform_code union all\n    select 'ddangyo' union all\n    select 'deliveryspecial' union all\n    select 'yogiyo'\n  ) p\n  left join platform_menu_mappings m\n    on m.menu_id = b.menu_id\n   and m.platform_code = p.platform_code\n   and m.mapping_status = 'active'\n  group by b.menu_id, p.platform_code\n)\nselect platform_code,\n       count(*) as baemin_reference_count,\n       sum(target_count > 0) as matched_count,\n       sum(target_count = 1) as one_to_one_count,\n       sum(target_count > 1) as one_to_many_count,\n       sum(target_count = 0) as missing_count,\n       round(1.0 * sum(target_count > 0) / count(*), 4) as match_rate\nfrom target_counts\ngroup by platform_code\norder by platform_code",
+        "description": "배민 기준 플랫폼 매칭 집계",
+        "tables_used": [
+          "platform_menu_mappings",
+          "platform_menus",
+          "platform_option_groups"
+        ],
+        "executed_at": "2026-07-28T12:44:46Z",
+        "filters": [
+          "presence_status = present where applicable",
+          "reference platform = baemin"
+        ]
+      }
+    },
+    {
+      "id": "review_sql",
+      "label": "현재 열린 검토 항목",
+      "query": {
+        "engine": "sqlite",
+        "language": "sql",
+        "sql": "select kind, platform_code, title, recommendation, evidence_json\nfrom catalog_review_items\nwhere state = 'open'\norder by kind, platform_code, title",
+        "description": "현재 열린 검토 항목",
+        "tables_used": [
+          "catalog_review_items"
+        ],
+        "executed_at": "2026-07-28T12:44:46Z",
+        "filters": [
+          "presence_status = present where applicable",
+          "reference platform = baemin"
+        ]
+      }
+    },
+    {
+      "id": "platform_only_sql",
+      "label": "배민 원본이 없는 통합메뉴",
+      "query": {
+        "engine": "sqlite",
+        "language": "sql",
+        "sql": "select m.base_name, m.base_price,\n       group_concat(mm.platform_code || ':' || mm.platform_menu_name, ' | ') as sources,\n       count(distinct mm.platform_code) as platform_count\nfrom menus m\njoin platform_menu_mappings mm\n  on mm.menu_id = m.menu_id and mm.mapping_status = 'active'\nwhere not exists (\n  select 1 from platform_menu_mappings b\n  where b.menu_id = m.menu_id\n    and b.platform_code = 'baemin'\n    and b.mapping_status = 'active'\n)\ngroup by m.menu_id\norder by m.base_name",
+        "description": "배민 원본이 없는 통합메뉴",
+        "tables_used": [
+          "menus",
+          "platform_menu_mappings"
+        ],
+        "executed_at": "2026-07-28T12:44:46Z",
+        "filters": [
+          "presence_status = present where applicable",
+          "reference platform = baemin"
+        ]
+      }
+    }
+  ]
+}
