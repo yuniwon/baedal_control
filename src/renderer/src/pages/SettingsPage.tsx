@@ -114,25 +114,25 @@ const getPlatformSessionGuidance = (
   const label = getPlatformLabel(platform)
   switch (record.detailCode) {
     case 'otp_required':
-      return `${label}에서 OTP 인증을 완료한 뒤 인증 완료 확인을 눌러 주세요.`
+      return `${label}에서 OTP 인증을 완료한 뒤 로그인 완료 확인을 눌러 주세요.`
     case 'captcha_required':
-      return `${label}에서 CAPTCHA를 완료한 뒤 인증 완료 확인을 눌러 주세요.`
+      return `${label}에서 CAPTCHA를 완료한 뒤 로그인 완료 확인을 눌러 주세요.`
     case 'account_selection_required':
-      return 'Chrome에서 사용할 쿠팡이츠 계정을 선택한 뒤 인증 완료 확인을 눌러 주세요.'
+      return 'Chrome에서 사용할 쿠팡이츠 계정을 선택한 뒤 로그인 완료 확인을 눌러 주세요.'
     case 'password_manager_unlock_or_account_selection_required':
-      return 'Chrome 비밀번호 관리자의 잠금을 해제하거나 계정을 선택한 뒤 인증 완료 확인을 눌러 주세요.'
+      return 'Chrome 비밀번호 관리자의 잠금을 해제하거나 계정을 선택한 뒤 로그인 완료 확인을 눌러 주세요.'
     case 'password_manager_auto_click_consent_required':
       return '아래에서 로그인 버튼 1회 자동 클릭을 허용해 주세요.'
     case 'login_click_already_attempted':
-      return '로그인 버튼은 이미 한 번 눌렀습니다. Chrome에서 상태를 확인한 뒤 인증 완료 확인을 눌러 주세요.'
+      return '로그인 버튼은 이미 한 번 눌렀습니다. Chrome에서 상태를 확인한 뒤 로그인 완료 확인을 눌러 주세요.'
     case 'managed_login_rejected':
       return `${label}에서 로그인 오류를 확인해 주세요. 계정 보호를 위해 자동 재시도하지 않습니다.`
     case 'google_chrome_profile_required':
       return '설치된 Google Chrome과 전용 프로필을 확인해 주세요.'
     case 'password_manager_login_not_confirmed':
-      return 'Chrome에서 로그인 결과를 확인한 뒤 인증 완료 확인을 눌러 주세요.'
+      return 'Chrome에서 로그인 결과를 확인한 뒤 로그인 완료 확인을 눌러 주세요.'
     case 'managed_chrome_session_unavailable':
-      return '전용 Chrome 연결 상태를 확인한 뒤 인증 화면 열기를 눌러 주세요.'
+      return '전용 Chrome 연결 상태를 확인한 뒤 로그인 창 열기를 눌러 주세요.'
     case 'password_manager_login_page_unavailable':
     case 'password_manager_document_identity_unavailable':
       return '로그인 화면을 안전하게 확인하지 못해 자동 클릭을 중단했습니다. Chrome에서 직접 확인해 주세요.'
@@ -320,8 +320,8 @@ export const SettingsPage = () => {
   const buildErrorMessage = (platform: PlatformKey, value: string) => {
     if (value.startsWith('platform_session_not_ready:')) {
       return value.endsWith('challenge_required')
-        ? '추가 인증을 마친 뒤 인증 완료 확인을 눌러 주세요.'
-        : '로그인 연결을 확인한 뒤 메뉴를 다시 읽어 주세요.'
+        ? '추가 인증을 마친 뒤 로그인 완료 확인을 눌러 주세요.'
+        : '로그인 상태를 확인한 뒤 메뉴 불러오기를 눌러 주세요.'
     }
 
     const formatted = formatPlatformImportError(platform, value)
@@ -474,9 +474,15 @@ export const SettingsPage = () => {
   return (
     <section className="page">
       <header className="page-header">
-        <h1>가져오기</h1>
-        <p>계정을 저장한 뒤 메뉴와 옵션을 다시 읽어옵니다. 자세한 화면 기록은 필요할 때만 펼쳐 확인합니다.</p>
+        <h1>메뉴 가져오기</h1>
+        <p>플랫폼에 로그인한 뒤 메뉴와 옵션을 통합메뉴로 불러옵니다.</p>
       </header>
+
+      <ol className="import-flow-guide" aria-label="메뉴 가져오기 순서">
+        <li><b>1</b><span><strong>1. 로그인 창 열기</strong><small>플랫폼 관리 화면을 엽니다.</small></span></li>
+        <li><b>2</b><span><strong>2. 로그인 완료 확인</strong><small>로그인과 추가 인증을 끝냅니다.</small></span></li>
+        <li><b>3</b><span><strong>3. 메뉴 불러오기</strong><small>메뉴와 옵션을 읽어옵니다.</small></span></li>
+      </ol>
 
       <div className="credential-list">
         {platforms.map((platform) => {
@@ -517,7 +523,7 @@ export const SettingsPage = () => {
                         }
                         type="button"
                       >
-                        인증 화면 열기
+                        로그인 창 열기
                       </button>
                       <button
                         className="primary-button"
@@ -529,7 +535,7 @@ export const SettingsPage = () => {
                         }
                         type="button"
                       >
-                        인증 완료 확인
+                        로그인 완료 확인
                       </button>
                     </>
                   ) : sessionState === 'ready' ? (
@@ -541,7 +547,7 @@ export const SettingsPage = () => {
                       }
                       type="button"
                     >
-                      연결 확인
+                      로그인 상태 확인
                     </button>
                   ) : !isCredentialRejected && !isUnsupported ? (
                     <button
@@ -552,7 +558,7 @@ export const SettingsPage = () => {
                       }
                       type="button"
                     >
-                      {`${getPlatformLabel(platform)} 로그인 열기`}
+                      로그인 창 열기
                     </button>
                   ) : null}
                   {usesApplicationCredential && !isChallenge && !isUnsupported ? <button
@@ -571,16 +577,14 @@ export const SettingsPage = () => {
                     }
                   >
                     {isCredentialRejected
-                      ? '로그인 정보 수정'
+                      ? '로그인 정보 수정 후 메뉴 불러오기'
                       : isSubmitting[platform]
-                      ? '저장 중'
-                      : status[platform]
-                        ? '저장'
-                        : '저장하고 읽기'}
+                      ? '메뉴 불러오는 중'
+                      : '로그인 정보 저장 후 메뉴 불러오기'}
                   </button> : null}
                   {canImport && !isChallenge && !isCredentialRejected && !isUnsupported ? (
                     <button
-                      className="primary-button"
+                      className={latestImports[platform] ? 'secondary-button' : 'primary-button'}
                       disabled={isSubmitting[platform]}
                       onClick={() =>
                         runImport(
@@ -591,7 +595,11 @@ export const SettingsPage = () => {
                         )
                       }
                     >
-                      {isSubmitting[platform] ? '읽는 중' : '다시 읽기'}
+                      {isSubmitting[platform]
+                        ? '메뉴 불러오는 중'
+                        : latestImports[platform]
+                          ? '변경사항 다시 확인'
+                          : '메뉴 불러오기'}
                     </button>
                   ) : null}
                 </div>

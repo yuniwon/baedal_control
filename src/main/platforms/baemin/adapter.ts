@@ -35,7 +35,10 @@ import {
 import { pickBaeminSearchResult } from './update-flow'
 import { pickBaeminRenderedSearchResult } from './update-flow'
 import { launchPlaywrightChromium } from '../../services/playwright-runtime'
-import { buildSafeNoticeDialogDismissalExpression } from '../../services/safe-notice-dialog-dismissal'
+import {
+  buildPostSaveSuccessDialogDismissalExpression,
+  buildSafeNoticeDialogDismissalExpression
+} from '../../services/safe-notice-dialog-dismissal'
 
 type BaeminCreateWizardEntryState = {
   buttonFound: boolean
@@ -754,6 +757,7 @@ export class BaeminAdapter implements PlatformAdapter {
       if (stageTracker) {
         stageTracker.current = '이름 변경 저장 후 편집창 닫힘 대기'
       }
+      await this.dismissPostSaveSuccessDialog(page)
       await input.waitFor({ state: 'hidden', timeout: 15000 })
     } finally {
       page.off('response', onResponse)
@@ -794,6 +798,7 @@ export class BaeminAdapter implements PlatformAdapter {
     if (stageTracker) {
       stageTracker.current = '가격 변경 저장 후 편집창 닫힘 대기'
     }
+    await this.dismissPostSaveSuccessDialog(page)
     await deliveryPriceInput.waitFor({ state: 'hidden', timeout: 15000 })
   }
 
@@ -832,7 +837,18 @@ export class BaeminAdapter implements PlatformAdapter {
     if (stageTracker) {
       stageTracker.current = '가격 변경 저장 후 편집창 닫힘 대기'
     }
+    await this.dismissPostSaveSuccessDialog(page)
     await page.locator('input').nth(updates[0].domIndex).waitFor({ state: 'hidden', timeout: 15000 })
+  }
+
+  private async dismissPostSaveSuccessDialog(page: Page) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const dismissed = await page
+        .evaluate(buildPostSaveSuccessDialogDismissalExpression())
+        .catch(() => [] as string[])
+      if (Array.isArray(dismissed) && dismissed.length > 0) return
+      await page.waitForTimeout(150)
+    }
   }
 
   private async readVisiblePriceChangeInputs(page: Page): Promise<BaeminVisiblePriceInputSnapshot[]> {

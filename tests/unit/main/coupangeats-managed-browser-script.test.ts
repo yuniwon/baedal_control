@@ -126,6 +126,44 @@ describe('applyManagedBrowserMenuUpdate', () => {
     expect(document.querySelector('[data-testid="editor"]')).toBeNull()
   })
 
+  it('confirms a save-success modal before waiting for the updated menu row', async () => {
+    document.body.innerHTML = `
+      <div class="content-body-wrapper"><div class="content-body-item"><div class="css-csu06v e2waxd92">
+        <div>추천메뉴 메뉴 사진은 연출된 이미지로 실제 조리된 음식과 다를 수 있습니다. 메뉴 추가 순서 변경</div>
+        <ul class="css-1p2a3k e2waxd90"><li><div class="dish"><div class="dish-top">
+          <div class="content"><div class="dish-wrapper"><span class="dish-name">왕새우갈비</span></div><div class="sale-price">23,900원</div></div>
+          <div class="image"><div class="edit"></div></div>
+        </div></div></li></ul>
+      </div></div></div>
+    `
+    const rowName = document.querySelector('.dish-name') as HTMLElement
+    const rowPrice = document.querySelector('.sale-price') as HTMLElement
+    document.querySelector('.edit')?.addEventListener('click', () => {
+      const form = document.createElement('div')
+      form.innerHTML = '<input type="text" placeholder="예: 치즈버거" value="왕새우갈비" /><input type="text" placeholder="0" value="23,900" /><button>저장</button>'
+      form.querySelector('button')?.addEventListener('click', () => {
+        const inputs = form.querySelectorAll('input')
+        const dialog = document.createElement('div')
+        dialog.setAttribute('role', 'dialog')
+        dialog.innerHTML = '<p>메뉴 저장이 완료되었습니다.</p><button>확인</button>'
+        dialog.querySelector('button')?.addEventListener('click', () => {
+          rowName.textContent = (inputs[0] as HTMLInputElement).value
+          rowPrice.textContent = `${(inputs[1] as HTMLInputElement).value}원`
+          form.remove()
+          dialog.remove()
+        })
+        document.body.appendChild(dialog)
+      })
+      document.body.appendChild(form)
+    })
+
+    const { applyManagedBrowserMenuUpdate } = await loadScript()
+    await expect(applyManagedBrowserMenuUpdate({
+      previousName: '왕새우갈비', previousPrice: 23900, nextName: '왕새우갈비 수정', nextPrice: 24900, platformMenuGroupName: '추천메뉴'
+    })).resolves.toEqual({ status: 'saved', message: 'menu_updated' })
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+  })
+
   it('uses platformMenuId to pick the correct duplicate row within the same group', async () => {
     vi.stubGlobal(
       'fetch',

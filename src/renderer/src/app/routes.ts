@@ -19,7 +19,7 @@ export const getRouteLabel = (route: AppRoute) => {
     case 'reviews':
       return '검토함'
     case 'imports':
-      return '가져오기'
+      return '메뉴 가져오기'
     case 'mappings':
       return '연결'
     case 'history':

@@ -284,6 +284,29 @@ const setInputValue = (input, value) => {
   input.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
+const dismissPostSaveSuccessDialog = () => {
+  const successPattern = /(?:저장|수정|변경|적용).{0,30}(?:완료|성공|반영)|(?:완료|성공).{0,30}(?:저장|수정|변경|적용)/u
+  const failurePattern = /실패|오류|불가|확인\s*필요|입력해/u
+  const dialogs = Array.from(document.querySelectorAll(
+    '[role="dialog"], [aria-modal="true"], [class*="modal" i], [class*="popup" i]'
+  ))
+
+  for (const dialog of dialogs) {
+    if (!isVisible(dialog)) continue
+    const text = normalizeText(dialog.textContent)
+    if (!successPattern.test(text) || failurePattern.test(text)) continue
+    const button = Array.from(dialog.querySelectorAll('button, [role="button"]')).find((element) =>
+      isVisible(element) && /^(?:확인|닫기)$/u.test(normalizeText(element.getAttribute('aria-label') || element.textContent))
+    )
+    if (button) {
+      button.click()
+      return true
+    }
+  }
+
+  return false
+}
+
 const waitFor = async (resolver, timeoutMs = 5000, intervalMs = 100) => {
   const startedAt = Date.now()
 
@@ -385,6 +408,7 @@ export const applyManagedBrowserMenuUpdate = async ({
   controls.saveButton.click()
 
   const saved = await waitFor(() => {
+    dismissPostSaveSuccessDialog()
     const nextRows = findMatchingRows({
       previousName: nextName,
       previousPrice: nextPrice,

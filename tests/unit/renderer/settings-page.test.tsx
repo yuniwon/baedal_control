@@ -321,10 +321,10 @@ describe('SettingsPage', () => {
     render(<SettingsPage />)
 
     expect(
-      await screen.findByText('쿠팡이츠에서 OTP 인증을 완료한 뒤 인증 완료 확인을 눌러 주세요.')
+      await screen.findByText('쿠팡이츠에서 OTP 인증을 완료한 뒤 로그인 완료 확인을 눌러 주세요.')
     ).toBeTruthy()
-    expect(screen.getByRole('button', { name: '인증 화면 열기' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '인증 완료 확인' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: '로그인 창 열기' }).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: '로그인 완료 확인' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '자동 재시도' })).toBeNull()
   })
 
@@ -339,7 +339,7 @@ describe('SettingsPage', () => {
     ).toBeTruthy()
     expect(within(card).queryByPlaceholderText('아이디')).toBeNull()
     expect(within(card).queryByPlaceholderText('비밀번호')).toBeNull()
-    expect(within(card).queryByRole('button', { name: '저장하고 읽기' })).toBeNull()
+    expect(within(card).queryByRole('button', { name: '로그인 정보 저장 후 메뉴 불러오기' })).toBeNull()
   })
 
   it('stores explicit consent before allowing the Coupang Eats login-button click', async () => {
@@ -365,9 +365,27 @@ describe('SettingsPage', () => {
     expect(screen.getByText('땡겨요')).toBeTruthy()
     expect(screen.getByText('배달특급')).toBeTruthy()
     expect(screen.getByText('네이버주문')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '요기요 로그인 열기' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '배달특급 로그인 열기' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '네이버주문 로그인 열기' })).toBeTruthy()
+    expect(within(screen.getByTestId('platform-auth-yogiyo')).getByRole('button', { name: '로그인 창 열기' })).toBeTruthy()
+    expect(within(screen.getByTestId('platform-auth-deliveryspecial')).getByRole('button', { name: '로그인 창 열기' })).toBeTruthy()
+    expect(within(screen.getByTestId('platform-auth-naverorder')).getByRole('button', { name: '로그인 창 열기' })).toBeTruthy()
+  })
+
+  it('explains the login-to-import order and keeps repeat import secondary', async () => {
+    render(<SettingsPage />)
+
+    expect(await screen.findByRole('heading', { name: '메뉴 가져오기' })).toBeTruthy()
+    expect(screen.getByText('1. 로그인 창 열기')).toBeTruthy()
+    expect(screen.getByText('2. 로그인 완료 확인')).toBeTruthy()
+    expect(screen.getByText('3. 메뉴 불러오기')).toBeTruthy()
+
+    const baeminCard = screen.getByTestId('platform-auth-baemin')
+    expect(within(baeminCard).getByRole('button', { name: '로그인 상태 확인' })).toBeTruthy()
+    expect(
+      within(baeminCard).getByRole('button', { name: '로그인 정보 저장 후 메뉴 불러오기' })
+    ).toBeTruthy()
+    const repeatImport = within(baeminCard).getByRole('button', { name: '변경사항 다시 확인' })
+    expect(repeatImport.className).toContain('secondary-button')
+    expect(repeatImport.className).not.toContain('primary-button')
   })
 
   it('reloads saved platform credentials when the page mounts again', async () => {
@@ -380,7 +398,7 @@ describe('SettingsPage', () => {
   it('keeps browser diagnostics hidden until the operator opens advanced tools', async () => {
     render(<SettingsPage />)
 
-    expect(await screen.findByRole('heading', { name: '가져오기' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: '메뉴 가져오기' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '브라우저 진단 보기' })).toBeTruthy()
     expect(screen.queryByText('브라우저 검사')).toBeNull()
 
@@ -392,7 +410,7 @@ describe('SettingsPage', () => {
   it('shows the automatic import result after saving credentials', async () => {
     render(<SettingsPage />)
 
-    const saveButtons = await screen.findAllByRole('button', { name: '저장' })
+    const saveButtons = await screen.findAllByRole('button', { name: '로그인 정보 저장 후 메뉴 불러오기' })
     fireEvent.click(saveButtons[0])
 
     await waitFor(() => {
@@ -498,7 +516,7 @@ describe('SettingsPage', () => {
   it('allows re-importing menus without overwriting saved credentials', async () => {
     render(<SettingsPage />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '다시 읽기' }))
+    fireEvent.click(await screen.findByRole('button', { name: '변경사항 다시 확인' }))
 
     await waitFor(() => {
       expect(importPlatformMenus).toHaveBeenCalledWith({ platformCode: 'baemin' })
@@ -510,7 +528,7 @@ describe('SettingsPage', () => {
   it('shows inspection steps with page and field details after saving credentials', async () => {
     render(<SettingsPage />)
 
-    const saveButtons = await screen.findAllByRole('button', { name: '저장' })
+    const saveButtons = await screen.findAllByRole('button', { name: '로그인 정보 저장 후 메뉴 불러오기' })
     fireEvent.click(saveButtons[0])
 
     expect(await screen.findByText('읽은 화면')).toBeTruthy()
@@ -524,7 +542,7 @@ describe('SettingsPage', () => {
   it('lets the user collapse the inspection panel after reviewing it', async () => {
     render(<SettingsPage />)
 
-    const saveButtons = await screen.findAllByRole('button', { name: '저장' })
+    const saveButtons = await screen.findAllByRole('button', { name: '로그인 정보 저장 후 메뉴 불러오기' })
     fireEvent.click(saveButtons[0])
 
     expect(await screen.findByRole('button', { name: '읽은 화면 접기' })).toBeTruthy()

@@ -57,7 +57,7 @@ describe('App navigation', () => {
     expect(await screen.findByRole('button', { name: '홈' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '통합메뉴' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '검토함' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '가져오기' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '메뉴 가져오기' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '옵션' })).toBeNull()
     expect(screen.queryByRole('button', { name: '연결' })).toBeNull()
 

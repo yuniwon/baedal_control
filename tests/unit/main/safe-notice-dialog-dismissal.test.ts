@@ -2,7 +2,9 @@ import { JSDOM } from 'jsdom'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  buildPostSaveSuccessDialogDismissalExpression,
   buildSafeNoticeDialogDismissalExpression,
+  dismissPostSaveSuccessDialogsInDocument,
   dismissSafeNoticeDialogsInDocument
 } from '../../../src/main/services/safe-notice-dialog-dismissal'
 
@@ -60,5 +62,29 @@ describe('safe notice dialog dismissal', () => {
 
     expect(expression).toContain('dismissSafeNoticeDialogsInDocument(document)')
     expect(expression).toContain('보지\\s*않기')
+  })
+
+  it('dismisses only a confirmed save-success dialog', () => {
+    const dom = new JSDOM(`
+      <div class="save-result-modal" id="success"><p>메뉴 저장이 완료되었습니다.</p><button>확인</button></div>
+      <div role="dialog" id="error"><p>저장에 실패했습니다.</p><button>확인</button></div>
+    `)
+    const successButton = dom.window.document.querySelector('#success button')!
+    const errorButton = dom.window.document.querySelector('#error button')!
+    makeVisible(dom.window.document.querySelector('#success')!)
+    makeVisible(dom.window.document.querySelector('#error')!)
+    makeVisible(successButton)
+    makeVisible(errorButton)
+    const successClick = vi.fn()
+    const errorClick = vi.fn()
+    successButton.addEventListener('click', successClick)
+    errorButton.addEventListener('click', errorClick)
+
+    expect(dismissPostSaveSuccessDialogsInDocument(dom.window.document)).toEqual(['확인'])
+    expect(successClick).toHaveBeenCalledOnce()
+    expect(errorClick).not.toHaveBeenCalled()
+    expect(buildPostSaveSuccessDialogDismissalExpression()).toContain(
+      'dismissPostSaveSuccessDialogsInDocument(document)'
+    )
   })
 })
