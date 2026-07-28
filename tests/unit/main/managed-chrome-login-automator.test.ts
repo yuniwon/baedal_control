@@ -114,7 +114,7 @@ describe('ManagedChromeLoginAutomator', () => {
   })
 
   it.each([
-    ['yogiyo', 'https://ceo.yogiyo.co.kr/'],
+    ['yogiyo', 'https://ceo.yogiyo.co.kr/login/'],
     ['ddangyo', 'https://boss.ddangyo.com/'],
     ['deliveryspecial', 'https://partner.payco.kr/user/login'],
     [
@@ -203,7 +203,10 @@ describe('ManagedChromeLoginAutomator', () => {
       'payco-login',
       expect.stringContaining('#loginButton')
     )
-    expect(clickSelector).toHaveBeenCalledWith('payco-login', '#loginButton')
+    expect(clickSelector).toHaveBeenCalledWith(
+      'payco-login',
+      'button#loginButton[type="submit"]'
+    )
   })
 
   it('recognizes the current and legacy Ddangyo encrypted login fields', async () => {

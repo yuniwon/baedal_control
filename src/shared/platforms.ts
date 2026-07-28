@@ -30,7 +30,7 @@ export const PLATFORM_METADATA: Record<PlatformCode, PlatformMetadata> = {
   },
   yogiyo: {
     label: '요기요',
-    loginUrl: 'https://ceo.yogiyo.co.kr/',
+    loginUrl: 'https://ceo.yogiyo.co.kr/login/',
     managementHosts: ['ceo.yogiyo.co.kr', 'owner.yogiyo.co.kr'],
     authenticationPreference: 'credential_first'
   },

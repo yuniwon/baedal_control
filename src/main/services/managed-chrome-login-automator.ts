@@ -217,7 +217,7 @@ const loginDescriptors: Partial<Record<PlatformCode, ManagedChromeLoginDescripto
     submitSelector: baeminSelectors.loginButton
   },
   yogiyo: {
-    loginUrl: 'https://ceo.yogiyo.co.kr/',
+    loginUrl: 'https://ceo.yogiyo.co.kr/login/',
     alreadyAuthenticatedMessage: '이미 요기요 로그인 세션이 열려 있습니다.',
     credentialMissingMessage: '저장된 요기요 계정이 없어 자동 로그인을 건너뛰었습니다.',
     loginTabNotFoundMessage: '요기요 로그인 화면을 찾지 못했습니다.',
@@ -277,10 +277,10 @@ const loginDescriptors: Partial<Record<PlatformCode, ManagedChromeLoginDescripto
         credential,
         platformLabel: '배달특급',
         usernameSelector: '#id',
-        passwordSelector: 'input[type="password"]',
-        submitSelector: '#loginButton'
+        passwordSelector: '#password',
+        submitSelector: 'button#loginButton[type="submit"]'
       }),
-    submitSelector: '#loginButton'
+    submitSelector: 'button#loginButton[type="submit"]'
   },
   naverorder: {
     loginUrl:

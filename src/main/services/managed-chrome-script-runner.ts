@@ -240,31 +240,7 @@ export class ManagedChromeScriptRunner {
     )
 
     try {
-      const expression = `
-JSON.stringify((() => {
-  const selector = ${JSON.stringify(normalizedSelector)}
-  const deepQuery = (root) => {
-    const direct = root.querySelector?.(selector)
-    if (direct) return direct
-    for (const element of root.querySelectorAll?.('*') ?? []) {
-      if (!element.shadowRoot) continue
-      const nested = deepQuery(element.shadowRoot)
-      if (nested) return nested
-    }
-    return null
-  }
-  const element = deepQuery(document)
-  if (!(element instanceof HTMLElement)) return { found: false }
-  element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' })
-  const rect = element.getBoundingClientRect()
-  if (rect.width <= 0 || rect.height <= 0) return { found: false }
-  return {
-    found: true,
-    x: rect.left + rect.width / 2,
-    y: rect.top + rect.height / 2
-  }
-})())
-`.trim()
+      const expression = buildClickTargetExpression(normalizedSelector)
       const result = await client.send('Runtime.evaluate', {
         expression,
         returnByValue: true
@@ -331,3 +307,38 @@ JSON.stringify((() => {
     return value
   }
 }
+
+export const buildClickTargetExpression = (selector: string) => `
+JSON.stringify((() => {
+  const selector = ${JSON.stringify(selector)}
+  const deepQueryAll = (root, matches = []) => {
+    matches.push(...(root.querySelectorAll?.(selector) ?? []))
+    for (const element of root.querySelectorAll?.('*') ?? []) {
+      if (!element.shadowRoot) continue
+      deepQueryAll(element.shadowRoot, matches)
+    }
+    return matches
+  }
+  for (const element of deepQueryAll(document)) {
+    if (!(element instanceof HTMLElement)) continue
+    if (element.matches(':disabled') || element.getAttribute('aria-disabled') === 'true') continue
+    const style = getComputedStyle(element)
+    if (
+      style.display === 'none' ||
+      style.visibility === 'hidden' ||
+      style.visibility === 'collapse' ||
+      style.pointerEvents === 'none'
+    ) continue
+
+    element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' })
+    const rect = element.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) continue
+    const x = rect.left + rect.width / 2
+    const y = rect.top + rect.height / 2
+    const hit = document.elementFromPoint?.(x, y)
+    if (hit && hit !== element && !element.contains(hit)) continue
+    return { found: true, x, y }
+  }
+  return { found: false }
+})())
+`.trim()

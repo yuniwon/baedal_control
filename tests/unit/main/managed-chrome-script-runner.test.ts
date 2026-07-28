@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
+import { JSDOM } from 'jsdom'
 
-import { ManagedChromeScriptRunner } from '../../../src/main/services/managed-chrome-script-runner'
+import {
+  buildClickTargetExpression,
+  ManagedChromeScriptRunner
+} from '../../../src/main/services/managed-chrome-script-runner'
 
 class MockWebSocket {
   static instances: MockWebSocket[] = []
@@ -97,6 +101,42 @@ class HangingWebSocket {
 }
 
 describe('ManagedChromeScriptRunner', () => {
+  it('selects the visible unobstructed submit control when a hidden duplicate comes first', () => {
+    const dom = new JSDOM(
+      '<button id="loginButton" style="display:none">숨은 로그인</button>' +
+        '<button id="loginButton" type="submit">로그인</button>',
+      { runScripts: 'dangerously' }
+    )
+    const [hiddenButton, visibleButton] = Array.from(
+      dom.window.document.querySelectorAll<HTMLButtonElement>('#loginButton')
+    )
+    hiddenButton.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0, x: 0, y: 0 }) as DOMRect
+    visibleButton.getBoundingClientRect = () =>
+      ({
+        left: 120,
+        top: 80,
+        width: 100,
+        height: 40,
+        right: 220,
+        bottom: 120,
+        x: 120,
+        y: 80
+      }) as DOMRect
+    Object.defineProperty(dom.window.document, 'elementFromPoint', {
+      value: () => visibleButton
+    })
+    Object.defineProperty(dom.window.HTMLElement.prototype, 'scrollIntoView', {
+      value: vi.fn()
+    })
+
+    const result = JSON.parse(
+      dom.window.eval(buildClickTargetExpression('#loginButton')) as string
+    )
+
+    expect(result).toEqual({ found: true, x: 170, y: 100 })
+  })
+
   it('evaluates a script in the requested tab and parses the returned JSON payload', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
