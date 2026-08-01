@@ -37,4 +37,12 @@ describe('menu matcher', () => {
     expect(isSafeAutoLinkMatch('고구마피자', '달콤고구마피자')).toBe(false)
     expect(isSafeAutoLinkMatch('반반피자', '꾸버스반반피자')).toBe(false)
   })
+
+  it('matches only explicitly confirmed store aliases', () => {
+    expect(isSafeAutoLinkMatch('수제요거트소스', '요거트소스')).toBe(true)
+    expect(isSafeAutoLinkMatch('갈릭소스', '갈릭디핑')).toBe(true)
+    expect(isSafeAutoLinkMatch('일반피자 M＋M', '일반피자 미디엄 두판')).toBe(true)
+    expect(isSafeAutoLinkMatch('국산피클', '피클')).toBe(false)
+    expect(isSafeAutoLinkMatch('치즈가루', '파마산 치즈가루')).toBe(false)
+  })
 })

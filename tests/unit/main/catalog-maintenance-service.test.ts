@@ -49,6 +49,23 @@ describe('CatalogMaintenanceService', () => {
     expect(preview.safeMerges.some((candidate) => candidate.sourceMenuId === 'unique-y')).toBe(false)
   })
 
+  it('previews explicitly confirmed store aliases without enabling fuzzy merges', () => {
+    const { db, menus, mappings, platformMenus } = setup()
+    menus.upsert({ menuId: 'yogurt', baseName: '요거트소스', basePrice: 500, isDirty: 1, isManaged: 1 })
+    menus.upsert({ menuId: 'homemade-yogurt', baseName: '수제요거트소스', basePrice: 500, isDirty: 0, isManaged: 1 })
+    platformMenus.upsert({ platformCode: 'baemin', platformMenuId: 'b-yogurt', platformMenuName: '요거트소스', platformMenuCurrentPrice: 500, platformMenuStatus: '판매중' })
+    platformMenus.upsert({ platformCode: 'ddangyo', platformMenuId: 'd-yogurt', platformMenuName: '수제요거트소스', platformMenuCurrentPrice: 500, platformMenuStatus: '판매중' })
+    mappings.upsert({ mappingId: 'map-b-yogurt', menuId: 'yogurt', platformCode: 'baemin', platformMenuId: 'b-yogurt', platformMenuName: '요거트소스', platformMenuCurrentPrice: 500, matchedBy: 'auto', isConfirmed: 1 })
+    mappings.upsert({ mappingId: 'map-d-yogurt', menuId: 'homemade-yogurt', platformCode: 'ddangyo', platformMenuId: 'd-yogurt', platformMenuName: '수제요거트소스', platformMenuCurrentPrice: 500, matchedBy: 'auto', isConfirmed: 1 })
+
+    const preview = new CatalogMaintenanceService({ db }).preview('baemin')
+
+    expect(preview.safeMerges).toContainEqual(expect.objectContaining({
+      sourceMenuId: 'homemade-yogurt',
+      targetMenuId: 'yogurt'
+    }))
+  })
+
   it('backs up, merges mappings, cleans categories, refreshes the reference price, and rebuilds reviews atomically', () => {
     const { db, menus, mappings, platformMenus } = setup()
     const backupDatabase = vi.fn(() => 'backup.db')
