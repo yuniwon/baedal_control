@@ -161,6 +161,7 @@ describe('ReviewInboxPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /기준 플랫폼 밖 일반 메뉴 1개/ }))
     expect(screen.getByText('현재 연결된 플랫폼')).toBeTruthy()
     expect(screen.getByRole('button', { name: '이 메뉴와 합치기' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '이 플랫폼에 추가하지 않음' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '이 메뉴와 합치기' }))
 
     await waitFor(() => {
@@ -175,7 +176,7 @@ describe('ReviewInboxPanel', () => {
   it('offers one-time and remembered resolution scopes', async () => {
     render(<ReviewInboxPanel />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '이 플랫폼에는 판매하지 않음' }))
+    fireEvent.click(await screen.findByRole('button', { name: '이 플랫폼에 추가하지 않음' }))
 
     expect(screen.getByLabelText('앞으로 같은 경우에도 적용')).toBeTruthy()
     expect(screen.getByLabelText('결정 이유')).toBeTruthy()
@@ -185,7 +186,7 @@ describe('ReviewInboxPanel', () => {
     render(<ReviewInboxPanel />)
 
     fireEvent.click(await screen.findByLabelText('쿠팡이츠 일반 메뉴 누락 모두 선택'))
-    fireEvent.click(screen.getByRole('button', { name: '이 플랫폼에는 판매하지 않음' }))
+    fireEvent.click(screen.getByRole('button', { name: '이 플랫폼에 추가하지 않음' }))
     fireEvent.click(screen.getByRole('button', { name: '결정 저장' }))
 
     await waitFor(() => {

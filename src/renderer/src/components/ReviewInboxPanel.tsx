@@ -99,7 +99,7 @@ const buildReviewFlow = (item: CatalogReviewItem): ReviewFlow => {
       decisionValue: hasGeneralCandidate ? '이름 차이 연결 확인' : '일반 메뉴 추가 여부',
       detail: hasGeneralCandidate
         ? '이름이 다른 일반 메뉴 후보가 이미 있습니다. 새 메뉴를 만들기 전에 기존 일반 메뉴와 연결할지 확인합니다.'
-        : '현재는 추가 의사만 저장합니다. 실제 등록은 플랫폼 생성 기능이 연결된 뒤 실행됩니다.'
+        : '현재는 추가 여부만 저장합니다. 이 선택은 플랫폼 원본 메뉴를 삭제하지 않습니다. 실제 등록은 플랫폼 생성 기능이 연결된 뒤 실행됩니다.'
     }
   }
 
@@ -155,7 +155,7 @@ const buildReviewFlow = (item: CatalogReviewItem): ReviewFlow => {
       decisionValue: '별칭·전용 여부 확인',
       detail: candidateCount > 0
         ? '기준 플랫폼의 메뉴와 같은 상품인지, 별도 플랫폼 전용 메뉴인지 결정합니다.'
-        : '기준 플랫폼에는 없지만 다른 플랫폼에서 판매 중인 메뉴입니다.'
+        : '기준 플랫폼에는 없지만 다른 플랫폼에서 판매 중인 메뉴입니다. 이 화면의 결정은 원본 플랫폼 메뉴를 삭제하지 않습니다.'
     }
   }
 
@@ -715,12 +715,17 @@ export const ReviewInboxPanel = () => {
                               플랫폼 전용으로 유지
                             </button>
                           ) : null}
-                          <button type="button" className="secondary-button" disabled={!hasCompatibleRecommendations} onClick={() => beginDecision('exclude_platform')}>
-                            이 플랫폼에는 판매하지 않음
-                          </button>
+                          {selectedItem.kind !== 'canonical_platform_only' ? (
+                            <button type="button" className="secondary-button" disabled={!hasCompatibleRecommendations} onClick={() => beginDecision('exclude_platform')}>
+                              이 플랫폼에 추가하지 않음
+                            </button>
+                          ) : null}
                           <button type="button" className="secondary-button" disabled={!hasCompatibleRecommendations} onClick={() => beginDecision('defer')}>
                             나중에 확인
                           </button>
+                          <small className="review-action-note">
+                            이 결정은 검토 규칙만 저장하며, 플랫폼에 이미 있는 메뉴를 삭제하거나 숨기지 않습니다.
+                          </small>
                           <details>
                             <summary>근거 보기</summary>
                             <pre>{formatEvidence(selectedItem.evidenceJson)}</pre>
