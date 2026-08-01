@@ -474,7 +474,12 @@ export const ReviewInboxPanel = () => {
         reviewItemId: selectedItem.reviewItemId,
         targetCanonicalMenuId: candidate.canonicalMenuId
       })
-      setItems((current) => current.filter((item) => item.canonicalMenuId !== selectedItem.canonicalMenuId))
+      const refreshedItems = await appApi.catalogReviews?.listOpen?.()
+      if (refreshedItems) {
+        setItems(refreshedItems)
+      } else {
+        setItems((current) => current.filter((item) => item.canonicalMenuId !== selectedItem.canonicalMenuId))
+      }
       setSelectedReviewIds(new Set())
       setSelectedReviewId(null)
       setExpandedGroup(null)

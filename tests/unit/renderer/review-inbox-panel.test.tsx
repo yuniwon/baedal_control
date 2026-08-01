@@ -151,7 +151,9 @@ describe('ReviewInboxPanel', () => {
   })
 
   it('offers a merge action when a platform-only canonical menu has a reference candidate', async () => {
-    listOpen.mockResolvedValue([canonicalPlatformOnlyItem])
+    listOpen
+      .mockResolvedValueOnce([canonicalPlatformOnlyItem])
+      .mockResolvedValueOnce([])
 
     render(<ReviewInboxPanel />)
 
