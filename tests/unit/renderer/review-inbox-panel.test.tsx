@@ -39,6 +39,17 @@ const optionOnlyItem = {
   evidenceJson: JSON.stringify({ canonicalName: '국산피클', optionRole: 'paid_add_on' })
 }
 
+const generalAliasCandidateItem = {
+  ...missingItem(11),
+  reviewItemId: 'review-general-alias',
+  fingerprint: 'fingerprint-general-alias',
+  title: '국산피클 메뉴가 플랫폼에 연결되지 않았습니다',
+  evidenceJson: JSON.stringify({
+    canonicalName: '국산피클',
+    signals: { generalMenuCandidateCount: 1 }
+  })
+}
+
 describe('ReviewInboxPanel', () => {
   beforeEach(() => {
     listOpen.mockResolvedValue([missingItem(1), missingItem(2), missingItem(3)])
@@ -59,7 +70,7 @@ describe('ReviewInboxPanel', () => {
 
     expect(await screen.findByText('통합 메뉴')).toBeTruthy()
     expect(screen.getByText('대상 플랫폼')).toBeTruthy()
-    expect(screen.getByText('추가 여부 결정')).toBeTruthy()
+    expect(screen.getByText('일반 메뉴 추가 여부')).toBeTruthy()
     expect(screen.getByRole('button', { name: '추가 대상으로 표시' })).toBeTruthy()
   })
 
@@ -73,6 +84,16 @@ describe('ReviewInboxPanel', () => {
     expect(screen.getByText('쿠팡이츠 유료 옵션만 제공')).toBeTruthy()
     expect(screen.getByText('일반 메뉴 추가 여부')).toBeTruthy()
     expect(screen.getByRole('button', { name: '일반 메뉴 추가 대상으로 표시' })).toBeTruthy()
+  })
+
+  it('puts a differently named general-menu candidate in its own review lane', async () => {
+    listOpen.mockResolvedValue([generalAliasCandidateItem])
+
+    render(<ReviewInboxPanel />)
+
+    expect(await screen.findByText('쿠팡이츠 이름 차이 연결 후보 1개')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /쿠팡이츠 이름 차이 연결 후보 1개/ }))
+    expect(screen.getByText('이름 차이 연결 확인')).toBeTruthy()
   })
 
   it('offers one-time and remembered resolution scopes', async () => {

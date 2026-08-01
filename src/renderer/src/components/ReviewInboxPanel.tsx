@@ -42,6 +42,10 @@ const buildReviewFlow = (item: CatalogReviewItem): ReviewFlow => {
     ? evidence.canonicalName
     : item.title
   const platformName = item.platformCode ? getPlatformLabel(item.platformCode) : '대상 플랫폼'
+  const signals = evidence.signals && typeof evidence.signals === 'object' && !Array.isArray(evidence.signals)
+    ? evidence.signals as Record<string, unknown>
+    : {}
+  const hasGeneralCandidate = typeof signals.generalMenuCandidateCount === 'number' && signals.generalMenuCandidateCount > 0
 
   if (item.kind === 'missing_on_platform') {
     return {
@@ -49,8 +53,10 @@ const buildReviewFlow = (item: CatalogReviewItem): ReviewFlow => {
       sourceValue: canonicalName,
       targetLabel: '대상 플랫폼',
       targetValue: platformName,
-      decisionValue: '추가 여부 결정',
-      detail: '현재는 추가 의사만 저장합니다. 실제 등록은 플랫폼 생성 기능이 연결된 뒤 실행됩니다.'
+      decisionValue: hasGeneralCandidate ? '이름 차이 연결 확인' : '일반 메뉴 추가 여부',
+      detail: hasGeneralCandidate
+        ? '이름이 다른 일반 메뉴 후보가 이미 있습니다. 새 메뉴를 만들기 전에 기존 일반 메뉴와 연결할지 확인합니다.'
+        : '현재는 추가 의사만 저장합니다. 실제 등록은 플랫폼 생성 기능이 연결된 뒤 실행됩니다.'
     }
   }
 
@@ -97,10 +103,18 @@ const buildReviewFlow = (item: CatalogReviewItem): ReviewFlow => {
 const buildReviewGroups = (items: CatalogReviewItem[]): ReviewGroup[] => {
   const grouped = new Map<string, CatalogReviewItem[]>()
   for (const item of items) {
+    const evidence = readEvidence(item.evidenceJson)
+    const signals = evidence.signals && typeof evidence.signals === 'object' && !Array.isArray(evidence.signals)
+      ? evidence.signals as Record<string, unknown>
+      : {}
+    const hasGeneralCandidate = item.kind === 'missing_on_platform' &&
+      typeof signals.generalMenuCandidateCount === 'number' &&
+      signals.generalMenuCandidateCount > 0
     const key = [
       item.kind,
       item.platformCode ?? 'unknown',
-      item.recommendation ?? 'no_recommendation'
+      item.recommendation ?? 'no_recommendation',
+      hasGeneralCandidate ? 'general_candidate' : 'no_general_candidate'
     ].join(':')
     grouped.set(key, [...(grouped.get(key) ?? []), item])
   }
@@ -108,11 +122,22 @@ const buildReviewGroups = (items: CatalogReviewItem[]): ReviewGroup[] => {
   return [...grouped.entries()].map(([key, groupItems]) => {
     const first = groupItems[0]
     if (first.kind === 'missing_on_platform') {
+      const firstEvidence = readEvidence(first.evidenceJson)
+      const firstSignals = firstEvidence.signals && typeof firstEvidence.signals === 'object' && !Array.isArray(firstEvidence.signals)
+        ? firstEvidence.signals as Record<string, unknown>
+        : {}
+      const hasGeneralCandidate = typeof firstSignals.generalMenuCandidateCount === 'number' && firstSignals.generalMenuCandidateCount > 0
       return {
         key,
-        label: `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 누락 메뉴 ${groupItems.length}개`,
-        selectionLabel: `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 누락 메뉴`,
-        explanation: '통합 메뉴에는 있지만 해당 플랫폼에 연결되지 않은 메뉴입니다.',
+        label: hasGeneralCandidate
+          ? `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 이름 차이 연결 후보 ${groupItems.length}개`
+          : `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 누락 메뉴 ${groupItems.length}개`,
+        selectionLabel: hasGeneralCandidate
+          ? `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 이름 차이 연결 후보`
+          : `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 누락 메뉴`,
+        explanation: hasGeneralCandidate
+          ? '일반 메뉴 후보는 있지만 다른 통합 메뉴에 연결되어 있어 연결 결정을 확인해야 합니다.'
+          : '통합 메뉴에는 있지만 해당 플랫폼에 연결되지 않은 메뉴입니다.',
         items: groupItems
       }
     }
