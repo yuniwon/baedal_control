@@ -54,6 +54,25 @@ const buildReviewFlow = (item: CatalogReviewItem): ReviewFlow => {
     }
   }
 
+  if (item.kind === 'option_only_on_platform') {
+    const optionRole = evidence.optionRole === 'paid_add_on'
+      ? '유료 옵션'
+      : evidence.optionRole === 'bundle_selection'
+        ? '세트·반반 선택 옵션'
+      : evidence.optionRole === 'included_selection'
+        ? '세트·반반 포함 옵션'
+        : '유료·포함 옵션'
+
+    return {
+      sourceLabel: '통합 메뉴',
+      sourceValue: canonicalName,
+      targetLabel: '현재 플랫폼 상태',
+      targetValue: `${platformName} ${optionRole}만 제공`,
+      decisionValue: '일반 메뉴 추가 여부',
+      detail: '같은 이름 또는 유사한 항목이 옵션으로만 존재합니다. 일반 메뉴와 옵션은 별도 판매 단위로 판단합니다.'
+    }
+  }
+
   if (item.kind === 'price_outlier') {
     return {
       sourceLabel: '통합 기준',
@@ -97,6 +116,15 @@ const buildReviewGroups = (items: CatalogReviewItem[]): ReviewGroup[] => {
         items: groupItems
       }
     }
+    if (first.kind === 'option_only_on_platform') {
+      return {
+        key,
+        label: `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 일반 메뉴 누락·옵션만 제공 ${groupItems.length}개`,
+        selectionLabel: `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 옵션만 제공`,
+        explanation: '일반 메뉴는 없고 옵션으로만 제공되는 항목입니다. 두 판매 단위는 서로 대체하지 않습니다.',
+        items: groupItems
+      }
+    }
     if (first.kind === 'price_outlier') {
       return {
         key,
@@ -125,7 +153,7 @@ const buildReviewGroups = (items: CatalogReviewItem[]): ReviewGroup[] => {
   }).sort((left, right) => {
     const priority = (group: ReviewGroup) => {
       const kind = group.items[0]?.kind
-      return kind === 'missing_on_platform' ? 0 : kind === 'price_outlier' ? 1 : kind === 'duplicate_option_group' ? 2 : 3
+      return kind === 'missing_on_platform' ? 0 : kind === 'option_only_on_platform' ? 1 : kind === 'price_outlier' ? 2 : kind === 'duplicate_option_group' ? 3 : 4
     }
     return priority(left) - priority(right) || left.label.localeCompare(right.label, 'ko')
   })
@@ -358,7 +386,7 @@ export const ReviewInboxPanel = () => {
                           ) : null}
                           {selectedItem.recommendation === 'add_to_platform' ? (
                             <button type="button" className="primary-button" disabled={!hasCompatibleRecommendations} onClick={() => beginDecision('apply_recommendation')}>
-                              추가 대상으로 표시
+                              {selectedItem.kind === 'option_only_on_platform' ? '일반 메뉴 추가 대상으로 표시' : '추가 대상으로 표시'}
                             </button>
                           ) : null}
                           <button type="button" className="secondary-button" disabled={!hasCompatibleRecommendations} onClick={() => beginDecision('exclude_platform')}>

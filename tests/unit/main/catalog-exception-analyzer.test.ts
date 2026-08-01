@@ -154,6 +154,121 @@ describe('analyzeCatalogExceptions', () => {
     })
   })
 
+  it('separates a general-menu gap from a paid option-only presence', () => {
+    const items = analyze({
+      menus: [menu({ menuId: 'pickle', baseName: '국산피클', basePrice: 500 })],
+      platformMenus: [source({ platformMenuId: 'other', platformMenuName: '다른 메뉴' })],
+      mappings: [],
+      logicalOptionGroups: [{
+        logicalGroupKey: 'coupangeats:sauce',
+        platformCode: 'coupangeats',
+        displayName: '소스 추가',
+        minOrderQuantity: 0,
+        maxOrderQuantity: 5,
+        optionCount: 1,
+        connectedMenuCount: 1,
+        sourceGroupCount: 1,
+        sampleOptionNames: ['피클'],
+        logicalOptions: [{ optionName: '피클', optionPrice: 500 }],
+        status: 'single',
+        sourceGroups: [{
+          optionGroupId: 'sauce-1',
+          optionGroupName: '소스 추가',
+          presenceStatus: 'present',
+          linkedMenuCount: 1,
+          linkedMenuNames: ['치즈피자'],
+          options: [{ optionName: '피클', optionPrice: 500 }]
+        }]
+      }]
+    })
+
+    const item = items.find((candidate) => candidate.kind === 'option_only_on_platform')
+
+    expect(item).toMatchObject({
+      canonicalMenuId: 'pickle',
+      platformCode: 'coupangeats',
+      recommendation: 'add_to_platform'
+    })
+    expect(items.some((candidate) =>
+      candidate.kind === 'missing_on_platform' && candidate.canonicalMenuId === 'pickle'
+    )).toBe(false)
+    expect(JSON.parse(item?.evidenceJson ?? '{}')).toMatchObject({
+      surface: 'option',
+      optionRole: 'paid_add_on',
+      optionMatches: [{ optionName: '피클', optionPrice: 500 }]
+    })
+  })
+
+  it('keeps an included set option distinct from a paid general menu', () => {
+    const items = analyze({
+      menus: [menu({ menuId: 'spaghetti', baseName: '스파게티', basePrice: 7000 })],
+      platformMenus: [source({ platformMenuId: 'other', platformMenuName: '다른 메뉴' })],
+      mappings: [],
+      logicalOptionGroups: [{
+        logicalGroupKey: 'baemin:set-side',
+        platformCode: 'baemin',
+        displayName: '사이드메뉴 선택',
+        minOrderQuantity: 1,
+        maxOrderQuantity: 1,
+        optionCount: 1,
+        connectedMenuCount: 1,
+        sourceGroupCount: 1,
+        sampleOptionNames: ['스파게티'],
+        logicalOptions: [{ optionName: '스파게티', optionPrice: 0 }],
+        status: 'single',
+        sourceGroups: [{
+          optionGroupId: 'set-side-1',
+          optionGroupName: '사이드메뉴 선택',
+          presenceStatus: 'present',
+          linkedMenuCount: 1,
+          linkedMenuNames: ['미디움 피자 세트'],
+          options: [{ optionName: '스파게티', optionPrice: 0 }]
+        }]
+      }]
+    })
+
+    const item = items.find((candidate) => candidate.kind === 'option_only_on_platform')
+
+    expect(item).toBeTruthy()
+    expect(JSON.parse(item?.evidenceJson ?? '{}')).toMatchObject({
+      optionRole: 'bundle_selection'
+    })
+  })
+
+  it('does not equate a generic included option with a differently named general menu', () => {
+    const items = analyze({
+      menus: [menu({ menuId: 'cheese-spaghetti', baseName: '치즈오븐스파게티', basePrice: 7000 })],
+      platformMenus: [source({ platformMenuId: 'other', platformMenuName: '다른 메뉴' })],
+      mappings: [],
+      logicalOptionGroups: [{
+        logicalGroupKey: 'baemin:set-side',
+        platformCode: 'baemin',
+        displayName: '사이드메뉴 선택',
+        optionCount: 1,
+        connectedMenuCount: 1,
+        sourceGroupCount: 1,
+        sampleOptionNames: ['스파게티'],
+        logicalOptions: [{ optionName: '스파게티', optionPrice: 0 }],
+        status: 'single',
+        sourceGroups: [{
+          optionGroupId: 'set-side-1',
+          optionGroupName: '사이드메뉴 선택',
+          presenceStatus: 'present',
+          linkedMenuCount: 1,
+          linkedMenuNames: ['미디움 피자 세트'],
+          options: [{ optionName: '스파게티', optionPrice: 0 }]
+        }]
+      }]
+    })
+
+    expect(items.some((candidate) =>
+      candidate.kind === 'missing_on_platform' && candidate.canonicalMenuId === 'cheese-spaghetti'
+    )).toBe(true)
+    expect(items.some((candidate) =>
+      candidate.kind === 'option_only_on_platform' && candidate.canonicalMenuId === 'cheese-spaghetti'
+    )).toBe(false)
+  })
+
   it('turns identical option shapes with fragmented links into a merge candidate', () => {
     const logicalOptionGroups: LogicalOptionGroupRecord[] = [
       {

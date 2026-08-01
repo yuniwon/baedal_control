@@ -45,6 +45,7 @@ import { buildSyncPreview } from '../services/sync-planner'
 const platformCodeSchema = z.enum(PLATFORM_CODES)
 const catalogReviewKindSchema = z.enum([
   'missing_on_platform',
+  'option_only_on_platform',
   'unmatched_platform_menu',
   'price_outlier',
   'price_policy_pattern',

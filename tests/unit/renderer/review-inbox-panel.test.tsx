@@ -29,6 +29,16 @@ const missingItem = (index: number) => ({
   intentRuleId: null
 })
 
+const optionOnlyItem = {
+  ...missingItem(10),
+  reviewItemId: 'review-option-only',
+  fingerprint: 'fingerprint-option-only',
+  kind: 'option_only_on_platform' as const,
+  title: '국산피클 메뉴가 일반 메뉴가 아닌 옵션으로만 있습니다',
+  explanation: '해당 플랫폼에서는 유료 옵션으로 제공되며, 별도 사이드·소스 메뉴는 확인되지 않았습니다.',
+  evidenceJson: JSON.stringify({ canonicalName: '국산피클', optionRole: 'paid_add_on' })
+}
+
 describe('ReviewInboxPanel', () => {
   beforeEach(() => {
     listOpen.mockResolvedValue([missingItem(1), missingItem(2), missingItem(3)])
@@ -51,6 +61,18 @@ describe('ReviewInboxPanel', () => {
     expect(screen.getByText('대상 플랫폼')).toBeTruthy()
     expect(screen.getByText('추가 여부 결정')).toBeTruthy()
     expect(screen.getByRole('button', { name: '추가 대상으로 표시' })).toBeTruthy()
+  })
+
+  it('labels option-only presence separately from a general-menu gap', async () => {
+    listOpen.mockResolvedValue([optionOnlyItem])
+
+    render(<ReviewInboxPanel />)
+
+    expect(await screen.findByText('쿠팡이츠 일반 메뉴 누락·옵션만 제공 1개')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /쿠팡이츠 일반 메뉴 누락·옵션만 제공 1개/ }))
+    expect(screen.getByText('쿠팡이츠 유료 옵션만 제공')).toBeTruthy()
+    expect(screen.getByText('일반 메뉴 추가 여부')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '일반 메뉴 추가 대상으로 표시' })).toBeTruthy()
   })
 
   it('offers one-time and remembered resolution scopes', async () => {

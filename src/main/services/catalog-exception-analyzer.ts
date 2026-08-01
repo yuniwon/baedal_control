@@ -16,6 +16,84 @@ import {
 } from '../../shared/catalog-normalization'
 import { isSafeAutoLinkMatch, scoreMenuMatch } from './menu-matcher'
 
+type OptionPresenceRole =
+  | 'paid_add_on'
+  | 'bundle_selection'
+  | 'included_selection'
+  | 'mixed_selection'
+
+type OptionPresenceMatch = {
+  group: LogicalOptionGroupRecord
+  optionName: string
+  optionPrice: number
+  role: OptionPresenceRole
+}
+
+const OPTION_NAME_ALIASES: Record<string, string> = {
+  갈릭디핑: '갈릭소스',
+  국산피클: '피클',
+  '파마산 치즈가루': '치즈가루',
+  요거트소스: '요거트'
+}
+
+const normalizeOptionName = (value: string) =>
+  value
+    .normalize('NFKC')
+    .toLocaleLowerCase('ko-KR')
+    .replace(/\s+/g, '')
+    .replace(/\d+(?:개|조각)\s*$/u, '')
+
+const isEquivalentOptionName = (canonicalName: string, optionName: string) => {
+  if (isSafeAutoLinkMatch(canonicalName, optionName)) {
+    return true
+  }
+
+  const canonicalKey = normalizeOptionName(canonicalName)
+  const optionKey = normalizeOptionName(optionName)
+  return OPTION_NAME_ALIASES[canonicalName] === optionName ||
+    OPTION_NAME_ALIASES[canonicalName] === optionKey ||
+    canonicalKey === optionKey
+}
+
+const resolveOptionPresenceRole = (
+  group: LogicalOptionGroupRecord,
+  optionPrice: number
+): Exclude<OptionPresenceRole, 'mixed_selection'> => {
+  if (/(?:세트|반반|피자|메뉴)\s*선택/iu.test(group.displayName)) {
+    return 'bundle_selection'
+  }
+
+  return optionPrice > 0 ? 'paid_add_on' : 'included_selection'
+}
+
+const findOptionPresenceMatches = (
+  canonicalName: string,
+  platformCode: PlatformCode,
+  logicalOptionGroups: LogicalOptionGroupRecord[]
+): OptionPresenceMatch[] => logicalOptionGroups
+  .filter(
+    (group) =>
+      group.platformCode === platformCode &&
+      group.status !== 'absent_confirmed' &&
+      group.status !== 'missing_suspected'
+  )
+  .flatMap((group) => {
+    return group.logicalOptions
+      .filter((option) => isEquivalentOptionName(canonicalName, option.optionName))
+      .map((option) => ({
+        group,
+        optionName: option.optionName,
+        optionPrice: option.optionPrice,
+        role: resolveOptionPresenceRole(group, option.optionPrice)
+      }))
+  })
+  .sort(
+    (left, right) =>
+      left.group.logicalGroupKey.localeCompare(right.group.logicalGroupKey) ||
+      left.optionName.localeCompare(right.optionName, 'ko-KR') ||
+      left.optionPrice - right.optionPrice
+  )
+
 export interface CatalogExceptionAnalysisInput {
   workspaceId: string
   referencePlatformCode?: PlatformCode | null
@@ -139,7 +217,12 @@ const analyzeMissingAndUnmatched = (
       (menu.isManaged ?? 1) === 1 &&
       (!referenceMenuIds || referenceMenuIds.has(menu.menuId))
   )
-  const platforms = [...new Set(input.platformMenus.map((menu) => menu.platformCode))].sort()
+  const platforms = [
+    ...new Set([
+      ...input.platformMenus.map((menu) => menu.platformCode),
+      ...input.logicalOptionGroups.map((group) => group.platformCode)
+    ])
+  ].sort()
   const activeMappingKeys = new Set(
     input.mappings
       .filter((mapping) => mapping.mappingStatus !== 'source_absent')
@@ -166,6 +249,57 @@ const analyzeMissingAndUnmatched = (
           isSafeAutoLinkMatch(canonicalMenu.baseName, source.platformMenuName)
       )
       if (safeCandidates.length === 1) {
+        continue
+      }
+
+      const optionMatches = findOptionPresenceMatches(
+        canonicalMenu.baseName,
+        platformCode,
+        input.logicalOptionGroups
+      )
+      if (optionMatches.length > 0) {
+        const optionRoles = [...new Set(optionMatches.map((match) => match.role))]
+        const optionRole = optionRoles.length === 1 ? optionRoles[0] : 'mixed_selection'
+        const firstMatch = optionMatches[0]
+
+        items.push(createReviewItem({
+          workspaceId: input.workspaceId,
+          kind: 'option_only_on_platform',
+          confidence: 1,
+          title: `${canonicalMenu.baseName} 메뉴가 일반 메뉴가 아닌 옵션으로만 있습니다`,
+          explanation:
+            optionRole === 'paid_add_on'
+              ? '해당 플랫폼에서는 유료 옵션으로 제공되며, 별도 사이드·소스 메뉴는 확인되지 않았습니다.'
+              : optionRole === 'bundle_selection'
+                ? '해당 플랫폼에서는 세트·반반 메뉴의 선택 옵션으로만 제공되며, 별도 메뉴는 확인되지 않았습니다.'
+              : optionRole === 'included_selection'
+                ? '해당 플랫폼에서는 세트·반반 메뉴의 포함 옵션으로만 제공되며, 별도 메뉴는 확인되지 않았습니다.'
+                : '해당 플랫폼에서 유료 옵션과 포함 옵션이 함께 확인되며, 별도 메뉴는 확인되지 않았습니다.',
+          recommendation: 'add_to_platform',
+          canonicalMenuId: canonicalMenu.menuId,
+          platformCode,
+          sourceEntityId: firstMatch.group.logicalGroupKey,
+          evidence: {
+            canonicalMenuId: canonicalMenu.menuId,
+            canonicalName: canonicalMenu.baseName,
+            platformCode,
+            fieldKey: 'presence',
+            surface: 'option',
+            optionRole,
+            signals: {
+              confirmedGeneralMenuMissing: true,
+              optionOnlyPresence: true,
+              optionMatchCount: optionMatches.length
+            },
+            optionMatches: optionMatches.map((match) => ({
+              optionGroupKey: match.group.logicalGroupKey,
+              optionGroupName: match.group.displayName,
+              optionName: match.optionName,
+              optionPrice: match.optionPrice,
+              optionRole: match.role
+            }))
+          }
+        }))
         continue
       }
 

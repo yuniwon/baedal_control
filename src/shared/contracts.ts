@@ -38,6 +38,7 @@ export type CatalogReviewRecommendation =
   | 'manual_review'
 export type CatalogReviewKind =
   | 'missing_on_platform'
+  | 'option_only_on_platform'
   | 'unmatched_platform_menu'
   | 'price_outlier'
   | 'price_policy_pattern'
