@@ -44,6 +44,15 @@ describe('ReviewInboxPanel', () => {
     expect(screen.queryByText('raw-source-1')).toBeNull()
   })
 
+  it('shows the decision path before exposing the primary action', async () => {
+    render(<ReviewInboxPanel />)
+
+    expect(await screen.findByText('통합 메뉴')).toBeTruthy()
+    expect(screen.getByText('대상 플랫폼')).toBeTruthy()
+    expect(screen.getByText('추가 여부 결정')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '추가 대상으로 표시' })).toBeTruthy()
+  })
+
   it('offers one-time and remembered resolution scopes', async () => {
     render(<ReviewInboxPanel />)
 

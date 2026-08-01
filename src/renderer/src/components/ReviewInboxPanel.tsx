@@ -16,6 +16,65 @@ type ReviewGroup = {
   items: CatalogReviewItem[]
 }
 
+type ReviewFlow = {
+  sourceLabel: string
+  sourceValue: string
+  targetLabel: string
+  targetValue: string
+  decisionValue: string
+  detail: string
+}
+
+const readEvidence = (evidenceJson: string): Record<string, unknown> => {
+  try {
+    const evidence = JSON.parse(evidenceJson) as unknown
+    return evidence && typeof evidence === 'object' && !Array.isArray(evidence)
+      ? evidence as Record<string, unknown>
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+const buildReviewFlow = (item: CatalogReviewItem): ReviewFlow => {
+  const evidence = readEvidence(item.evidenceJson)
+  const canonicalName = typeof evidence.canonicalName === 'string'
+    ? evidence.canonicalName
+    : item.title
+  const platformName = item.platformCode ? getPlatformLabel(item.platformCode) : '대상 플랫폼'
+
+  if (item.kind === 'missing_on_platform') {
+    return {
+      sourceLabel: '통합 메뉴',
+      sourceValue: canonicalName,
+      targetLabel: '대상 플랫폼',
+      targetValue: platformName,
+      decisionValue: '추가 여부 결정',
+      detail: '현재는 추가 의사만 저장합니다. 실제 등록은 플랫폼 생성 기능이 연결된 뒤 실행됩니다.'
+    }
+  }
+
+  if (item.kind === 'price_outlier') {
+    return {
+      sourceLabel: '통합 기준',
+      sourceValue: canonicalName,
+      targetLabel: '차이가 난 곳',
+      targetValue: platformName,
+      decisionValue: '가격 기준 결정',
+      detail: '기준 가격을 적용할지 플랫폼별 가격을 유지할지 결정합니다.'
+    }
+  }
+
+  return {
+    sourceLabel: '확인할 항목',
+    sourceValue: canonicalName,
+    targetLabel: '영향 범위',
+    targetValue: platformName,
+    decisionValue: '처리 방법 결정',
+    detail: item.explanation
+  }
+}
+
 const buildReviewGroups = (items: CatalogReviewItem[]): ReviewGroup[] => {
   const grouped = new Map<string, CatalogReviewItem[]>()
   for (const item of items) {
@@ -63,6 +122,12 @@ const buildReviewGroups = (items: CatalogReviewItem[]): ReviewGroup[] => {
       explanation: first.explanation,
       items: groupItems
     }
+  }).sort((left, right) => {
+    const priority = (group: ReviewGroup) => {
+      const kind = group.items[0]?.kind
+      return kind === 'missing_on_platform' ? 0 : kind === 'price_outlier' ? 1 : kind === 'duplicate_option_group' ? 2 : 3
+    }
+    return priority(left) - priority(right) || left.label.localeCompare(right.label, 'ko')
   })
 }
 
@@ -123,6 +188,7 @@ export const ReviewInboxPanel = () => {
   }, [groups, expandedGroup])
 
   const selectedItem = items.find((item) => item.reviewItemId === selectedReviewId) ?? null
+  const selectedFlow = selectedItem ? buildReviewFlow(selectedItem) : null
   const selectedResolutionItems = items.filter((item) => selectedReviewIds.has(item.reviewItemId))
   const resolutionTargets = selectedResolutionItems.length > 0
     ? selectedResolutionItems
@@ -201,7 +267,7 @@ export const ReviewInboxPanel = () => {
           {groups.map((group) => {
             const isExpanded = expandedGroup === group.key
             return (
-              <section className="review-group" key={group.key}>
+              <section className={`review-group${isExpanded ? ' is-active' : ''}`} key={group.key}>
                 <button
                   type="button"
                   className="review-group-toggle"
@@ -243,7 +309,7 @@ export const ReviewInboxPanel = () => {
                     </label>
                     <div className="review-item-list" role="radiogroup" aria-label={`${group.label} 항목`}>
                       {group.items.map((item) => (
-                        <label className="review-item-row" key={item.reviewItemId}>
+                        <label className={`review-item-row${selectedReviewId === item.reviewItemId ? ' is-selected' : ''}`} key={item.reviewItemId}>
                           <input
                             type="radio"
                             name="selected-review"
@@ -264,13 +330,35 @@ export const ReviewInboxPanel = () => {
 
                     {selectedItem && group.items.some((item) => item.reviewItemId === selectedItem.reviewItemId) ? (
                       <div className="review-decision-area">
+                        {selectedFlow ? (
+                          <div className="review-flow-card" aria-label="검토 진행 순서">
+                            <span className="review-flow-kicker">지금 결정할 항목</span>
+                            <div className="review-flow-route">
+                              <div className="review-flow-node">
+                                <small>{selectedFlow.sourceLabel}</small>
+                                <strong>{selectedFlow.sourceValue}</strong>
+                              </div>
+                              <span className="review-flow-arrow" aria-hidden="true">→</span>
+                              <div className="review-flow-node">
+                                <small>{selectedFlow.targetLabel}</small>
+                                <strong>{selectedFlow.targetValue}</strong>
+                              </div>
+                              <span className="review-flow-arrow" aria-hidden="true">→</span>
+                              <div className="review-flow-node review-flow-node-next">
+                                <small>다음 단계</small>
+                                <strong>{selectedFlow.decisionValue}</strong>
+                              </div>
+                            </div>
+                            <p>{selectedFlow.detail}</p>
+                          </div>
+                        ) : null}
                         <div className="review-decision-actions">
                           {selectedResolutionItems.length > 1 ? (
                             <strong className="review-bulk-selection">{selectedResolutionItems.length}개에 함께 적용</strong>
                           ) : null}
                           {selectedItem.recommendation === 'add_to_platform' ? (
                             <button type="button" className="primary-button" disabled={!hasCompatibleRecommendations} onClick={() => beginDecision('apply_recommendation')}>
-                              플랫폼에 추가
+                              추가 대상으로 표시
                             </button>
                           ) : null}
                           <button type="button" className="secondary-button" disabled={!hasCompatibleRecommendations} onClick={() => beginDecision('exclude_platform')}>
