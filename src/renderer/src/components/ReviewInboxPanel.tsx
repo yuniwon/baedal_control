@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import type {
   CatalogIntentRule,
+  CatalogReviewLinkInput,
   CatalogReviewItem,
   CatalogReviewResolutionInput
 } from '../../../shared/contracts'
@@ -23,6 +24,25 @@ type ReviewFlow = {
   targetValue: string
   decisionValue: string
   detail: string
+}
+
+type GeneralCandidateEvidence = {
+  platformMenuId: string
+  platformMenuName: string
+  platformMenuCurrentPrice?: number | null
+  platformMenuGroupName?: string | null
+  presenceStatus?: string | null
+}
+
+type OptionMatchEvidence = {
+  optionGroupKey?: string
+  optionGroupName?: string
+  optionName?: string
+  optionPrice?: number | null
+  optionRole?: string
+  minOrderQuantity?: number | null
+  maxOrderQuantity?: number | null
+  linkedMenuNames?: string[]
 }
 
 const readEvidence = (evidenceJson: string): Record<string, unknown> => {
@@ -67,6 +87,8 @@ const buildReviewFlow = (item: CatalogReviewItem): ReviewFlow => {
         ? '세트·반반 선택 옵션'
       : evidence.optionRole === 'included_selection'
         ? '세트·반반 포함 옵션'
+      : evidence.optionRole === 'free_optional'
+        ? '무료 선택 옵션'
         : '유료·포함 옵션'
 
     return {
@@ -79,6 +101,41 @@ const buildReviewFlow = (item: CatalogReviewItem): ReviewFlow => {
     }
   }
 
+  if (item.kind === 'option_candidate_on_platform') {
+    return {
+      sourceLabel: '통합 메뉴',
+      sourceValue: canonicalName,
+      targetLabel: '유사 옵션 후보',
+      targetValue: `${platformName} 옵션`,
+      decisionValue: '옵션과 일반 메뉴 관계 확인',
+      detail: '이름만 비슷한 후보입니다. 용량·브랜드·판매 단위가 다를 수 있으므로 자동 연결하지 않습니다.'
+    }
+  }
+
+  if (item.kind === 'canonical_platform_only') {
+    const candidateCount = typeof signals.canonicalCandidateCount === 'number'
+      ? signals.canonicalCandidateCount
+      : 0
+    const platformMappings = Array.isArray(evidence.platformMappings)
+      ? evidence.platformMappings.filter((mapping): mapping is Record<string, unknown> => Boolean(mapping && typeof mapping === 'object' && !Array.isArray(mapping)))
+      : []
+    const platformLabels = [...new Set(platformMappings
+      .map((mapping) => typeof mapping.platformCode === 'string' ? getPlatformLabel(mapping.platformCode as Parameters<typeof getPlatformLabel>[0]) : null)
+      .filter((label): label is string => Boolean(label)))]
+    return {
+      sourceLabel: '통합 메뉴',
+      sourceValue: canonicalName,
+      targetLabel: platformLabels.length > 0 ? '현재 연결된 플랫폼' : '기준 플랫폼 밖 연결',
+      targetValue: platformLabels.length > 0
+        ? platformLabels.join(' · ')
+        : candidateCount > 0 ? `기존 메뉴 후보 ${candidateCount}개` : '플랫폼 전용 메뉴',
+      decisionValue: '별칭·전용 여부 확인',
+      detail: candidateCount > 0
+        ? '기준 플랫폼의 메뉴와 같은 상품인지, 별도 플랫폼 전용 메뉴인지 결정합니다.'
+        : '기준 플랫폼에는 없지만 다른 플랫폼에서 판매 중인 메뉴입니다.'
+    }
+  }
+
   if (item.kind === 'price_outlier') {
     return {
       sourceLabel: '통합 기준',
@@ -87,6 +144,17 @@ const buildReviewFlow = (item: CatalogReviewItem): ReviewFlow => {
       targetValue: platformName,
       decisionValue: '가격 기준 결정',
       detail: '기준 가격을 적용할지 플랫폼별 가격을 유지할지 결정합니다.'
+    }
+  }
+
+  if (item.kind === 'option_price_outlier') {
+    return {
+      sourceLabel: '옵션 구성',
+      sourceValue: canonicalName,
+      targetLabel: '가격이 다른 곳',
+      targetValue: platformName,
+      decisionValue: '옵션 가격 기준 결정',
+      detail: '같은 플랫폼·같은 메뉴에 연결된 옵션 가격이 다릅니다. 사이즈나 판매 전략 차이인지 확인합니다.'
     }
   }
 
@@ -150,12 +218,39 @@ const buildReviewGroups = (items: CatalogReviewItem[]): ReviewGroup[] => {
         items: groupItems
       }
     }
+    if (first.kind === 'option_candidate_on_platform') {
+      return {
+        key,
+        label: `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 옵션 유사 후보 ${groupItems.length}개`,
+        selectionLabel: `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 옵션 유사 후보`,
+        explanation: '이름이 비슷한 옵션 후보입니다. 일반 메뉴와 같은 판매 단위인지 직접 확인합니다.',
+        items: groupItems
+      }
+    }
+    if (first.kind === 'canonical_platform_only') {
+      return {
+        key,
+        label: `기준 플랫폼 밖 통합 메뉴 ${groupItems.length}개`,
+        selectionLabel: '기준 플랫폼 밖 통합 메뉴',
+        explanation: '기준 플랫폼에는 없지만 다른 플랫폼에만 연결된 통합 메뉴입니다.',
+        items: groupItems
+      }
+    }
     if (first.kind === 'price_outlier') {
       return {
         key,
         label: `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼별'} 가격 차이 ${groupItems.length}개`,
         selectionLabel: `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼별'} 가격 차이`,
         explanation: '같은 메뉴의 가격이 플랫폼별로 다릅니다.',
+        items: groupItems
+      }
+    }
+    if (first.kind === 'option_price_outlier') {
+      return {
+        key,
+        label: `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 옵션 가격 차이 ${groupItems.length}개`,
+        selectionLabel: `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 옵션 가격 차이`,
+        explanation: '같은 메뉴에 연결된 동일 옵션의 가격이 서로 다릅니다.',
         items: groupItems
       }
     }
@@ -178,7 +273,7 @@ const buildReviewGroups = (items: CatalogReviewItem[]): ReviewGroup[] => {
   }).sort((left, right) => {
     const priority = (group: ReviewGroup) => {
       const kind = group.items[0]?.kind
-      return kind === 'missing_on_platform' ? 0 : kind === 'option_only_on_platform' ? 1 : kind === 'price_outlier' ? 2 : kind === 'duplicate_option_group' ? 3 : 4
+      return kind === 'canonical_platform_only' ? 0 : kind === 'missing_on_platform' ? 1 : kind === 'option_only_on_platform' ? 2 : kind === 'option_candidate_on_platform' ? 3 : kind === 'price_outlier' ? 4 : kind === 'option_price_outlier' ? 5 : kind === 'duplicate_option_group' ? 6 : 7
     }
     return priority(left) - priority(right) || left.label.localeCompare(right.label, 'ko')
   })
@@ -203,6 +298,7 @@ export const ReviewInboxPanel = () => {
   const [scope, setScope] = useState<CatalogIntentRule['scope']>('entity')
   const [reason, setReason] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+  const [isLinking, setIsLinking] = useState(false)
 
   useEffect(() => {
     const listOpen = appApi.catalogReviews?.listOpen
@@ -242,6 +338,23 @@ export const ReviewInboxPanel = () => {
 
   const selectedItem = items.find((item) => item.reviewItemId === selectedReviewId) ?? null
   const selectedFlow = selectedItem ? buildReviewFlow(selectedItem) : null
+  const selectedEvidence = selectedItem ? readEvidence(selectedItem.evidenceJson) : {}
+  const generalCandidates = Array.isArray(selectedEvidence.generalCandidates)
+    ? selectedEvidence.generalCandidates.filter((candidate): candidate is GeneralCandidateEvidence => {
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return false
+      const value = candidate as Record<string, unknown>
+      return typeof value.platformMenuId === 'string' && typeof value.platformMenuName === 'string'
+    })
+    : []
+  const optionMatches = Array.isArray(selectedEvidence.optionMatches)
+    ? selectedEvidence.optionMatches.filter((match): match is OptionMatchEvidence => Boolean(match && typeof match === 'object' && !Array.isArray(match)))
+    : []
+  const platformMappings = Array.isArray(selectedEvidence.platformMappings)
+    ? selectedEvidence.platformMappings.filter((mapping): mapping is Record<string, unknown> => Boolean(mapping && typeof mapping === 'object' && !Array.isArray(mapping)))
+    : []
+  const canonicalCandidates = Array.isArray(selectedEvidence.canonicalCandidates)
+    ? selectedEvidence.canonicalCandidates.filter((candidate): candidate is Record<string, unknown> => Boolean(candidate && typeof candidate === 'object' && !Array.isArray(candidate)))
+    : []
   const selectedResolutionItems = items.filter((item) => selectedReviewIds.has(item.reviewItemId))
   const resolutionTargets = selectedResolutionItems.length > 0
     ? selectedResolutionItems
@@ -290,6 +403,35 @@ export const ReviewInboxPanel = () => {
       setResolution(null)
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const linkGeneralCandidate = async (candidate: GeneralCandidateEvidence) => {
+    if (!selectedItem || selectedItem.kind !== 'missing_on_platform') return
+    const link = appApi.catalogReviews?.link
+    if (!link) return
+
+    const payload: CatalogReviewLinkInput = {
+      reviewItemId: selectedItem.reviewItemId,
+      sourceEntityId: candidate.platformMenuId
+    }
+    setIsLinking(true)
+    try {
+      await link(payload)
+      const resolvedSourceKey = `${selectedItem.platformCode ?? ''}:${candidate.platformMenuId}`
+      setItems((current) => current.filter((item) => {
+        if (item.reviewItemId === selectedItem.reviewItemId) return false
+        const evidence = readEvidence(item.evidenceJson)
+        const sourceIds = Array.isArray(evidence.sourceEntityIds) ? evidence.sourceEntityIds : []
+        return !(item.platformCode === selectedItem.platformCode && sourceIds.includes(candidate.platformMenuId)) &&
+          !(item.platformCode === selectedItem.platformCode && item.sourceEntityId === candidate.platformMenuId && resolvedSourceKey.length > 0)
+      }))
+      setSelectedReviewIds(new Set())
+      setSelectedReviewId(null)
+      setExpandedGroup(null)
+      setResolution(null)
+    } finally {
+      setIsLinking(false)
     }
   }
 
@@ -405,13 +547,96 @@ export const ReviewInboxPanel = () => {
                             <p>{selectedFlow.detail}</p>
                           </div>
                         ) : null}
+                        {selectedItem.kind === 'missing_on_platform' && generalCandidates.length > 0 ? (
+                          <div className="review-candidate-card" aria-label="일반 메뉴 연결 후보">
+                            <div>
+                              <strong>이름이 다른 일반 메뉴 후보</strong>
+                              <small>기존 메뉴를 연결하면 새 메뉴를 만들지 않고 이 플랫폼의 원본을 통합 메뉴에 붙입니다.</small>
+                            </div>
+                            <div className="review-candidate-list">
+                              {generalCandidates.map((candidate) => (
+                                <div className="review-candidate-row" key={candidate.platformMenuId}>
+                                  <span>
+                                    <strong>{candidate.platformMenuName}</strong>
+                                    <small>
+                                      {candidate.platformMenuGroupName ? `${candidate.platformMenuGroupName} · ` : ''}
+                                      {typeof candidate.platformMenuCurrentPrice === 'number'
+                                        ? `${candidate.platformMenuCurrentPrice.toLocaleString('ko-KR')}원`
+                                        : '가격 미확인'}
+                                    </small>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="secondary-button"
+                                    disabled={isLinking}
+                                    onClick={() => void linkGeneralCandidate(candidate)}
+                                  >
+                                    {isLinking ? '연결 중…' : '이 후보와 연결'}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                        {optionMatches.length > 0 ? (
+                          <div className="review-option-scope" aria-label="옵션 범위 근거">
+                            <strong>옵션 구성 확인</strong>
+                            <div className="review-option-match-list">
+                              {optionMatches.map((match, index) => {
+                                const role = match.optionRole === 'paid_add_on'
+                                  ? '유료 추가'
+                                  : match.optionRole === 'free_optional'
+                                    ? '무료 선택'
+                                    : match.optionRole === 'bundle_selection'
+                                      ? '세트·반반 선택'
+                                      : match.optionRole === 'included_selection'
+                                        ? '포함 선택'
+                                        : '옵션'
+                                const quantity = match.maxOrderQuantity === null || match.maxOrderQuantity === undefined
+                                  ? '선택 수 제한 없음'
+                                  : `최대 ${match.maxOrderQuantity}개`
+                                const linked = match.linkedMenuNames && match.linkedMenuNames.length > 0
+                                  ? ` · 연결 메뉴 ${match.linkedMenuNames.join(', ')}`
+                                  : ''
+                                return (
+                                  <span key={`${match.optionGroupKey ?? 'group'}-${match.optionName ?? 'option'}-${index}`}>
+                                    {match.optionGroupName ?? '옵션 그룹'} · {match.optionName ?? '이름 미확인'} · {role} · {quantity}
+                                    {typeof match.optionPrice === 'number' ? ` · ${match.optionPrice.toLocaleString('ko-KR')}원` : ''}{linked}
+                                  </span>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+                        {selectedItem.kind === 'canonical_platform_only' && (platformMappings.length > 0 || canonicalCandidates.length > 0) ? (
+                          <div className="review-option-scope" aria-label="기준 플랫폼 밖 연결 정보">
+                            <strong>기준 플랫폼 밖 연결 정보</strong>
+                            {platformMappings.length > 0 ? (
+                              <div className="review-option-match-list">
+                                {platformMappings.map((mapping, index) => (
+                                  <span key={`platform-mapping-${index}`}>
+                                    {typeof mapping.platformCode === 'string' ? getPlatformLabel(mapping.platformCode as Parameters<typeof getPlatformLabel>[0]) : '플랫폼'} · {typeof mapping.platformMenuName === 'string' ? mapping.platformMenuName : '메뉴명 미확인'}
+                                    {typeof mapping.platformPrice === 'number' ? ` · ${mapping.platformPrice.toLocaleString('ko-KR')}원` : ''}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                            {canonicalCandidates.length > 0 ? (
+                              <small>기준 플랫폼 후보: {canonicalCandidates.map((candidate) => typeof candidate.canonicalName === 'string' ? candidate.canonicalName : '').filter(Boolean).join(', ')}</small>
+                            ) : null}
+                          </div>
+                        ) : null}
                         <div className="review-decision-actions">
                           {selectedResolutionItems.length > 1 ? (
                             <strong className="review-bulk-selection">{selectedResolutionItems.length}개에 함께 적용</strong>
                           ) : null}
-                          {selectedItem.recommendation === 'add_to_platform' ? (
+                          {selectedItem.recommendation === 'add_to_platform' || selectedItem.kind === 'canonical_platform_only' ? (
                             <button type="button" className="primary-button" disabled={!hasCompatibleRecommendations} onClick={() => beginDecision('apply_recommendation')}>
-                              {selectedItem.kind === 'option_only_on_platform' ? '일반 메뉴 추가 대상으로 표시' : '추가 대상으로 표시'}
+                              {selectedItem.kind === 'option_only_on_platform'
+                                ? '일반 메뉴 추가 대상으로 표시'
+                                : selectedItem.kind === 'canonical_platform_only'
+                                  ? '플랫폼 전용으로 유지 표시'
+                                  : '추가 대상으로 표시'}
                             </button>
                           ) : null}
                           <button type="button" className="secondary-button" disabled={!hasCompatibleRecommendations} onClick={() => beginDecision('exclude_platform')}>

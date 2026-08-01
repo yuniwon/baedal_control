@@ -39,8 +39,11 @@ export type CatalogReviewRecommendation =
 export type CatalogReviewKind =
   | 'missing_on_platform'
   | 'option_only_on_platform'
+  | 'option_candidate_on_platform'
+  | 'canonical_platform_only'
   | 'unmatched_platform_menu'
   | 'price_outlier'
+  | 'option_price_outlier'
   | 'price_policy_pattern'
   | 'variant_shape_conflict'
   | 'duplicate_option_group'
@@ -322,6 +325,11 @@ export interface CatalogReviewResolutionInput {
   scope: CatalogIntentRule['scope']
   reason: string
   expiresAt?: string | null
+}
+
+export interface CatalogReviewLinkInput {
+  reviewItemId: string
+  sourceEntityId: string
 }
 
 export interface PlatformMenuCatalogRecord {

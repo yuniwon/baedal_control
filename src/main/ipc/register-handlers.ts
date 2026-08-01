@@ -13,6 +13,7 @@ import type {
   CatalogBootstrapPreviewInput,
   CatalogIntentRule,
   CatalogReviewItem,
+  CatalogReviewLinkInput,
   CatalogReviewResolutionInput,
   CatalogMaintenanceApplyInput,
   CatalogMaintenancePreview,
@@ -46,8 +47,11 @@ const platformCodeSchema = z.enum(PLATFORM_CODES)
 const catalogReviewKindSchema = z.enum([
   'missing_on_platform',
   'option_only_on_platform',
+  'option_candidate_on_platform',
+  'canonical_platform_only',
   'unmatched_platform_menu',
   'price_outlier',
+  'option_price_outlier',
   'price_policy_pattern',
   'variant_shape_conflict',
   'duplicate_option_group',
@@ -128,6 +132,10 @@ const catalogReviewResolutionSchema = z.object({
   scope: z.enum(['entity', 'platform', 'category', 'field', 'workspace']),
   reason: z.string().trim().min(1),
   expiresAt: z.string().datetime().nullable().optional()
+}).strict()
+const catalogReviewLinkSchema = z.object({
+  reviewItemId: z.string().trim().min(1),
+  sourceEntityId: z.string().trim().min(1)
 }).strict()
 const catalogMaintenancePreviewSchema = z.object({
   referencePlatformCode: platformCodeSchema
@@ -534,6 +542,101 @@ export const registerHandlers = ({
     }
 
     return { ok: true as const, resolvedCount: selectedItems.length }
+  })
+  register('catalogReviews:link', async (_event, payload: unknown) => {
+    if (!catalogReviewRepository) {
+      throw new Error('catalog_reviews_unavailable')
+    }
+
+    const input = parseCatalogPayload(catalogReviewLinkSchema, payload) as CatalogReviewLinkInput
+    const openItems = catalogReviewRepository.listOpen('default')
+    const item = openItems.find((candidate) => candidate.reviewItemId === input.reviewItemId)
+    if (!item) {
+      throw new Error(`catalog_review_item_not_open:${input.reviewItemId}`)
+    }
+    if (
+      item.kind !== 'missing_on_platform' ||
+      !item.canonicalMenuId ||
+      !item.platformCode
+    ) {
+      throw new Error(`catalog_review_link_unsupported:${item.reviewItemId}`)
+    }
+
+    let evidence: Record<string, unknown> = {}
+    try {
+      evidence = JSON.parse(item.evidenceJson) as Record<string, unknown>
+    } catch {
+      evidence = {}
+    }
+    const sourceIds = Array.isArray(evidence.sourceEntityIds)
+      ? evidence.sourceEntityIds.filter((value): value is string => typeof value === 'string')
+      : []
+    const generalCandidates = Array.isArray(evidence.generalCandidates)
+      ? evidence.generalCandidates.filter(
+          (value): value is Record<string, unknown> => Boolean(value) && typeof value === 'object'
+        )
+      : []
+    if (
+      sourceIds.length > 0 && !sourceIds.includes(input.sourceEntityId) &&
+      !generalCandidates.some((candidate) => candidate.platformMenuId === input.sourceEntityId)
+    ) {
+      throw new Error(`catalog_review_link_candidate_not_found:${input.sourceEntityId}`)
+    }
+
+    const source = platformMenuRepository.listAll().find(
+      (candidate) =>
+        candidate.platformCode === item.platformCode &&
+        candidate.platformMenuId === input.sourceEntityId
+    )
+    if (!source || source.presenceStatus === 'absent_confirmed' || source.presenceStatus === 'missing_suspected') {
+      throw new Error(`catalog_review_link_source_unavailable:${input.sourceEntityId}`)
+    }
+
+    const existingMapping = mappingRepository.listAll().find(
+      (mapping) =>
+        mapping.platformCode === item.platformCode &&
+        mapping.platformMenuId === input.sourceEntityId &&
+        mapping.mappingStatus !== 'source_absent'
+    )
+    if (existingMapping && existingMapping.menuId !== item.canonicalMenuId) {
+      throw new Error(`catalog_review_link_source_already_mapped:${input.sourceEntityId}`)
+    }
+
+    const mappingId = `${item.canonicalMenuId}:${item.platformCode}:${input.sourceEntityId}`
+    mappingRepository.upsert({
+      mappingId,
+      menuId: item.canonicalMenuId,
+      platformCode: item.platformCode,
+      platformMenuId: source.platformMenuId,
+      platformMenuName: source.platformMenuName,
+      platformMenuCurrentPrice: source.platformMenuCurrentPrice ?? null,
+      platformMenuPriceCount: source.platformMenuPriceCount ?? null,
+      platformMenuGroupName: source.platformMenuGroupName ?? null,
+      platformMenuStatus: source.platformMenuStatus ?? null,
+      platformMenuPriceSummary: source.platformMenuPriceSummary ?? null,
+      platformMenuPriceVariants: source.platformMenuPriceVariants ?? null,
+      platformMenuBindingSummary: source.platformMenuBindingSummary ?? null,
+      platformMenuBindingStatus: source.platformMenuBindingStatus ?? null,
+      matchedBy: 'manual',
+      isConfirmed: 1
+    })
+
+    const relatedReviewIds = openItems
+      .filter((candidate) =>
+        candidate.reviewItemId === item.reviewItemId ||
+        (
+          candidate.platformCode === item.platformCode &&
+          candidate.sourceEntityId === input.sourceEntityId
+        )
+      )
+      .map((candidate) => candidate.reviewItemId)
+    catalogReviewRepository.resolve(relatedReviewIds)
+
+    return {
+      ok: true as const,
+      mappingId,
+      resolvedCount: relatedReviewIds.length
+    }
   })
   register('catalogMaintenance:preview', async (_event, payload: unknown) => {
     if (!catalogMaintenanceService) throw new Error('catalog_maintenance_unavailable')

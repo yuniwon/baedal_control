@@ -21,6 +21,7 @@ type OptionPresenceRole =
   | 'paid_add_on'
   | 'bundle_selection'
   | 'included_selection'
+  | 'free_optional'
   | 'mixed_selection'
 
 type OptionPresenceMatch = {
@@ -28,6 +29,9 @@ type OptionPresenceMatch = {
   optionName: string
   optionPrice: number
   role: OptionPresenceRole
+  minOrderQuantity: number | null
+  maxOrderQuantity: number | null
+  linkedMenuNames: string[]
 }
 
 const OPTION_NAME_ALIASES: Record<string, string> = {
@@ -45,12 +49,21 @@ const GENERAL_MENU_ALIAS_PAIRS: Array<[string, string]> = [
   ['고르곤졸라씬도우', '고르곤졸라씬']
 ]
 
+// These are deliberately suggestions, not confirmed aliases. A generic
+// platform option such as "콜라" may represent a different brand or package,
+// so it must remain a manual-review candidate.
+const OPTION_NAME_SUGGESTION_PAIRS: Array<[string, string]> = [
+  ['코카콜라', '콜라'],
+  ['코카콜라제로', '제로콜라'],
+  ['칠성사이다', '사이다']
+]
+
 const normalizeOptionName = (value: string) =>
   value
     .normalize('NFKC')
     .toLocaleLowerCase('ko-KR')
     .replace(/\s+/g, '')
-    .replace(/\d+(?:개|조각)\s*$/u, '')
+    .replace(/\d+(?:\.\d+)?\s*(?:개|조각|ml|m|l|kg|g)\s*$/iu, '')
 
 const normalizeGeneralName = (value: string) => catalogMenuIdentity(value)
 
@@ -79,6 +92,15 @@ const isEquivalentOptionName = (canonicalName: string, optionName: string) => {
     canonicalKey === optionKey
 }
 
+const isSuggestedOptionName = (canonicalName: string, optionName: string) => {
+  const canonicalKey = normalizeOptionName(canonicalName)
+  const optionKey = normalizeOptionName(optionName)
+  return OPTION_NAME_SUGGESTION_PAIRS.some(([first, second]) =>
+    (canonicalKey === first && optionKey === second) ||
+    (canonicalKey === second && optionKey === first)
+  )
+}
+
 const resolveOptionPresenceRole = (
   group: LogicalOptionGroupRecord,
   optionPrice: number
@@ -87,13 +109,25 @@ const resolveOptionPresenceRole = (
     return 'bundle_selection'
   }
 
-  return optionPrice > 0 ? 'paid_add_on' : 'included_selection'
+  if (optionPrice > 0) {
+    return 'paid_add_on'
+  }
+
+  if (
+    group.minOrderQuantity === 0 &&
+    (group.maxOrderQuantity == null || group.maxOrderQuantity > 1)
+  ) {
+    return 'free_optional'
+  }
+
+  return 'included_selection'
 }
 
 const findOptionPresenceMatches = (
   canonicalName: string,
   platformCode: PlatformCode,
-  logicalOptionGroups: LogicalOptionGroupRecord[]
+  logicalOptionGroups: LogicalOptionGroupRecord[],
+  matcher: (canonicalName: string, optionName: string) => boolean
 ): OptionPresenceMatch[] => logicalOptionGroups
   .filter(
     (group) =>
@@ -103,12 +137,17 @@ const findOptionPresenceMatches = (
   )
   .flatMap((group) => {
     return group.logicalOptions
-      .filter((option) => isEquivalentOptionName(canonicalName, option.optionName))
+      .filter((option) => matcher(canonicalName, option.optionName))
       .map((option) => ({
         group,
         optionName: option.optionName,
         optionPrice: option.optionPrice,
-        role: resolveOptionPresenceRole(group, option.optionPrice)
+        role: resolveOptionPresenceRole(group, option.optionPrice),
+        minOrderQuantity: group.minOrderQuantity ?? null,
+        maxOrderQuantity: group.maxOrderQuantity ?? null,
+        linkedMenuNames: [...new Set(
+          group.sourceGroups.flatMap((sourceGroup) => sourceGroup.linkedMenuNames)
+        )].sort((left, right) => left.localeCompare(right, 'ko-KR'))
       }))
   })
   .sort(
@@ -221,11 +260,8 @@ const classifyMatch = (canonicalMenus: MenuRecord[], sourceName: string) => {
   }
 }
 
-const analyzeMissingAndUnmatched = (
-  input: CatalogExceptionAnalysisInput
-): CatalogReviewItem[] => {
-  const items: CatalogReviewItem[] = []
-  const referenceMenuIds = input.referencePlatformCode
+const buildReferenceMenuIds = (input: CatalogExceptionAnalysisInput) =>
+  input.referencePlatformCode
     ? new Set(
         input.mappings
           .filter(
@@ -236,6 +272,78 @@ const analyzeMissingAndUnmatched = (
           .map((mapping) => mapping.menuId)
       )
     : null
+
+const analyzeCanonicalPlatformOnly = (
+  input: CatalogExceptionAnalysisInput,
+  referenceMenuIds: Set<string> | null
+): CatalogReviewItem[] => {
+  if (!referenceMenuIds) {
+    return []
+  }
+
+  const referenceMenus = input.menus.filter(
+    (menu) => (menu.isManaged ?? 1) === 1 && referenceMenuIds.has(menu.menuId)
+  )
+  const platformOnlyMenus = input.menus.filter(
+    (menu) => (menu.isManaged ?? 1) === 1 && !referenceMenuIds.has(menu.menuId)
+  )
+  const activeMappings = input.mappings.filter(
+    (mapping) => mapping.mappingStatus !== 'source_absent'
+  )
+
+  return platformOnlyMenus.flatMap((menu) => {
+    const mappings = activeMappings.filter((mapping) => mapping.menuId === menu.menuId)
+    if (mappings.length === 0) {
+      return []
+    }
+
+    const canonicalCandidates = referenceMenus
+      .filter((candidate) => candidate.menuId !== menu.menuId)
+      .filter((candidate) => isEquivalentGeneralMenuName(candidate.baseName, menu.baseName))
+      .map((candidate) => ({
+        canonicalMenuId: candidate.menuId,
+        canonicalName: candidate.baseName,
+        basePrice: candidate.basePrice
+      }))
+
+    return [createReviewItem({
+      workspaceId: input.workspaceId,
+      kind: 'canonical_platform_only',
+      confidence: canonicalCandidates.length > 0 ? 0.9 : 0.75,
+      title: `${menu.baseName} 통합메뉴가 기준 플랫폼에는 없습니다`,
+      explanation: canonicalCandidates.length > 0
+        ? '기준 플랫폼의 기존 통합 메뉴와 이름이 같거나 비슷합니다. 별칭인지 플랫폼 전용인지 결정해야 합니다.'
+        : '다른 플랫폼에서만 확인된 통합 메뉴입니다. 기준 플랫폼에 추가할지, 플랫폼 전용으로 유지할지 결정해야 합니다.',
+      recommendation: 'manual_review',
+      canonicalMenuId: menu.menuId,
+      evidence: {
+        canonicalMenuId: menu.menuId,
+        canonicalName: menu.baseName,
+        canonicalPrice: menu.basePrice,
+        fieldKey: 'presence',
+        surface: 'general',
+        signals: {
+          referencePlatformMissing: true,
+          canonicalCandidateCount: canonicalCandidates.length,
+          activePlatformMappingCount: mappings.length
+        },
+        canonicalCandidates,
+        platformMappings: mappings.map((mapping) => ({
+          platformCode: mapping.platformCode,
+          platformMenuId: mapping.platformMenuId,
+          platformMenuName: mapping.platformMenuName,
+          platformPrice: mapping.platformMenuCurrentPrice ?? null
+        }))
+      }
+    })]
+  })
+}
+
+const analyzeMissingAndUnmatched = (
+  input: CatalogExceptionAnalysisInput
+): CatalogReviewItem[] => {
+  const items: CatalogReviewItem[] = []
+  const referenceMenuIds = buildReferenceMenuIds(input)
   const managedMenus = input.menus.filter(
     (menu) =>
       (menu.isManaged ?? 1) === 1 &&
@@ -259,7 +367,9 @@ const analyzeMissingAndUnmatched = (
   for (const platformCode of platforms) {
     const platformSources = input.platformMenus.filter(
       (source) =>
-        source.platformCode === platformCode && source.presenceStatus !== 'absent_confirmed'
+        source.platformCode === platformCode &&
+        source.presenceStatus !== 'absent_confirmed' &&
+        source.presenceStatus !== 'missing_suspected'
     )
 
     for (const canonicalMenu of managedMenus) {
@@ -281,7 +391,8 @@ const analyzeMissingAndUnmatched = (
         ? findOptionPresenceMatches(
           canonicalMenu.baseName,
           platformCode,
-          input.logicalOptionGroups
+          input.logicalOptionGroups,
+          isEquivalentOptionName
         )
         : []
       if (optionMatches.length > 0) {
@@ -301,6 +412,8 @@ const analyzeMissingAndUnmatched = (
                 ? '해당 플랫폼에서는 세트·반반 메뉴의 선택 옵션으로만 제공되며, 별도 메뉴는 확인되지 않았습니다.'
               : optionRole === 'included_selection'
                 ? '해당 플랫폼에서는 세트·반반 메뉴의 포함 옵션으로만 제공되며, 별도 메뉴는 확인되지 않았습니다.'
+              : optionRole === 'free_optional'
+                ? '해당 플랫폼에서는 무료 선택 옵션으로 제공되며, 별도 일반 메뉴는 확인되지 않았습니다.'
                 : '해당 플랫폼에서 유료 옵션과 포함 옵션이 함께 확인되며, 별도 메뉴는 확인되지 않았습니다.',
           recommendation: 'add_to_platform',
           canonicalMenuId: canonicalMenu.menuId,
@@ -323,7 +436,60 @@ const analyzeMissingAndUnmatched = (
               optionGroupName: match.group.displayName,
               optionName: match.optionName,
               optionPrice: match.optionPrice,
-              optionRole: match.role
+              optionRole: match.role,
+              minOrderQuantity: match.minOrderQuantity,
+              maxOrderQuantity: match.maxOrderQuantity,
+              linkedMenuNames: match.linkedMenuNames
+            }))
+          }
+        }))
+        continue
+      }
+
+      const optionCandidates = generalCandidates.length === 0
+        ? findOptionPresenceMatches(
+          canonicalMenu.baseName,
+          platformCode,
+          input.logicalOptionGroups,
+          isSuggestedOptionName
+        )
+        : []
+      if (optionCandidates.length > 0) {
+        const optionRoles = [...new Set(optionCandidates.map((match) => match.role))]
+        const optionRole = optionRoles.length === 1 ? optionRoles[0] : 'mixed_selection'
+        const firstMatch = optionCandidates[0]
+
+        items.push(createReviewItem({
+          workspaceId: input.workspaceId,
+          kind: 'option_candidate_on_platform',
+          confidence: 0.7,
+          title: `${canonicalMenu.baseName}와 비슷한 옵션이 플랫폼에 있습니다`,
+          explanation: '옵션 이름은 비슷하지만 브랜드·용량·판매 단위가 다를 수 있어 일반 메뉴와 같은 상품인지 확인이 필요합니다.',
+          recommendation: 'manual_review',
+          canonicalMenuId: canonicalMenu.menuId,
+          platformCode,
+          sourceEntityId: firstMatch.group.logicalGroupKey,
+          evidence: {
+            canonicalMenuId: canonicalMenu.menuId,
+            canonicalName: canonicalMenu.baseName,
+            platformCode,
+            fieldKey: 'presence',
+            surface: 'option',
+            optionRole,
+            signals: {
+              confirmedGeneralMenuMissing: false,
+              optionCandidatePresence: true,
+              optionMatchCount: optionCandidates.length
+            },
+            optionMatches: optionCandidates.map((match) => ({
+              optionGroupKey: match.group.logicalGroupKey,
+              optionGroupName: match.group.displayName,
+              optionName: match.optionName,
+              optionPrice: match.optionPrice,
+              optionRole: match.role,
+              minOrderQuantity: match.minOrderQuantity,
+              maxOrderQuantity: match.maxOrderQuantity,
+              linkedMenuNames: match.linkedMenuNames
             }))
           }
         }))
@@ -351,7 +517,14 @@ const analyzeMissingAndUnmatched = (
             uniqueSafeUnmappedSourceCount: safeCandidates.length,
             generalMenuCandidateCount: generalCandidates.length
           },
-          sourceEntityIds: generalCandidates.map((source) => source.platformMenuId).sort()
+          sourceEntityIds: generalCandidates.map((source) => source.platformMenuId).sort(),
+          generalCandidates: generalCandidates.map((source) => ({
+            platformMenuId: source.platformMenuId,
+            platformMenuName: source.platformMenuName,
+            platformMenuCurrentPrice: source.platformMenuCurrentPrice ?? null,
+            platformMenuGroupName: source.platformMenuGroupName ?? null,
+            presenceStatus: source.presenceStatus ?? null
+          })).sort((left, right) => left.platformMenuId.localeCompare(right.platformMenuId))
         }
       }))
     }
@@ -477,6 +650,84 @@ const analyzePrices = (input: CatalogExceptionAnalysisInput): CatalogReviewItem[
   })
 }
 
+const analyzeOptionPrices = (input: CatalogExceptionAnalysisInput): CatalogReviewItem[] => {
+  const occurrencesByPlatform = new Map<PlatformCode, Map<string, Array<{
+    group: LogicalOptionGroupRecord
+    optionName: string
+    optionPrice: number
+    linkedMenuNames: string[]
+  }>>>()
+
+  for (const group of input.logicalOptionGroups) {
+    if (group.status === 'absent_confirmed' || group.status === 'missing_suspected') {
+      continue
+    }
+
+    const byOption = occurrencesByPlatform.get(group.platformCode) ?? new Map()
+    const linkedMenuNames = [...new Set(
+      group.sourceGroups.flatMap((sourceGroup) => sourceGroup.linkedMenuNames)
+    )].sort((left, right) => left.localeCompare(right, 'ko-KR'))
+    for (const option of group.logicalOptions) {
+      const optionKey = normalizeOptionName(option.optionName)
+      if (!optionKey) continue
+      const occurrences = byOption.get(optionKey) ?? []
+      occurrences.push({
+        group,
+        optionName: option.optionName,
+        optionPrice: option.optionPrice,
+        linkedMenuNames
+      })
+      byOption.set(optionKey, occurrences)
+    }
+    occurrencesByPlatform.set(group.platformCode, byOption)
+  }
+
+  return [...occurrencesByPlatform.entries()].flatMap(([platformCode, byOption]) =>
+    [...byOption.entries()].flatMap(([optionKey, occurrences]) => {
+      const distinctPrices = [...new Set(occurrences.map((occurrence) => occurrence.optionPrice))]
+      if (distinctPrices.length < 2) return []
+
+      const hasSharedMenuPriceDifference = occurrences.some((occurrence, index) =>
+        occurrences.slice(index + 1).some((other) =>
+          occurrence.optionPrice !== other.optionPrice &&
+          occurrence.linkedMenuNames.some((menuName) => other.linkedMenuNames.includes(menuName))
+        )
+      )
+      if (!hasSharedMenuPriceDifference) return []
+
+      const first = occurrences[0]
+      return [createReviewItem({
+        workspaceId: input.workspaceId,
+        kind: 'option_price_outlier',
+        confidence: 1,
+        title: `${first.optionName} 옵션 가격이 같은 메뉴에서 다릅니다`,
+        explanation: '같은 플랫폼·같은 메뉴에 연결된 동일 옵션의 가격이 다릅니다. 사이즈·전략 차이인지 확인해야 합니다.',
+        recommendation: 'manual_review',
+        platformCode,
+        sourceEntityId: first.group.logicalGroupKey,
+        evidence: {
+          platformCode,
+          fieldKey: 'option_price',
+          optionKey,
+          optionNames: [...new Set(occurrences.map((occurrence) => occurrence.optionName))].sort(),
+          distinctPrices: distinctPrices.sort((left, right) => left - right),
+          optionOccurrences: occurrences.map((occurrence) => ({
+            optionGroupKey: occurrence.group.logicalGroupKey,
+            optionGroupName: occurrence.group.displayName,
+            optionName: occurrence.optionName,
+            optionPrice: occurrence.optionPrice,
+            minOrderQuantity: occurrence.group.minOrderQuantity ?? null,
+            maxOrderQuantity: occurrence.group.maxOrderQuantity ?? null,
+            linkedMenuNames: occurrence.linkedMenuNames
+          })).sort((left, right) =>
+            left.optionGroupKey.localeCompare(right.optionGroupKey) || left.optionPrice - right.optionPrice
+          )
+        }
+      })]
+    })
+  )
+}
+
 const analyzeOptionGroups = (input: CatalogExceptionAnalysisInput): CatalogReviewItem[] =>
   input.logicalOptionGroups.flatMap((group) => {
     if (group.status !== 'merge_candidate' && group.status !== 'shape_conflict') {
@@ -519,7 +770,9 @@ export const analyzeCatalogExceptions = (
   input: CatalogExceptionAnalysisInput
 ): CatalogReviewItem[] =>
   [
+    ...analyzeCanonicalPlatformOnly(input, buildReferenceMenuIds(input)),
     ...analyzeMissingAndUnmatched(input),
     ...analyzePrices(input),
+    ...analyzeOptionPrices(input),
     ...analyzeOptionGroups(input)
   ].sort(compareItems)

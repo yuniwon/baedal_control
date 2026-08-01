@@ -3,6 +3,7 @@ import type {
   CatalogBootstrapActivationInput,
   CatalogBootstrapPreviewInput,
   CatalogMaintenanceApplyInput,
+  CatalogReviewLinkInput,
   CatalogReviewResolutionInput,
   PlatformCode
 } from '../shared/contracts'
@@ -61,6 +62,7 @@ export const appApi = {
   },
   catalogReviews: {
     listOpen: () => ipcRenderer.invoke('catalogReviews:listOpen'),
+    link: (payload: CatalogReviewLinkInput) => ipcRenderer.invoke('catalogReviews:link', payload),
     resolve: (payload: CatalogReviewResolutionInput) =>
       ipcRenderer.invoke('catalogReviews:resolve', payload)
   },

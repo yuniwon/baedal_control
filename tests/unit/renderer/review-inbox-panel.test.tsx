@@ -1,13 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { listOpen, resolve } = vi.hoisted(() => ({
+const { listOpen, link, resolve } = vi.hoisted(() => ({
   listOpen: vi.fn(),
+  link: vi.fn(),
   resolve: vi.fn()
 }))
 
 vi.mock('../../../src/renderer/src/lib/api', () => ({
-  appApi: { catalogReviews: { listOpen, resolve } }
+  appApi: { catalogReviews: { listOpen, link, resolve } }
 }))
 
 import { ReviewInboxPanel } from '../../../src/renderer/src/components/ReviewInboxPanel'
@@ -50,9 +51,27 @@ const generalAliasCandidateItem = {
   })
 }
 
+const generalCandidateItem = {
+  ...missingItem(12),
+  reviewItemId: 'review-general-candidate',
+  fingerprint: 'fingerprint-general-candidate',
+  title: '국산피클 메뉴가 플랫폼에 연결되지 않았습니다',
+  evidenceJson: JSON.stringify({
+    canonicalName: '국산피클',
+    signals: { generalMenuCandidateCount: 1 },
+    generalCandidates: [{
+      platformMenuId: 'pickle-source',
+      platformMenuName: '피클 1개',
+      platformMenuCurrentPrice: 500,
+      platformMenuGroupName: '사이드'
+    }]
+  })
+}
+
 describe('ReviewInboxPanel', () => {
   beforeEach(() => {
     listOpen.mockResolvedValue([missingItem(1), missingItem(2), missingItem(3)])
+    link.mockResolvedValue({ ok: true, mappingId: 'mapping-1', resolvedCount: 1 })
     resolve.mockResolvedValue({ ok: true, resolvedCount: 1 })
   })
 
@@ -94,6 +113,23 @@ describe('ReviewInboxPanel', () => {
     expect(await screen.findByText('쿠팡이츠 이름 차이 연결 후보 1개')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /쿠팡이츠 이름 차이 연결 후보 1개/ }))
     expect(screen.getByText('이름 차이 연결 확인')).toBeTruthy()
+  })
+
+  it('lets the operator link a concrete general-menu candidate', async () => {
+    listOpen.mockResolvedValue([generalCandidateItem])
+
+    render(<ReviewInboxPanel />)
+
+    expect(await screen.findByText('피클 1개')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '이 후보와 연결' }))
+
+    await waitFor(() => {
+      expect(link).toHaveBeenCalledWith({
+        reviewItemId: 'review-general-candidate',
+        sourceEntityId: 'pickle-source'
+      })
+      expect(screen.queryByText('이름 차이 연결 후보 1개')).toBeNull()
+    })
   })
 
   it('offers one-time and remembered resolution scopes', async () => {

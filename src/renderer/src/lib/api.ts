@@ -7,6 +7,7 @@ import type {
   CatalogBootstrapPreview,
   CatalogBootstrapPreviewInput,
   CatalogReviewItem,
+  CatalogReviewLinkInput,
   CatalogReviewResolutionInput,
   CatalogMaintenanceApplyInput,
   CatalogMaintenancePreview,
@@ -110,6 +111,11 @@ declare global {
       }
       catalogReviews: {
         listOpen: () => Promise<CatalogReviewItem[]>
+        link: (payload: CatalogReviewLinkInput) => Promise<{
+          ok: true
+          mappingId: string
+          resolvedCount: number
+        }>
         resolve: (payload: CatalogReviewResolutionInput) => Promise<{
           ok: true
           resolvedCount: number
@@ -248,6 +254,11 @@ export const appApi: AppApi = window.appApi ?? {
   },
   catalogReviews: {
     listOpen: () => noopPromise([] as CatalogReviewItem[]),
+    link: (payload) => noopPromise({
+      ok: true as const,
+      mappingId: `${payload.reviewItemId}:${payload.sourceEntityId}`,
+      resolvedCount: 1
+    }),
     resolve: (payload) => noopPromise({ ok: true as const, resolvedCount: payload.reviewItemIds.length })
   },
   catalogMaintenance: {

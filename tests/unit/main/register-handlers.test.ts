@@ -448,6 +448,67 @@ describe('registerHandlers', () => {
     })).rejects.toThrow('invalid_catalog_request')
   })
 
+  it('links a selected general-menu candidate and resolves its review', async () => {
+    const upsert = vi.fn()
+    const resolve = vi.fn()
+    const source = {
+      platformCode: 'coupangeats' as const,
+      platformMenuId: 'pickle-source',
+      platformMenuName: '피클 1개',
+      platformMenuCurrentPrice: 500,
+      presenceStatus: 'present' as const
+    }
+    const review = {
+      reviewItemId: 'review-link',
+      workspaceId: 'default',
+      fingerprint: 'fingerprint-link',
+      kind: 'missing_on_platform' as const,
+      state: 'open' as const,
+      confidence: 1,
+      title: '국산피클 메뉴가 플랫폼에 연결되지 않았습니다',
+      explanation: '이름이 다른 일반 메뉴 후보가 있습니다.',
+      recommendation: 'add_to_platform' as const,
+      evidenceJson: JSON.stringify({
+        sourceEntityIds: ['pickle-source'],
+        generalCandidates: [{ platformMenuId: 'pickle-source', platformMenuName: '피클 1개' }]
+      }),
+      canonicalMenuId: 'pickle',
+      platformCode: 'coupangeats' as const,
+      sourceEntityId: null,
+      intentRuleId: null
+    }
+
+    registerHandlers({
+      menuRepository: { list: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      mappingRepository: { listAll: vi.fn().mockReturnValue([]), upsert },
+      platformMenuRepository: { listAll: vi.fn().mockReturnValue([source]) },
+      syncRunRepository: { list: vi.fn().mockReturnValue([]) },
+      credentialVault: { get: vi.fn(), set: vi.fn() } as never,
+      catalogReviewRepository: {
+        listOpen: vi.fn().mockReturnValue([review]),
+        resolve,
+        setState: vi.fn()
+      }
+    })
+
+    await expect(
+      electronMock.registeredHandlers.get('catalogReviews:link')?.({}, {
+        reviewItemId: 'review-link',
+        sourceEntityId: 'pickle-source'
+      })
+    ).resolves.toEqual({
+      ok: true,
+      mappingId: 'pickle:coupangeats:pickle-source',
+      resolvedCount: 1
+    })
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      mappingId: 'pickle:coupangeats:pickle-source',
+      matchedBy: 'manual',
+      isConfirmed: 1
+    }))
+    expect(resolve).toHaveBeenCalledWith(['review-link'])
+  })
+
   it('runs only selected items that are still executable in the latest preview', async () => {
     const run = vi.fn().mockResolvedValue({ syncRunId: 'run-1', summary: '성공 1건, 실패 0건' })
 

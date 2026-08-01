@@ -958,6 +958,77 @@
   line-height: 1.45;
 }
 
+.review-candidate-card,
+.review-option-scope {
+  display: grid;
+  gap: 9px;
+  margin: 0 0 12px;
+  padding: 11px 12px;
+  border: 1px solid #f4b8a7;
+  border-radius: 8px;
+  background: #fff9f7;
+}
+
+.review-candidate-card > div:first-child,
+.review-option-scope > strong {
+  display: grid;
+  gap: 3px;
+}
+
+.review-candidate-card small,
+.review-option-scope span {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.review-candidate-list,
+.review-option-match-list {
+  display: grid;
+  gap: 7px;
+}
+
+.review-candidate-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 9px;
+  border: 1px solid #fbd3c8;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.review-candidate-row > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.review-candidate-row > span strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.review-candidate-row .secondary-button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.review-option-scope {
+  border-color: #dbe5f2;
+  background: #f8fafc;
+}
+
+.review-option-match-list span {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 5px;
+  background: #ffffff;
+}
+
 .review-decision-actions {
   display: flex;
   align-items: center;

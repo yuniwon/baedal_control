@@ -96,6 +96,29 @@ describe('analyzeCatalogExceptions', () => {
     )).toBe(true)
   })
 
+  it('surfaces a managed canonical menu that exists only outside the reference platform', () => {
+    const items = analyze({
+      referencePlatformCode: 'baemin',
+      menus: [
+        menu({ menuId: 'reference-menu', baseName: '치즈피자' }),
+        menu({ menuId: 'platform-only', baseName: '고구마피자' })
+      ],
+      platformMenus: [
+        source({ platformCode: 'baemin', platformMenuId: 'b-1', platformMenuName: '치즈피자' }),
+        source({ platformCode: 'coupangeats', platformMenuId: 'c-1', platformMenuName: '고구마피자' })
+      ],
+      mappings: [
+        mapping({ mappingId: 'reference-menu:baemin', menuId: 'reference-menu', platformCode: 'baemin', platformMenuId: 'b-1', platformMenuName: '치즈피자' }),
+        mapping({ mappingId: 'platform-only:coupangeats', menuId: 'platform-only', platformCode: 'coupangeats', platformMenuId: 'c-1', platformMenuName: '고구마피자' })
+      ]
+    })
+
+    expect(items.find((item) => item.kind === 'canonical_platform_only' && item.canonicalMenuId === 'platform-only')).toMatchObject({
+      recommendation: 'manual_review',
+      platformCode: null
+    })
+  })
+
   it('marks a mapped price outlier as a decision instead of silently aligning it', () => {
     const item = analyze({
       menus: [menu()],
@@ -196,6 +219,146 @@ describe('analyzeCatalogExceptions', () => {
       surface: 'option',
       optionRole: 'paid_add_on',
       optionMatches: [{ optionName: '피클', optionPrice: 500 }]
+    })
+  })
+
+  it('marks a similar beverage option as a conservative candidate instead of an exact match', () => {
+    const items = analyze({
+      menus: [menu({ menuId: 'cola', baseName: '코카콜라', basePrice: 2000 })],
+      platformMenus: [source({ platformMenuId: 'other', platformMenuName: '다른 메뉴' })],
+      mappings: [],
+      logicalOptionGroups: [{
+        logicalGroupKey: 'coupangeats:drink',
+        platformCode: 'coupangeats',
+        displayName: '음료 선택',
+        minOrderQuantity: 0,
+        maxOrderQuantity: 1,
+        optionCount: 1,
+        connectedMenuCount: 1,
+        sourceGroupCount: 1,
+        sampleOptionNames: ['콜라 500ml'],
+        logicalOptions: [{ optionName: '콜라 500ml', optionPrice: 2000 }],
+        status: 'single',
+        sourceGroups: [{
+          optionGroupId: 'drink-1',
+          optionGroupName: '음료 선택',
+          presenceStatus: 'present',
+          linkedMenuCount: 1,
+          linkedMenuNames: ['피자 세트'],
+          options: [{ optionName: '콜라 500ml', optionPrice: 2000 }]
+        }]
+      }]
+    })
+
+    const item = items.find((candidate) => candidate.kind === 'option_candidate_on_platform')
+    expect(item).toMatchObject({
+      canonicalMenuId: 'cola',
+      platformCode: 'coupangeats',
+      recommendation: 'manual_review',
+      confidence: 0.7
+    })
+    expect(JSON.parse(item?.evidenceJson ?? '{}')).toMatchObject({
+      optionRole: 'paid_add_on',
+      optionMatches: [{ optionName: '콜라 500ml', maxOrderQuantity: 1 }]
+    })
+  })
+
+  it('records a free optional role and its selection range', () => {
+    const items = analyze({
+      menus: [menu({ menuId: 'pickle', baseName: '국산피클', basePrice: 500 })],
+      platformMenus: [source({ platformMenuId: 'other', platformMenuName: '다른 메뉴' })],
+      mappings: [],
+      logicalOptionGroups: [{
+        logicalGroupKey: 'coupangeats:free-sauce',
+        platformCode: 'coupangeats',
+        displayName: '소스 추가',
+        minOrderQuantity: 0,
+        maxOrderQuantity: 6,
+        optionCount: 1,
+        connectedMenuCount: 1,
+        sourceGroupCount: 1,
+        sampleOptionNames: ['국산피클'],
+        logicalOptions: [{ optionName: '국산피클', optionPrice: 0 }],
+        status: 'single',
+        sourceGroups: [{
+          optionGroupId: 'free-sauce-1',
+          optionGroupName: '소스 추가',
+          presenceStatus: 'present',
+          linkedMenuCount: 1,
+          linkedMenuNames: ['치즈피자'],
+          options: [{ optionName: '국산피클', optionPrice: 0 }]
+        }]
+      }]
+    })
+
+    const item = items.find((candidate) => candidate.kind === 'option_only_on_platform')
+    expect(JSON.parse(item?.evidenceJson ?? '{}')).toMatchObject({
+      optionRole: 'free_optional',
+      optionMatches: [{ minOrderQuantity: 0, maxOrderQuantity: 6 }]
+    })
+  })
+
+  it('flags the same option name at different prices for the same platform menu', () => {
+    const sharedMenu = '킹쉬림프피자'
+    const items = analyze({
+      menus: [menu()],
+      platformMenus: [source({ platformMenuName: sharedMenu })],
+      mappings: [],
+      logicalOptionGroups: [
+        {
+          logicalGroupKey: 'coupangeats:sauce-a',
+          platformCode: 'coupangeats',
+          displayName: '소스 추가',
+          minOrderQuantity: 0,
+          maxOrderQuantity: 1,
+          optionCount: 1,
+          connectedMenuCount: 1,
+          sourceGroupCount: 1,
+          sampleOptionNames: ['요거트소스'],
+          logicalOptions: [{ optionName: '요거트소스', optionPrice: 300 }],
+          status: 'single',
+          sourceGroups: [{
+            optionGroupId: 'sauce-a-1',
+            optionGroupName: '소스 추가',
+            presenceStatus: 'present',
+            linkedMenuCount: 1,
+            linkedMenuNames: [sharedMenu],
+            options: [{ optionName: '요거트소스', optionPrice: 300 }]
+          }]
+        },
+        {
+          logicalGroupKey: 'coupangeats:sauce-b',
+          platformCode: 'coupangeats',
+          displayName: '소스 선택',
+          minOrderQuantity: 0,
+          maxOrderQuantity: 1,
+          optionCount: 1,
+          connectedMenuCount: 1,
+          sourceGroupCount: 1,
+          sampleOptionNames: ['요거트 소스'],
+          logicalOptions: [{ optionName: '요거트 소스', optionPrice: 500 }],
+          status: 'single',
+          sourceGroups: [{
+            optionGroupId: 'sauce-b-1',
+            optionGroupName: '소스 선택',
+            presenceStatus: 'present',
+            linkedMenuCount: 1,
+            linkedMenuNames: [sharedMenu],
+            options: [{ optionName: '요거트 소스', optionPrice: 500 }]
+          }]
+        }
+      ]
+    })
+
+    const item = items.find((candidate) => candidate.kind === 'option_price_outlier')
+    expect(item).toMatchObject({
+      platformCode: 'coupangeats',
+      sourceEntityId: 'coupangeats:sauce-a',
+      recommendation: 'manual_review'
+    })
+    expect(JSON.parse(item?.evidenceJson ?? '{}')).toMatchObject({
+      fieldKey: 'option_price',
+      distinctPrices: [300, 500]
     })
   })
 
