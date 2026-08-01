@@ -875,6 +875,17 @@
   gap: 2px;
 }
 
+.review-surface-badge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #eef4ff;
+  color: #175cd3;
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .review-item-row > em {
   color: #667085;
   font-size: 12px;
@@ -1027,6 +1038,12 @@
   padding: 6px 8px;
   border-radius: 5px;
   background: #ffffff;
+}
+
+.review-canonical-merge-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 4px;
 }
 
 .review-decision-actions {

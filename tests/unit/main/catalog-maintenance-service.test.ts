@@ -96,6 +96,28 @@ describe('CatalogMaintenanceService', () => {
       .toMatchObject({ seedMode: 'platform', seedPlatformCode: 'baemin', canonicalVersion: 2 })
   })
 
+  it('merges an explicitly selected platform-only canonical menu into the reference menu', () => {
+    const { db, menus, mappings } = setup()
+    const backupDatabase = vi.fn(() => 'explicit-merge-backup.db')
+    const refreshReviews = vi.fn()
+    const service = new CatalogMaintenanceService({ db, backupDatabase, refreshReviews })
+
+    const result = service.mergeCanonicalMenus('unique-y', 'cheese')
+
+    expect(result).toEqual({
+      ok: true,
+      backupPath: 'explicit-merge-backup.db',
+      sourceMenuId: 'unique-y',
+      targetMenuId: 'cheese'
+    })
+    expect(menus.get('unique-y')).toBeNull()
+    expect(mappings.listForMenu('cheese').map((mapping) => mapping.mappingId)).toContain('map-unique')
+    expect(mappings.listForMenu('cheese').find((mapping) => mapping.mappingId === 'map-unique'))
+      .toMatchObject({ matchedBy: 'manual', isConfirmed: 1 })
+    expect(backupDatabase).toHaveBeenCalledTimes(1)
+    expect(refreshReviews).toHaveBeenCalledTimes(1)
+  })
+
   it('consolidates active M and L siblings even when the reference platform has no menu', () => {
     const { db, menus, mappings, platformMenus } = setup()
     menus.upsert({ menuId: 'yam-m', baseName: '고구마 피자 M', basePrice: 19900, isDirty: 0, isManaged: 1 })

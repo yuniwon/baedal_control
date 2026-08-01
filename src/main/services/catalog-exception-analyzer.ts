@@ -503,7 +503,7 @@ const analyzeMissingAndUnmatched = (
         title: `${canonicalMenu.baseName} 메뉴가 플랫폼에 연결되지 않았습니다`,
         explanation: generalCandidates.length > 0
           ? '이름이 다른 일반 메뉴 후보가 있지만 다른 통합 메뉴에 연결되어 있습니다.'
-          : '의도적인 미판매인지 누락인지 결정이 필요합니다.',
+          : '일반 메뉴가 없습니다. 누락인지, 이 플랫폼에서 판매하지 않는 메뉴인지 결정합니다.',
         recommendation: 'add_to_platform',
         canonicalMenuId: canonicalMenu.menuId,
         platformCode,

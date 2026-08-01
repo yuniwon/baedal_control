@@ -34,6 +34,12 @@ type GeneralCandidateEvidence = {
   presenceStatus?: string | null
 }
 
+type CanonicalCandidateEvidence = {
+  canonicalMenuId: string
+  canonicalName: string
+  basePrice?: number | null
+}
+
 type OptionMatchEvidence = {
   optionGroupKey?: string
   optionGroupName?: string
@@ -56,6 +62,23 @@ const readEvidence = (evidenceJson: string): Record<string, unknown> => {
   }
 }
 
+const reviewSurfaceLabel = (item: CatalogReviewItem): string => {
+  switch (item.kind) {
+    case 'missing_on_platform':
+      return '일반 메뉴 누락'
+    case 'option_only_on_platform':
+      return '옵션 메뉴만 존재'
+    case 'option_candidate_on_platform':
+      return '옵션 유사 후보'
+    case 'canonical_platform_only':
+      return '기준 플랫폼 밖 일반 메뉴'
+    case 'option_price_outlier':
+      return '옵션 가격 차이'
+    default:
+      return '일반 메뉴 검토'
+  }
+}
+
 const buildReviewFlow = (item: CatalogReviewItem): ReviewFlow => {
   const evidence = readEvidence(item.evidenceJson)
   const canonicalName = typeof evidence.canonicalName === 'string'
@@ -71,7 +94,7 @@ const buildReviewFlow = (item: CatalogReviewItem): ReviewFlow => {
     return {
       sourceLabel: '통합 메뉴',
       sourceValue: canonicalName,
-      targetLabel: '대상 플랫폼',
+      targetLabel: '일반 메뉴 대상 플랫폼',
       targetValue: platformName,
       decisionValue: hasGeneralCandidate ? '이름 차이 연결 확인' : '일반 메뉴 추가 여부',
       detail: hasGeneralCandidate
@@ -199,10 +222,10 @@ const buildReviewGroups = (items: CatalogReviewItem[]): ReviewGroup[] => {
         key,
         label: hasGeneralCandidate
           ? `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 이름 차이 연결 후보 ${groupItems.length}개`
-          : `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 누락 메뉴 ${groupItems.length}개`,
+          : `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 일반 메뉴 누락 ${groupItems.length}개`,
         selectionLabel: hasGeneralCandidate
           ? `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 이름 차이 연결 후보`
-          : `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 누락 메뉴`,
+          : `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 일반 메뉴 누락`,
         explanation: hasGeneralCandidate
           ? '일반 메뉴 후보는 있지만 다른 통합 메뉴에 연결되어 있어 연결 결정을 확인해야 합니다.'
           : '통합 메뉴에는 있지만 해당 플랫폼에 연결되지 않은 메뉴입니다.',
@@ -212,8 +235,8 @@ const buildReviewGroups = (items: CatalogReviewItem[]): ReviewGroup[] => {
     if (first.kind === 'option_only_on_platform') {
       return {
         key,
-        label: `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 일반 메뉴 누락·옵션만 제공 ${groupItems.length}개`,
-        selectionLabel: `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 옵션만 제공`,
+        label: `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 옵션 메뉴만 존재 (일반 메뉴 없음) ${groupItems.length}개`,
+        selectionLabel: `${first.platformCode ? getPlatformLabel(first.platformCode) : '플랫폼'} 옵션 메뉴만 존재`,
         explanation: '일반 메뉴는 없고 옵션으로만 제공되는 항목입니다. 두 판매 단위는 서로 대체하지 않습니다.',
         items: groupItems
       }
@@ -230,8 +253,8 @@ const buildReviewGroups = (items: CatalogReviewItem[]): ReviewGroup[] => {
     if (first.kind === 'canonical_platform_only') {
       return {
         key,
-        label: `기준 플랫폼 밖 통합 메뉴 ${groupItems.length}개`,
-        selectionLabel: '기준 플랫폼 밖 통합 메뉴',
+        label: `기준 플랫폼 밖 일반 메뉴 ${groupItems.length}개`,
+        selectionLabel: '기준 플랫폼 밖 일반 메뉴',
         explanation: '기준 플랫폼에는 없지만 다른 플랫폼에만 연결된 통합 메뉴입니다.',
         items: groupItems
       }
@@ -299,6 +322,7 @@ export const ReviewInboxPanel = () => {
   const [reason, setReason] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [isLinking, setIsLinking] = useState(false)
+  const [isMerging, setIsMerging] = useState(false)
 
   useEffect(() => {
     const listOpen = appApi.catalogReviews?.listOpen
@@ -353,7 +377,11 @@ export const ReviewInboxPanel = () => {
     ? selectedEvidence.platformMappings.filter((mapping): mapping is Record<string, unknown> => Boolean(mapping && typeof mapping === 'object' && !Array.isArray(mapping)))
     : []
   const canonicalCandidates = Array.isArray(selectedEvidence.canonicalCandidates)
-    ? selectedEvidence.canonicalCandidates.filter((candidate): candidate is Record<string, unknown> => Boolean(candidate && typeof candidate === 'object' && !Array.isArray(candidate)))
+    ? selectedEvidence.canonicalCandidates.filter((candidate): candidate is CanonicalCandidateEvidence => {
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return false
+      const value = candidate as Record<string, unknown>
+      return typeof value.canonicalMenuId === 'string' && typeof value.canonicalName === 'string'
+    })
     : []
   const selectedResolutionItems = items.filter((item) => selectedReviewIds.has(item.reviewItemId))
   const resolutionTargets = selectedResolutionItems.length > 0
@@ -372,7 +400,7 @@ export const ReviewInboxPanel = () => {
     setScope('entity')
     setReason(
       nextResolution === 'exclude_platform'
-        ? '이 플랫폼에는 의도적으로 판매하지 않음'
+        ? '이 플랫폼에는 판매하지 않음'
         : nextResolution === 'defer'
           ? '추가 확인 후 결정'
           : '검토 결과에 따라 처리'
@@ -432,6 +460,27 @@ export const ReviewInboxPanel = () => {
       setResolution(null)
     } finally {
       setIsLinking(false)
+    }
+  }
+
+  const mergeCanonicalCandidate = async (candidate: CanonicalCandidateEvidence) => {
+    if (!selectedItem || selectedItem.kind !== 'canonical_platform_only') return
+    const mergeCanonical = appApi.catalogReviews?.mergeCanonical
+    if (!mergeCanonical) return
+
+    setIsMerging(true)
+    try {
+      await mergeCanonical({
+        reviewItemId: selectedItem.reviewItemId,
+        targetCanonicalMenuId: candidate.canonicalMenuId
+      })
+      setItems((current) => current.filter((item) => item.canonicalMenuId !== selectedItem.canonicalMenuId))
+      setSelectedReviewIds(new Set())
+      setSelectedReviewId(null)
+      setExpandedGroup(null)
+      setResolution(null)
+    } finally {
+      setIsMerging(false)
     }
   }
 
@@ -516,7 +565,7 @@ export const ReviewInboxPanel = () => {
                           />
                           <span>
                             <strong>{item.title}</strong>
-                            <small>{item.explanation}</small>
+                          <small><span className="review-surface-badge">{reviewSurfaceLabel(item)}</span>{item.explanation}</small>
                           </span>
                           <em>{`${Math.round(item.confidence * 100)}% 근거`}</em>
                         </label>
@@ -622,7 +671,26 @@ export const ReviewInboxPanel = () => {
                               </div>
                             ) : null}
                             {canonicalCandidates.length > 0 ? (
-                              <small>기준 플랫폼 후보: {canonicalCandidates.map((candidate) => typeof candidate.canonicalName === 'string' ? candidate.canonicalName : '').filter(Boolean).join(', ')}</small>
+                              <div className="review-canonical-merge-list">
+                                <strong>기존 통합 메뉴와 합치기</strong>
+                                <small>같은 일반 메뉴라면 아래 후보를 선택해 하나의 통합 메뉴로 합칠 수 있습니다.</small>
+                                {canonicalCandidates.map((candidate) => (
+                                  <div className="review-candidate-row" key={candidate.canonicalMenuId}>
+                                    <span>
+                                      <strong>{candidate.canonicalName}</strong>
+                                      <small>{typeof candidate.basePrice === 'number' ? `${candidate.basePrice.toLocaleString('ko-KR')}원` : '가격 미확인'}</small>
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="secondary-button"
+                                      disabled={isMerging}
+                                      onClick={() => void mergeCanonicalCandidate(candidate)}
+                                    >
+                                      {isMerging ? '합치는 중…' : '이 메뉴와 합치기'}
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
                             ) : null}
                           </div>
                         ) : null}
@@ -630,20 +698,23 @@ export const ReviewInboxPanel = () => {
                           {selectedResolutionItems.length > 1 ? (
                             <strong className="review-bulk-selection">{selectedResolutionItems.length}개에 함께 적용</strong>
                           ) : null}
-                          {selectedItem.recommendation === 'add_to_platform' || selectedItem.kind === 'canonical_platform_only' ? (
+                          {selectedItem.recommendation === 'add_to_platform' && selectedItem.kind !== 'canonical_platform_only' ? (
                             <button type="button" className="primary-button" disabled={!hasCompatibleRecommendations} onClick={() => beginDecision('apply_recommendation')}>
                               {selectedItem.kind === 'option_only_on_platform'
                                 ? '일반 메뉴 추가 대상으로 표시'
-                                : selectedItem.kind === 'canonical_platform_only'
-                                  ? '플랫폼 전용으로 유지 표시'
-                                  : '추가 대상으로 표시'}
+                                : '플랫폼에 일반 메뉴 추가 대상으로 표시'}
+                            </button>
+                          ) : null}
+                          {selectedItem.kind === 'canonical_platform_only' && canonicalCandidates.length === 0 ? (
+                            <button type="button" className="primary-button" disabled={!hasCompatibleRecommendations} onClick={() => beginDecision('apply_recommendation')}>
+                              플랫폼 전용으로 유지
                             </button>
                           ) : null}
                           <button type="button" className="secondary-button" disabled={!hasCompatibleRecommendations} onClick={() => beginDecision('exclude_platform')}>
-                            의도적으로 제외
+                            이 플랫폼에는 판매하지 않음
                           </button>
                           <button type="button" className="secondary-button" disabled={!hasCompatibleRecommendations} onClick={() => beginDecision('defer')}>
-                            나중에 결정
+                            나중에 확인
                           </button>
                           <details>
                             <summary>근거 보기</summary>

@@ -1,14 +1,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { listOpen, link, resolve } = vi.hoisted(() => ({
+const { listOpen, link, mergeCanonical, resolve } = vi.hoisted(() => ({
   listOpen: vi.fn(),
   link: vi.fn(),
+  mergeCanonical: vi.fn(),
   resolve: vi.fn()
 }))
 
 vi.mock('../../../src/renderer/src/lib/api', () => ({
-  appApi: { catalogReviews: { listOpen, link, resolve } }
+  appApi: { catalogReviews: { listOpen, link, mergeCanonical, resolve } }
 }))
 
 import { ReviewInboxPanel } from '../../../src/renderer/src/components/ReviewInboxPanel'
@@ -68,17 +69,34 @@ const generalCandidateItem = {
   })
 }
 
+const canonicalPlatformOnlyItem = {
+  ...missingItem(13),
+  reviewItemId: 'review-canonical-platform-only',
+  fingerprint: 'fingerprint-canonical-platform-only',
+  kind: 'canonical_platform_only' as const,
+  title: '피클 통합메뉴가 기준 플랫폼에는 없습니다',
+  recommendation: 'manual_review' as const,
+  canonicalMenuId: 'pickle-platform-only',
+  platformCode: null,
+  evidenceJson: JSON.stringify({
+    canonicalName: '피클',
+    platformMappings: [{ platformCode: 'yogiyo', platformMenuName: '피클' }],
+    canonicalCandidates: [{ canonicalMenuId: 'pickle', canonicalName: '국산피클', basePrice: 500 }]
+  })
+}
+
 describe('ReviewInboxPanel', () => {
   beforeEach(() => {
     listOpen.mockResolvedValue([missingItem(1), missingItem(2), missingItem(3)])
     link.mockResolvedValue({ ok: true, mappingId: 'mapping-1', resolvedCount: 1 })
+    mergeCanonical.mockResolvedValue({ ok: true, backupPath: null, sourceMenuId: 'pickle-platform-only', targetMenuId: 'pickle', resolvedCount: 1 })
     resolve.mockResolvedValue({ ok: true, resolvedCount: 1 })
   })
 
   it('groups matching exceptions and keeps raw evidence collapsed', async () => {
     render(<ReviewInboxPanel />)
 
-    expect(await screen.findByText('쿠팡이츠 누락 메뉴 3개')).toBeTruthy()
+    expect(await screen.findByText('쿠팡이츠 일반 메뉴 누락 3개')).toBeTruthy()
     expect(screen.getByText('추천 확인').previousElementSibling?.textContent).toBe('3')
     expect(screen.getByText('결정 필요').previousElementSibling?.textContent).toBe('0')
     expect(screen.queryByText('raw-source-1')).toBeNull()
@@ -88,9 +106,9 @@ describe('ReviewInboxPanel', () => {
     render(<ReviewInboxPanel />)
 
     expect(await screen.findByText('통합 메뉴')).toBeTruthy()
-    expect(screen.getByText('대상 플랫폼')).toBeTruthy()
+    expect(screen.getByText('일반 메뉴 대상 플랫폼')).toBeTruthy()
     expect(screen.getByText('일반 메뉴 추가 여부')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '추가 대상으로 표시' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '플랫폼에 일반 메뉴 추가 대상으로 표시' })).toBeTruthy()
   })
 
   it('labels option-only presence separately from a general-menu gap', async () => {
@@ -98,8 +116,8 @@ describe('ReviewInboxPanel', () => {
 
     render(<ReviewInboxPanel />)
 
-    expect(await screen.findByText('쿠팡이츠 일반 메뉴 누락·옵션만 제공 1개')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /쿠팡이츠 일반 메뉴 누락·옵션만 제공 1개/ }))
+    expect(await screen.findByText('쿠팡이츠 옵션 메뉴만 존재 (일반 메뉴 없음) 1개')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /쿠팡이츠 옵션 메뉴만 존재 \(일반 메뉴 없음\) 1개/ }))
     expect(screen.getByText('쿠팡이츠 유료 옵션만 제공')).toBeTruthy()
     expect(screen.getByText('일반 메뉴 추가 여부')).toBeTruthy()
     expect(screen.getByRole('button', { name: '일반 메뉴 추가 대상으로 표시' })).toBeTruthy()
@@ -132,10 +150,30 @@ describe('ReviewInboxPanel', () => {
     })
   })
 
+  it('offers a merge action when a platform-only canonical menu has a reference candidate', async () => {
+    listOpen.mockResolvedValue([canonicalPlatformOnlyItem])
+
+    render(<ReviewInboxPanel />)
+
+    expect(await screen.findByText('기준 플랫폼 밖 일반 메뉴 1개')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /기준 플랫폼 밖 일반 메뉴 1개/ }))
+    expect(screen.getByText('현재 연결된 플랫폼')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '이 메뉴와 합치기' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '이 메뉴와 합치기' }))
+
+    await waitFor(() => {
+      expect(mergeCanonical).toHaveBeenCalledWith({
+        reviewItemId: 'review-canonical-platform-only',
+        targetCanonicalMenuId: 'pickle'
+      })
+      expect(screen.queryByText('기준 플랫폼 밖 일반 메뉴 1개')).toBeNull()
+    })
+  })
+
   it('offers one-time and remembered resolution scopes', async () => {
     render(<ReviewInboxPanel />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '의도적으로 제외' }))
+    fireEvent.click(await screen.findByRole('button', { name: '이 플랫폼에는 판매하지 않음' }))
 
     expect(screen.getByLabelText('앞으로 같은 경우에도 적용')).toBeTruthy()
     expect(screen.getByLabelText('결정 이유')).toBeTruthy()
@@ -144,8 +182,8 @@ describe('ReviewInboxPanel', () => {
   it('resolves a group together only when the selected recommendations match', async () => {
     render(<ReviewInboxPanel />)
 
-    fireEvent.click(await screen.findByLabelText('쿠팡이츠 누락 메뉴 모두 선택'))
-    fireEvent.click(screen.getByRole('button', { name: '의도적으로 제외' }))
+    fireEvent.click(await screen.findByLabelText('쿠팡이츠 일반 메뉴 누락 모두 선택'))
+    fireEvent.click(screen.getByRole('button', { name: '이 플랫폼에는 판매하지 않음' }))
     fireEvent.click(screen.getByRole('button', { name: '결정 저장' }))
 
     await waitFor(() => {
@@ -153,7 +191,7 @@ describe('ReviewInboxPanel', () => {
         reviewItemIds: ['review-1', 'review-2', 'review-3'],
         resolution: 'exclude_platform'
       }))
-      expect(screen.queryByText('쿠팡이츠 누락 메뉴 3개')).toBeNull()
+      expect(screen.queryByText('쿠팡이츠 일반 메뉴 누락 3개')).toBeNull()
     })
   })
 })

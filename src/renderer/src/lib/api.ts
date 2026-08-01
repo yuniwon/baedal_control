@@ -6,6 +6,7 @@ import type {
   CatalogBootstrapActivationInput,
   CatalogBootstrapPreview,
   CatalogBootstrapPreviewInput,
+  CatalogReviewCanonicalMergeInput,
   CatalogReviewItem,
   CatalogReviewLinkInput,
   CatalogReviewResolutionInput,
@@ -114,6 +115,13 @@ declare global {
         link: (payload: CatalogReviewLinkInput) => Promise<{
           ok: true
           mappingId: string
+          resolvedCount: number
+        }>
+        mergeCanonical: (payload: CatalogReviewCanonicalMergeInput) => Promise<{
+          ok: true
+          backupPath: string | null
+          sourceMenuId: string
+          targetMenuId: string
           resolvedCount: number
         }>
         resolve: (payload: CatalogReviewResolutionInput) => Promise<{
@@ -257,6 +265,13 @@ export const appApi: AppApi = window.appApi ?? {
     link: (payload) => noopPromise({
       ok: true as const,
       mappingId: `${payload.reviewItemId}:${payload.sourceEntityId}`,
+      resolvedCount: 1
+    }),
+    mergeCanonical: (payload) => noopPromise({
+      ok: true as const,
+      backupPath: null,
+      sourceMenuId: payload.reviewItemId,
+      targetMenuId: payload.targetCanonicalMenuId,
       resolvedCount: 1
     }),
     resolve: (payload) => noopPromise({ ok: true as const, resolvedCount: payload.reviewItemIds.length })

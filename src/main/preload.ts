@@ -4,6 +4,7 @@ import type {
   CatalogBootstrapPreviewInput,
   CatalogMaintenanceApplyInput,
   CatalogReviewLinkInput,
+  CatalogReviewCanonicalMergeInput,
   CatalogReviewResolutionInput,
   PlatformCode
 } from '../shared/contracts'
@@ -63,6 +64,8 @@ export const appApi = {
   catalogReviews: {
     listOpen: () => ipcRenderer.invoke('catalogReviews:listOpen'),
     link: (payload: CatalogReviewLinkInput) => ipcRenderer.invoke('catalogReviews:link', payload),
+    mergeCanonical: (payload: CatalogReviewCanonicalMergeInput) =>
+      ipcRenderer.invoke('catalogReviews:mergeCanonical', payload),
     resolve: (payload: CatalogReviewResolutionInput) =>
       ipcRenderer.invoke('catalogReviews:resolve', payload)
   },

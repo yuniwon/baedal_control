@@ -54,6 +54,70 @@ const withoutTerminalSize = (name: string) => name.replace(/[\s(（][ML](?:[)）
 export class CatalogMaintenanceService {
   constructor(private readonly deps: CatalogMaintenanceServiceDependencies) {}
 
+  mergeCanonicalMenus(sourceMenuId: string, targetMenuId: string) {
+    if (sourceMenuId === targetMenuId) {
+      throw new Error('catalog_canonical_merge_same_menu')
+    }
+
+    const source = this.deps.db.prepare('select menu_id from menus where menu_id = ?').get(sourceMenuId)
+    const target = this.deps.db.prepare('select menu_id from menus where menu_id = ?').get(targetMenuId)
+    if (!source || !target) {
+      throw new Error('catalog_canonical_merge_menu_not_found')
+    }
+
+    const backupPath = this.deps.backupDatabase?.() ?? null
+    withSavepoint(this.deps.db, () => {
+      const sourceMappings = this.deps.db.prepare(`
+        select mapping_id mappingId, platform_code platformCode, platform_menu_id platformMenuId
+        from platform_menu_mappings
+        where menu_id = ?
+      `).all(sourceMenuId) as Array<{
+        mappingId: string
+        platformCode: PlatformCode
+        platformMenuId: string
+      }>
+      const targetSourceKeys = new Set(
+        (this.deps.db.prepare(`
+          select platform_code platformCode, platform_menu_id platformMenuId
+          from platform_menu_mappings
+          where menu_id = ?
+        `).all(targetMenuId) as Array<{
+          platformCode: PlatformCode
+          platformMenuId: string
+        }>).map((mapping) => `${mapping.platformCode}:${mapping.platformMenuId}`)
+      )
+
+      for (const mapping of sourceMappings) {
+        const sourceKey = `${mapping.platformCode}:${mapping.platformMenuId}`
+        if (targetSourceKeys.has(sourceKey)) {
+          this.deps.db.prepare('delete from platform_menu_mappings where mapping_id = ?')
+            .run(mapping.mappingId)
+          continue
+        }
+        this.deps.db.prepare(`
+          update platform_menu_mappings
+          set menu_id = ?, matched_by = 'manual', is_confirmed = 1
+          where mapping_id = ?
+        `).run(targetMenuId, mapping.mappingId)
+      }
+
+      this.deps.db.prepare('delete from menus where menu_id = ?').run(sourceMenuId)
+      this.deps.db.prepare(`
+        update catalog_workspaces
+        set canonical_version = canonical_version + 1, updated_at = current_timestamp
+        where workspace_id = 'default'
+      `).run()
+      this.deps.refreshReviews?.()
+    })
+
+    return {
+      ok: true as const,
+      backupPath,
+      sourceMenuId,
+      targetMenuId
+    }
+  }
+
   preview(referencePlatformCode: PlatformCode): CatalogMaintenancePreview {
     const menus = this.listMenus()
     const mappings = this.listMappings()

@@ -332,6 +332,19 @@ export interface CatalogReviewLinkInput {
   sourceEntityId: string
 }
 
+export interface CatalogReviewCanonicalMergeInput {
+  reviewItemId: string
+  targetCanonicalMenuId: string
+}
+
+export interface CatalogReviewCanonicalMergeResult {
+  ok: true
+  backupPath: string | null
+  sourceMenuId: string
+  targetMenuId: string
+  resolvedCount: number
+}
+
 export interface PlatformMenuCatalogRecord {
   platformCode: PlatformCode
   platformMenuId: string

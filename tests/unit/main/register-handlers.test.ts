@@ -509,6 +509,65 @@ describe('registerHandlers', () => {
     expect(resolve).toHaveBeenCalledWith(['review-link'])
   })
 
+  it('merges a platform-only canonical menu only with an explicit reference candidate', async () => {
+    const mergeCanonicalMenus = vi.fn().mockReturnValue({
+      ok: true,
+      backupPath: 'backup.db',
+      sourceMenuId: 'platform-only',
+      targetMenuId: 'reference-menu'
+    })
+    const review = {
+      reviewItemId: 'review-merge',
+      workspaceId: 'default',
+      fingerprint: 'fingerprint-merge',
+      kind: 'canonical_platform_only' as const,
+      state: 'open' as const,
+      confidence: 0.9,
+      title: '피클 통합메뉴가 기준 플랫폼에는 없습니다',
+      explanation: '기준 플랫폼 후보가 있습니다.',
+      recommendation: 'manual_review' as const,
+      evidenceJson: JSON.stringify({
+        canonicalCandidates: [{ canonicalMenuId: 'reference-menu', canonicalName: '국산피클' }]
+      }),
+      canonicalMenuId: 'platform-only',
+      platformCode: null,
+      sourceEntityId: null,
+      intentRuleId: null
+    }
+
+    registerHandlers({
+      menuRepository: { list: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      mappingRepository: { listAll: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      platformMenuRepository: { listAll: vi.fn().mockReturnValue([]) },
+      syncRunRepository: { list: vi.fn().mockReturnValue([]) },
+      credentialVault: { get: vi.fn(), set: vi.fn() } as never,
+      catalogReviewRepository: {
+        listOpen: vi.fn().mockReturnValue([review]),
+        resolve: vi.fn(),
+        setState: vi.fn()
+      },
+      catalogMaintenanceService: {
+        preview: vi.fn(),
+        apply: vi.fn(),
+        mergeCanonicalMenus
+      }
+    })
+
+    await expect(
+      electronMock.registeredHandlers.get('catalogReviews:mergeCanonical')?.({}, {
+        reviewItemId: 'review-merge',
+        targetCanonicalMenuId: 'reference-menu'
+      })
+    ).resolves.toEqual({
+      ok: true,
+      backupPath: 'backup.db',
+      sourceMenuId: 'platform-only',
+      targetMenuId: 'reference-menu',
+      resolvedCount: 1
+    })
+    expect(mergeCanonicalMenus).toHaveBeenCalledWith('platform-only', 'reference-menu')
+  })
+
   it('runs only selected items that are still executable in the latest preview', async () => {
     const run = vi.fn().mockResolvedValue({ syncRunId: 'run-1', summary: '성공 1건, 실패 0건' })
 

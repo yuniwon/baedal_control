@@ -13,6 +13,7 @@ import type {
   CatalogBootstrapPreviewInput,
   CatalogIntentRule,
   CatalogReviewItem,
+  CatalogReviewCanonicalMergeInput,
   CatalogReviewLinkInput,
   CatalogReviewResolutionInput,
   CatalogMaintenanceApplyInput,
@@ -136,6 +137,10 @@ const catalogReviewResolutionSchema = z.object({
 const catalogReviewLinkSchema = z.object({
   reviewItemId: z.string().trim().min(1),
   sourceEntityId: z.string().trim().min(1)
+}).strict()
+const catalogReviewCanonicalMergeSchema = z.object({
+  reviewItemId: z.string().trim().min(1),
+  targetCanonicalMenuId: z.string().trim().min(1)
 }).strict()
 const catalogMaintenancePreviewSchema = z.object({
   referencePlatformCode: platformCodeSchema
@@ -261,6 +266,12 @@ interface HandlerDependencies {
   catalogMaintenanceService?: {
     preview: (referencePlatformCode: PlatformCode) => CatalogMaintenancePreview
     apply: (input: CatalogMaintenanceApplyInput) => CatalogMaintenanceResult
+    mergeCanonicalMenus?: (sourceMenuId: string, targetMenuId: string) => {
+      ok: true
+      backupPath: string | null
+      sourceMenuId: string
+      targetMenuId: string
+    }
   }
   syncEngine?: { run: (items: SyncPreviewItem[]) => Promise<unknown> }
   onCredentialSaved?: (platformCode: PlatformCode) => void
@@ -635,6 +646,55 @@ export const registerHandlers = ({
     return {
       ok: true as const,
       mappingId,
+      resolvedCount: relatedReviewIds.length
+    }
+  })
+  register('catalogReviews:mergeCanonical', async (_event, payload: unknown) => {
+    if (!catalogReviewRepository || !catalogMaintenanceService?.mergeCanonicalMenus) {
+      throw new Error('catalog_reviews_unavailable')
+    }
+
+    const input = parseCatalogPayload(
+      catalogReviewCanonicalMergeSchema,
+      payload
+    ) as CatalogReviewCanonicalMergeInput
+    const openItems = catalogReviewRepository.listOpen('default')
+    const item = openItems.find((candidate) => candidate.reviewItemId === input.reviewItemId)
+    if (!item) {
+      throw new Error(`catalog_review_item_not_open:${input.reviewItemId}`)
+    }
+    if (item.kind !== 'canonical_platform_only' || !item.canonicalMenuId) {
+      throw new Error(`catalog_review_merge_unsupported:${item.reviewItemId}`)
+    }
+
+    let evidence: Record<string, unknown> = {}
+    try {
+      evidence = JSON.parse(item.evidenceJson) as Record<string, unknown>
+    } catch {
+      evidence = {}
+    }
+    const candidates = Array.isArray(evidence.canonicalCandidates)
+      ? evidence.canonicalCandidates.filter(
+          (value): value is Record<string, unknown> => Boolean(value) && typeof value === 'object'
+        )
+      : []
+    if (!candidates.some((candidate) => candidate.canonicalMenuId === input.targetCanonicalMenuId)) {
+      throw new Error(`catalog_review_merge_candidate_not_found:${input.targetCanonicalMenuId}`)
+    }
+
+    const relatedReviewIds = openItems
+      .filter((candidate) => candidate.canonicalMenuId === item.canonicalMenuId)
+      .map((candidate) => candidate.reviewItemId)
+    const result = catalogMaintenanceService.mergeCanonicalMenus(
+      item.canonicalMenuId,
+      input.targetCanonicalMenuId
+    )
+
+    return {
+      ok: true as const,
+      backupPath: result.backupPath,
+      sourceMenuId: result.sourceMenuId,
+      targetMenuId: result.targetMenuId,
       resolvedCount: relatedReviewIds.length
     }
   })
