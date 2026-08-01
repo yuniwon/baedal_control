@@ -12,7 +12,8 @@ import type {
 } from '../../shared/contracts'
 import {
   catalogCategoryIdentity,
-  cleanCatalogCategoryName
+  cleanCatalogCategoryName,
+  catalogMenuIdentity
 } from '../../shared/catalog-normalization'
 import { isSafeAutoLinkMatch, scoreMenuMatch } from './menu-matcher'
 
@@ -36,12 +37,35 @@ const OPTION_NAME_ALIASES: Record<string, string> = {
   요거트소스: '요거트'
 }
 
+const GENERAL_MENU_ALIAS_PAIRS: Array<[string, string]> = [
+  ['국산피클', '피클'],
+  ['파마산치즈가루', '치즈가루'],
+  ['달콤고구마', '고구마'],
+  ['꾸버스반반', '반반'],
+  ['고르곤졸라씬도우', '고르곤졸라씬']
+]
+
 const normalizeOptionName = (value: string) =>
   value
     .normalize('NFKC')
     .toLocaleLowerCase('ko-KR')
     .replace(/\s+/g, '')
     .replace(/\d+(?:개|조각)\s*$/u, '')
+
+const normalizeGeneralName = (value: string) => catalogMenuIdentity(value)
+
+const isEquivalentGeneralMenuName = (left: string, right: string) => {
+  if (isSafeAutoLinkMatch(left, right)) {
+    return true
+  }
+
+  const leftKey = normalizeGeneralName(left)
+  const rightKey = normalizeGeneralName(right)
+  return GENERAL_MENU_ALIAS_PAIRS.some(([first, second]) =>
+    (leftKey === first && rightKey === second) ||
+    (leftKey === second && rightKey === first)
+  )
+}
 
 const isEquivalentOptionName = (canonicalName: string, optionName: string) => {
   if (isSafeAutoLinkMatch(canonicalName, optionName)) {
@@ -168,7 +192,7 @@ const compareItems = (left: CatalogReviewItem, right: CatalogReviewItem) =>
   left.fingerprint.localeCompare(right.fingerprint)
 
 const classifyMatch = (canonicalMenus: MenuRecord[], sourceName: string) => {
-  const safe = canonicalMenus.filter((menu) => isSafeAutoLinkMatch(menu.baseName, sourceName))
+  const safe = canonicalMenus.filter((menu) => isEquivalentGeneralMenuName(menu.baseName, sourceName))
   if (safe.length === 1) {
     return {
       level: 'unique_safe' as const,
@@ -243,20 +267,23 @@ const analyzeMissingAndUnmatched = (
         continue
       }
 
-      const safeCandidates = platformSources.filter(
-        (source) =>
-          !mappedSourceKeys.has(`${platformCode}:${source.platformMenuId}`) &&
-          isSafeAutoLinkMatch(canonicalMenu.baseName, source.platformMenuName)
+      const generalCandidates = platformSources.filter((source) =>
+        isEquivalentGeneralMenuName(canonicalMenu.baseName, source.platformMenuName)
+      )
+      const safeCandidates = generalCandidates.filter(
+        (source) => !mappedSourceKeys.has(`${platformCode}:${source.platformMenuId}`)
       )
       if (safeCandidates.length === 1) {
         continue
       }
 
-      const optionMatches = findOptionPresenceMatches(
-        canonicalMenu.baseName,
-        platformCode,
-        input.logicalOptionGroups
-      )
+      const optionMatches = generalCandidates.length === 0
+        ? findOptionPresenceMatches(
+          canonicalMenu.baseName,
+          platformCode,
+          input.logicalOptionGroups
+        )
+        : []
       if (optionMatches.length > 0) {
         const optionRoles = [...new Set(optionMatches.map((match) => match.role))]
         const optionRole = optionRoles.length === 1 ? optionRoles[0] : 'mixed_selection'
@@ -308,7 +335,9 @@ const analyzeMissingAndUnmatched = (
         kind: 'missing_on_platform',
         confidence: 1,
         title: `${canonicalMenu.baseName} 메뉴가 플랫폼에 연결되지 않았습니다`,
-        explanation: '의도적인 미판매인지 누락인지 결정이 필요합니다.',
+        explanation: generalCandidates.length > 0
+          ? '이름이 다른 일반 메뉴 후보가 있지만 다른 통합 메뉴에 연결되어 있습니다.'
+          : '의도적인 미판매인지 누락인지 결정이 필요합니다.',
         recommendation: 'add_to_platform',
         canonicalMenuId: canonicalMenu.menuId,
         platformCode,
@@ -319,9 +348,10 @@ const analyzeMissingAndUnmatched = (
           fieldKey: 'presence',
           signals: {
             confirmedPlatformMappingMissing: true,
-            uniqueSafeUnmappedSourceCount: safeCandidates.length
+            uniqueSafeUnmappedSourceCount: safeCandidates.length,
+            generalMenuCandidateCount: generalCandidates.length
           },
-          sourceEntityIds: safeCandidates.map((source) => source.platformMenuId).sort()
+          sourceEntityIds: generalCandidates.map((source) => source.platformMenuId).sort()
         }
       }))
     }

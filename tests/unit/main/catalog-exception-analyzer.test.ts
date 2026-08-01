@@ -199,6 +199,26 @@ describe('analyzeCatalogExceptions', () => {
     })
   })
 
+  it('keeps a general-menu alias in the general-menu review lane', () => {
+    const items = analyze({
+      menus: [menu({ menuId: 'pickle', baseName: '국산피클', basePrice: 500 })],
+      platformMenus: [source({
+        platformMenuId: 'pickle-source',
+        platformMenuName: '피클',
+        platformMenuCurrentPrice: 500
+      })],
+      mappings: []
+    })
+
+    expect(items.some((candidate) =>
+      candidate.kind === 'missing_on_platform' && candidate.canonicalMenuId === 'pickle'
+    )).toBe(false)
+    expect(items.find((candidate) => candidate.kind === 'unmatched_platform_menu')).toMatchObject({
+      canonicalMenuId: 'pickle',
+      recommendation: 'align_to_canonical'
+    })
+  })
+
   it('keeps an included set option distinct from a paid general menu', () => {
     const items = analyze({
       menus: [menu({ menuId: 'spaghetti', baseName: '스파게티', basePrice: 7000 })],
