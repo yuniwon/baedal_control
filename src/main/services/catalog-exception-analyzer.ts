@@ -46,7 +46,16 @@ const GENERAL_MENU_ALIAS_PAIRS: Array<[string, string]> = [
   ['파마산치즈가루', '치즈가루'],
   ['달콤고구마', '고구마'],
   ['꾸버스반반', '반반'],
-  ['고르곤졸라씬도우', '고르곤졸라씬']
+  ['고르곤졸라씬도우', '고르곤졸라씬'],
+  // This store's reference menu uses branded names while some platforms
+  // collapse the same drink into a size-bundled generic name.
+  ['코카콜라', '콜라500ml125l'],
+  ['코카콜라', '콜라500ml'],
+  ['코카콜라', '콜라125l'],
+  ['칠성사이다', '사이다500ml125l'],
+  ['칠성사이다', '사이다500ml'],
+  ['칠성사이다', '사이다125l'],
+  ['치즈오븐스파게티', '스파게티']
 ]
 
 // These are deliberately suggestions, not confirmed aliases. A generic

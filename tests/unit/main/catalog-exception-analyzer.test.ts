@@ -119,6 +119,53 @@ describe('analyzeCatalogExceptions', () => {
     })
   })
 
+  it('offers explicit store aliases as merge candidates for platform-only menus', () => {
+    const items = analyze({
+      referencePlatformCode: 'baemin',
+      menus: [
+        menu({ menuId: 'cola', baseName: '코카콜라', basePrice: 1800 }),
+        menu({ menuId: 'cider', baseName: '칠성사이다', basePrice: 1800 }),
+        menu({ menuId: 'spaghetti', baseName: '치즈오븐스파게티', basePrice: 7000 }),
+        menu({ menuId: 'cola-platform-only', baseName: '콜라(500ml/1.25L)', basePrice: 1800 }),
+        menu({ menuId: 'cider-platform-only', baseName: '사이다(500ml/1.25L)', basePrice: 1800 }),
+        menu({ menuId: 'spaghetti-platform-only', baseName: '스파게티', basePrice: 7000 })
+      ],
+      platformMenus: [
+        source({ platformCode: 'baemin', platformMenuId: 'b-cola', platformMenuName: '코카콜라', platformMenuCurrentPrice: 1800 }),
+        source({ platformCode: 'baemin', platformMenuId: 'b-cider', platformMenuName: '칠성사이다', platformMenuCurrentPrice: 1800 }),
+        source({ platformCode: 'baemin', platformMenuId: 'b-spaghetti', platformMenuName: '치즈오븐스파게티', platformMenuCurrentPrice: 7000 }),
+        source({ platformCode: 'coupangeats', platformMenuId: 'c-cola', platformMenuName: '콜라(500ml/1.25L)', platformMenuCurrentPrice: 1800 }),
+        source({ platformCode: 'coupangeats', platformMenuId: 'c-cider', platformMenuName: '사이다(500ml/1.25L)', platformMenuCurrentPrice: 1800 }),
+        source({ platformCode: 'yogiyo', platformMenuId: 'y-spaghetti', platformMenuName: '스파게티', platformMenuCurrentPrice: 7000 })
+      ],
+      mappings: [
+        mapping({ mappingId: 'cola:baemin', menuId: 'cola', platformCode: 'baemin', platformMenuId: 'b-cola', platformMenuName: '코카콜라' }),
+        mapping({ mappingId: 'cider:baemin', menuId: 'cider', platformCode: 'baemin', platformMenuId: 'b-cider', platformMenuName: '칠성사이다' }),
+        mapping({ mappingId: 'spaghetti:baemin', menuId: 'spaghetti', platformCode: 'baemin', platformMenuId: 'b-spaghetti', platformMenuName: '치즈오븐스파게티' }),
+        mapping({ mappingId: 'cola-platform-only:coupangeats', menuId: 'cola-platform-only', platformCode: 'coupangeats', platformMenuId: 'c-cola', platformMenuName: '콜라(500ml/1.25L)' }),
+        mapping({ mappingId: 'cider-platform-only:coupangeats', menuId: 'cider-platform-only', platformCode: 'coupangeats', platformMenuId: 'c-cider', platformMenuName: '사이다(500ml/1.25L)' }),
+        mapping({ mappingId: 'spaghetti-platform-only:yogiyo', menuId: 'spaghetti-platform-only', platformCode: 'yogiyo', platformMenuId: 'y-spaghetti', platformMenuName: '스파게티' })
+      ]
+    })
+
+    expect(items.filter((item) => item.kind === 'canonical_platform_only')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          canonicalMenuId: 'cola-platform-only',
+          evidenceJson: expect.stringContaining('"canonicalMenuId":"cola"')
+        }),
+        expect.objectContaining({
+          canonicalMenuId: 'cider-platform-only',
+          evidenceJson: expect.stringContaining('"canonicalMenuId":"cider"')
+        }),
+        expect.objectContaining({
+          canonicalMenuId: 'spaghetti-platform-only',
+          evidenceJson: expect.stringContaining('"canonicalMenuId":"spaghetti"')
+        })
+      ])
+    )
+  })
+
   it('marks a mapped price outlier as a decision instead of silently aligning it', () => {
     const item = analyze({
       menus: [menu()],
