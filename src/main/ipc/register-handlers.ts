@@ -20,6 +20,9 @@ import type {
   CatalogMaintenancePreview,
   CatalogMaintenanceResult,
   CatalogProjectionPreview,
+  CatalogPublicationPreview,
+  CatalogPublicationPreviewInput,
+  CatalogPublicationTargetInput,
   CatalogWorkspaceRecord,
   PlatformImportResult,
   MenuRecord,
@@ -154,6 +157,22 @@ const catalogMaintenanceApplySchema = z.object({
 const catalogProjectionPreviewSchema = z.object({
   referencePlatformCode: platformCodeSchema
 }).strict()
+const catalogPublicationPreviewSchema = z.object({
+  menu: z.object({
+    menuId: z.string().trim().min(1),
+    baseName: z.string().trim().min(1),
+    basePrice: z.number().int().nonnegative(),
+    basePriceVariants: z.unknown().nullable().optional()
+  }).strict(),
+  targetPlatformCodes: z.array(platformCodeSchema).min(1)
+}).strict()
+const catalogPublicationTargetSchema = z.object({
+  menuId: z.string().trim().min(1),
+  targets: z.array(z.object({
+    platformCode: platformCodeSchema,
+    intent: z.enum(['publish', 'exclude'])
+  }).strict())
+}).strict()
 
 const parseCatalogPayload = <T>(schema: z.ZodType<T>, payload: unknown): T => {
   const result = schema.safeParse(payload)
@@ -280,6 +299,15 @@ interface HandlerDependencies {
   catalogProjectionService?: {
     preview: (referencePlatformCode: PlatformCode) => CatalogProjectionPreview
   }
+  catalogPublicationService?: {
+    preview: (input: CatalogPublicationPreviewInput) => CatalogPublicationPreview
+  }
+  catalogPublicationTargetRepository?: {
+    replaceForMenu: (
+      menuId: string,
+      targets: CatalogPublicationTargetInput['targets']
+    ) => void
+  }
   syncEngine?: { run: (items: SyncPreviewItem[]) => Promise<unknown> }
   onCredentialSaved?: (platformCode: PlatformCode) => void
   createId?: () => string
@@ -313,6 +341,8 @@ export const registerHandlers = ({
   catalogIntentRuleRepository,
   catalogMaintenanceService,
   catalogProjectionService,
+  catalogPublicationService,
+  catalogPublicationTargetRepository,
   syncEngine,
   onCredentialSaved,
   createId,
@@ -720,6 +750,17 @@ export const registerHandlers = ({
     if (!catalogProjectionService) throw new Error('catalog_projection_unavailable')
     const input = parseCatalogPayload(catalogProjectionPreviewSchema, payload)
     return catalogProjectionService.preview(input.referencePlatformCode)
+  })
+  register('catalogPublication:preview', async (_event, payload: unknown) => {
+    if (!catalogPublicationService) throw new Error('catalog_publication_unavailable')
+    const input = parseCatalogPayload(catalogPublicationPreviewSchema, payload)
+    return catalogPublicationService.preview(input as CatalogPublicationPreviewInput)
+  })
+  register('catalogPublication:set-targets', async (_event, payload: unknown) => {
+    if (!catalogPublicationTargetRepository) throw new Error('catalog_publication_unavailable')
+    const input = parseCatalogPayload(catalogPublicationTargetSchema, payload)
+    catalogPublicationTargetRepository.replaceForMenu(input.menuId, input.targets)
+    return { ok: true as const }
   })
   register('agentReports:getNextActionPlan', async (_event, filters?: Record<string, unknown>) =>
     agentOperationsReportService?.getNextActionPlan(filters ?? {}) ?? {

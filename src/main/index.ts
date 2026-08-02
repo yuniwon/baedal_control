@@ -9,6 +9,7 @@ import { BrowserInspectionSnapshotRepository } from './repositories/browser-insp
 import { CatalogWorkspaceRepository } from './repositories/catalog-workspace-repository'
 import { CatalogReviewRepository } from './repositories/catalog-review-repository'
 import { CatalogIntentRuleRepository } from './repositories/catalog-intent-rule-repository'
+import { CatalogPublicationTargetRepository } from './repositories/catalog-publication-target-repository'
 import { MappingRepository } from './repositories/mapping-repository'
 import { MenuRepository } from './repositories/menu-repository'
 import { PlatformImportChangeRepository } from './repositories/platform-import-change-repository'
@@ -41,6 +42,7 @@ import { createCatalogImportOrchestrator } from './services/catalog-import-orche
 import { CatalogBootstrapService } from './services/catalog-bootstrap-service'
 import { CatalogMaintenanceService } from './services/catalog-maintenance-service'
 import { CatalogProjectionService } from './services/catalog-projection-service'
+import { CatalogPublicationService } from './services/catalog-publication-service'
 import { analyzeCatalogExceptions } from './services/catalog-exception-analyzer'
 import { applyIntentRules } from './services/catalog-intent-policy'
 import { AgentOperationsReportService } from './services/agent-operations-report-service'
@@ -111,6 +113,7 @@ app.whenReady().then(async () => {
   const catalogWorkspaceRepository = new CatalogWorkspaceRepository(db)
   const catalogReviewRepository = new CatalogReviewRepository(db)
   const catalogIntentRuleRepository = new CatalogIntentRuleRepository(db)
+  const catalogPublicationTargetRepository = new CatalogPublicationTargetRepository(db)
   const browserInspectionSnapshotRepository = new BrowserInspectionSnapshotRepository(db)
   const platformSessionStateRepository = new PlatformSessionStateRepository(db)
   const platformAuthPreferenceRepository = new PlatformAuthPreferenceRepository(db)
@@ -154,6 +157,9 @@ app.whenReady().then(async () => {
     mappingRepository,
     platformMenuRepository,
     platformOptionGroupRepository
+  })
+  const catalogPublicationService = new CatalogPublicationService({
+    mappingRepository
   })
   const browserInspectorBridge = new BrowserInspectorBridge(browserInspectionSnapshotRepository, {
     extensionPath: join(process.cwd(), 'browser-extension', 'delivery-menu-inspector')
@@ -417,6 +423,8 @@ app.whenReady().then(async () => {
     catalogIntentRuleRepository,
     catalogMaintenanceService,
     catalogProjectionService,
+    catalogPublicationService,
+    catalogPublicationTargetRepository,
     syncEngine,
     onCredentialSaved: registerPlatformAdapter
   })

@@ -469,6 +469,35 @@ describe('registerHandlers', () => {
     })).rejects.toThrow('invalid_catalog_request')
   })
 
+  it('validates publication planning and persists per-platform targets', async () => {
+    const preview = vi.fn().mockReturnValue({ menuId: 'menu-1', items: [], summary: {} })
+    const replaceForMenu = vi.fn()
+    registerHandlers({
+      menuRepository: { list: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      mappingRepository: { listAll: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      platformMenuRepository: { listAll: vi.fn().mockReturnValue([]) },
+      syncRunRepository: { list: vi.fn().mockReturnValue([]) },
+      credentialVault: { get: vi.fn(), set: vi.fn() } as never,
+      catalogPublicationService: { preview },
+      catalogPublicationTargetRepository: { replaceForMenu }
+    })
+
+    await electronMock.registeredHandlers.get('catalogPublication:preview')?.({}, {
+      menu: { menuId: 'menu-1', baseName: '새 메뉴', basePrice: 12000, basePriceVariants: null },
+      targetPlatformCodes: ['baemin', 'yogiyo']
+    })
+    expect(preview).toHaveBeenCalledWith(expect.objectContaining({
+      menu: expect.objectContaining({ menuId: 'menu-1' }),
+      targetPlatformCodes: ['baemin', 'yogiyo']
+    }))
+
+    await electronMock.registeredHandlers.get('catalogPublication:set-targets')?.({}, {
+      menuId: 'menu-1',
+      targets: [{ platformCode: 'baemin', intent: 'publish' }]
+    })
+    expect(replaceForMenu).toHaveBeenCalledWith('menu-1', [{ platformCode: 'baemin', intent: 'publish' }])
+  })
+
   it('links a selected general-menu candidate and resolves its review', async () => {
     const upsert = vi.fn()
     const resolve = vi.fn()

@@ -181,6 +181,15 @@ export const migrate = (db: DatabaseConnection) => {
       updated_at text not null default current_timestamp
     );
 
+    create table if not exists catalog_publication_targets (
+      menu_id text not null,
+      platform_code text not null,
+      intent text not null,
+      updated_at text not null default current_timestamp,
+      primary key (menu_id, platform_code),
+      foreign key(menu_id) references menus(menu_id)
+    );
+
     create table if not exists platform_session_states (
       workspace_id text not null,
       platform_code text not null,

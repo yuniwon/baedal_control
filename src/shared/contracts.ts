@@ -15,6 +15,7 @@ export const appApiKeys = [
   'catalogBootstrap',
   'catalogReviews',
   'catalogMaintenance',
+  'catalogPublication',
   'agentReports',
   'browserInspectionSnapshots',
   'browserInspector',
@@ -143,6 +144,57 @@ export interface CatalogProjectionPreview {
   menuCount: number
   items: CatalogProjectionItem[]
   platforms: CatalogProjectionPlatformSummary[]
+}
+
+export type CatalogPublicationIntent = 'publish' | 'exclude'
+export type CatalogPublicationDisposition =
+  | 'already_connected'
+  | 'automatic'
+  | 'manual'
+  | 'blocked'
+
+export interface CatalogPublicationPreviewInput {
+  menu: Pick<MenuRecord, 'menuId' | 'baseName' | 'basePrice' | 'basePriceVariants'>
+  targetPlatformCodes: PlatformCode[]
+}
+
+export interface CatalogPublicationTargetInput {
+  menuId: string
+  targets: Array<{
+    platformCode: PlatformCode
+    intent: CatalogPublicationIntent
+  }>
+}
+
+export interface CatalogPublicationPlanItem {
+  platformCode: PlatformCode
+  intent: CatalogPublicationIntent
+  disposition: CatalogPublicationDisposition
+  canAutoCreate: boolean
+  title: string
+  detail: string
+  blockers: string[]
+}
+
+export interface CatalogPublicationPreview {
+  menuId: string
+  menuName: string
+  generatedAt: string
+  items: CatalogPublicationPlanItem[]
+  summary: {
+    total: number
+    automatic: number
+    manual: number
+    blocked: number
+    alreadyConnected: number
+  }
+}
+
+export interface CatalogPublicationTargetRecord {
+  menuId: string
+  platformCode: PlatformCode
+  intent: CatalogPublicationIntent
+  updatedAt?: string
 }
 
 export interface CatalogReviewItem {

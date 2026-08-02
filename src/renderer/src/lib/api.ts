@@ -14,6 +14,9 @@ import type {
   CatalogMaintenancePreview,
   CatalogMaintenanceResult,
   CatalogProjectionPreview,
+  CatalogPublicationPreview,
+  CatalogPublicationPreviewInput,
+  CatalogPublicationTargetInput,
   CatalogWorkspaceRecord,
   LogicalOptionGroupRecord,
   ManagedChromeSessionStatus,
@@ -134,6 +137,10 @@ declare global {
         preview: (referencePlatformCode: PlatformCode) => Promise<CatalogMaintenancePreview>
         apply: (payload: CatalogMaintenanceApplyInput) => Promise<CatalogMaintenanceResult>
         projectionPreview: (referencePlatformCode: PlatformCode) => Promise<CatalogProjectionPreview>
+      }
+      catalogPublication: {
+        preview: (payload: CatalogPublicationPreviewInput) => Promise<CatalogPublicationPreview>
+        setTargets: (payload: CatalogPublicationTargetInput) => Promise<{ ok: true }>
       }
       agentReports: {
         getNextActionPlan: (filters?: unknown) => Promise<AgentReportEnvelope<AgentActionPlanReport>>
@@ -306,6 +313,20 @@ export const appApi: AppApi = window.appApi ?? {
         items: [],
         platforms: []
       } as CatalogProjectionPreview)
+  },
+  catalogPublication: {
+    preview: (payload) =>
+      globalThis.window?.appApi?.catalogPublication.preview(payload)
+      ?? noopPromise({
+        menuId: payload.menu.menuId,
+        menuName: payload.menu.baseName,
+        generatedAt: '',
+        items: [],
+        summary: { total: 0, automatic: 0, manual: 0, blocked: 0, alreadyConnected: 0 }
+      } as CatalogPublicationPreview),
+    setTargets: (payload) =>
+      globalThis.window?.appApi?.catalogPublication.setTargets(payload)
+      ?? noopPromise({ ok: true as const })
   },
   agentReports: {
     getNextActionPlan: () =>

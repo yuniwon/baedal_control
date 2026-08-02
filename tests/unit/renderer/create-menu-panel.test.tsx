@@ -13,6 +13,8 @@ describe('CreateMenuPanel', () => {
 
     fireEvent.change(screen.getByLabelText('메뉴명'), { target: { value: '새 피자' } })
     fireEvent.change(screen.getByLabelText('기준 가격'), { target: { value: '22000' } })
+    fireEvent.click(screen.getByRole('button', { name: '등록 방식 확인' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: '메뉴 만들기' })).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: '메뉴 만들기' }))
     await waitFor(() => expect(create).toHaveBeenCalledOnce())
     expect(create.mock.calls[0][0]).toMatchObject({ baseName: '새 피자', basePrice: 22000 })

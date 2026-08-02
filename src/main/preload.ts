@@ -4,6 +4,9 @@ import type {
   CatalogBootstrapPreviewInput,
   CatalogMaintenanceApplyInput,
   CatalogProjectionPreview,
+  CatalogPublicationPreview,
+  CatalogPublicationPreviewInput,
+  CatalogPublicationTargetInput,
   CatalogReviewLinkInput,
   CatalogReviewCanonicalMergeInput,
   CatalogReviewResolutionInput,
@@ -77,6 +80,12 @@ export const appApi = {
       ipcRenderer.invoke('catalogMaintenance:apply', payload),
     projectionPreview: (referencePlatformCode: PlatformCode): Promise<CatalogProjectionPreview> =>
       ipcRenderer.invoke('catalogProjection:preview', { referencePlatformCode })
+  },
+  catalogPublication: {
+    preview: (payload: CatalogPublicationPreviewInput): Promise<CatalogPublicationPreview> =>
+      ipcRenderer.invoke('catalogPublication:preview', payload),
+    setTargets: (payload: CatalogPublicationTargetInput) =>
+      ipcRenderer.invoke('catalogPublication:set-targets', payload)
   },
   agentReports: {
     getNextActionPlan: (filters?: unknown) =>

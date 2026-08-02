@@ -33,6 +33,7 @@ describe('preload contract', () => {
       'catalogBootstrap',
       'catalogReviews',
       'catalogMaintenance',
+      'catalogPublication',
       'agentReports',
       'browserInspectionSnapshots',
       'browserInspector',
@@ -51,6 +52,7 @@ describe('preload contract', () => {
     expect(Object.keys(appApi.catalogBootstrap)).toEqual(['preview', 'activate'])
     expect(Object.keys(appApi.catalogReviews)).toEqual(['listOpen', 'link', 'mergeCanonical', 'resolve'])
     expect(Object.keys(appApi.catalogMaintenance)).toEqual(['preview', 'apply', 'projectionPreview'])
+    expect(Object.keys(appApi.catalogPublication)).toEqual(['preview', 'setTargets'])
 
     await appApi.catalogWorkspace.get()
     await appApi.catalogBootstrap.preview({

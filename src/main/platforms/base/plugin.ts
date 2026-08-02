@@ -1,5 +1,6 @@
 import type {
   CanonicalMenuProjectionInput,
+  MenuRecord,
   PlatformAuthProbe,
   PlatformProjectionResult,
   PlatformWriteVerification,
@@ -33,6 +34,20 @@ export interface PlatformCatalogWriter {
   apply(item: SyncPreviewItem): Promise<void>
 }
 
+export interface PlatformCatalogCreateInput {
+  menu: MenuRecord
+  targetPlatformCode: PlatformCode
+}
+
+export interface PlatformCatalogCreateResult {
+  platformMenuId: string
+  platformMenuName: string
+}
+
+export interface PlatformCatalogCreator {
+  create(input: PlatformCatalogCreateInput): Promise<PlatformCatalogCreateResult>
+}
+
 export interface PlatformWriteVerifier {
   verify(item: SyncPreviewItem): Promise<PlatformWriteVerification>
 }
@@ -44,5 +59,6 @@ export interface PlatformPlugin {
   reader?: PlatformCatalogReader
   projector?: PlatformCatalogProjector
   writer?: PlatformCatalogWriter
+  creator?: PlatformCatalogCreator
   verifier?: PlatformWriteVerifier
 }

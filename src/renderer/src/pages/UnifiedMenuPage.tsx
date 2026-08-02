@@ -5,7 +5,8 @@ import type {
   CatalogProjectionPreview,
   MenuRecord,
   PlatformMenuCatalogRecord,
-  PlatformMenuMappingRecord
+  PlatformMenuMappingRecord,
+  PlatformCode
 } from '../../../shared/contracts'
 import { getPlatformLabel, PLATFORM_CODES } from '../../../shared/platforms'
 import type { MenuRow } from '../components/MenuTable'
@@ -136,8 +137,15 @@ export const UnifiedMenuPage = () => {
     await appApi.menus.save(payload)
     setItems((current) => deriveCatalogMenuItems(current.map((item) => item.menuId === next.menuId ? next : item)))
   }
-  const create = async (menu: MenuRecord) => {
+  const create = async (menu: MenuRecord, targetPlatformCodes: PlatformCode[]) => {
     await appApi.menus.save(menu)
+    await appApi.catalogPublication.setTargets({
+      menuId: menu.menuId,
+      targets: PLATFORM_CODES.map((platformCode) => ({
+        platformCode,
+        intent: targetPlatformCodes.includes(platformCode) ? 'publish' : 'exclude'
+      }))
+    })
     const [next] = deriveCatalogMenuItems([{ ...menu, categoryName: '미분류', sources: [] }])
     setItems((current) => [...current, next])
     setCreating(false)
@@ -265,7 +273,7 @@ export const UnifiedMenuPage = () => {
             <div className="menu-workspace">
               <CategoryRail categories={categories} items={items} onSelect={setCategory} selected={category} />
               <MenuListPane items={visible} onSelect={selectMenu} selectedId={selectedId} />
-              {creating ? <CreateMenuPanel onCancel={() => setCreating(false)} onCreate={create} /> : <MenuDetailPane item={selected} onClose={() => { if (canLeaveDraft()) setSelectedId(null) }} onDirtyChange={setDetailDirty} onSave={save} />}
+              {creating ? <CreateMenuPanel onCancel={() => setCreating(false)} onCreate={create} onPreviewPublication={(menu, targetPlatformCodes) => appApi.catalogPublication.preview({ menu, targetPlatformCodes })} /> : <MenuDetailPane item={selected} onClose={() => { if (canLeaveDraft()) setSelectedId(null) }} onDirtyChange={setDetailDirty} onSave={save} />}
             </div>
           )}
         </>

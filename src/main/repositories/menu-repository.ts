@@ -38,6 +38,10 @@ export class MenuRepository {
 
   remove(menuId: string) {
     this.db.prepare(`
+      delete from catalog_publication_targets
+      where menu_id = ?
+    `).run(menuId)
+    this.db.prepare(`
       delete from menus
       where menu_id = ?
     `).run(menuId)

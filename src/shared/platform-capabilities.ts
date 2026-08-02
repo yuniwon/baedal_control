@@ -19,6 +19,7 @@ export interface PlatformCapabilityManifest {
   }
   catalog: {
     menus: boolean
+    menuCreation: 'verified' | 'inspection_only' | 'unsupported'
     optionGroups: boolean
     optionBindings: boolean
     images: boolean
@@ -67,35 +68,35 @@ const manifest = (
 export const PLATFORM_CAPABILITIES: Record<PlatformCode, PlatformCapabilityManifest> = {
   baemin: manifest(
     { read: true, project: true, write: true, verify: true },
-    { menus: true, optionGroups: true, optionBindings: true, images: false, promotions: false },
+    { menus: true, menuCreation: 'inspection_only', optionGroups: true, optionBindings: true, images: false, promotions: false },
     reusableCredentialStrategies,
     ['^/menu(?:/|$)']
   ),
   yogiyo: manifest(
     { read: true, project: true, write: false, verify: true },
-    { menus: true, optionGroups: true, optionBindings: true, images: false, promotions: false },
+    { menus: true, menuCreation: 'unsupported', optionGroups: true, optionBindings: true, images: false, promotions: false },
     reusableCredentialStrategies,
     ['^/(?:menu|option)(?:/|$)']
   ),
   coupangeats: manifest(
     { read: true, project: true, write: true, verify: true },
-    { menus: true, optionGroups: true, optionBindings: true, images: false, promotions: false },
+    { menus: true, menuCreation: 'unsupported', optionGroups: true, optionBindings: true, images: false, promotions: false },
     reusablePasswordManagerStrategies,
     ['^/merchant/management(?:/|$)']
   ),
   ddangyo: manifest(
     { read: true, project: true, write: true, verify: true },
-    { menus: true, optionGroups: true, optionBindings: true, images: false, promotions: false }
+    { menus: true, menuCreation: 'unsupported', optionGroups: true, optionBindings: true, images: false, promotions: false }
   ),
   deliveryspecial: manifest(
     { read: true, project: true, write: false, verify: true },
-    { menus: true, optionGroups: true, optionBindings: true, images: false, promotions: false },
+    { menus: true, menuCreation: 'unsupported', optionGroups: true, optionBindings: true, images: false, promotions: false },
     reusableCredentialStrategies,
     ['^/(?:shop|product|info|order|custom)(?:/|$)']
   ),
   naverorder: manifest(
     { read: false, project: true, write: false, verify: false },
-    { menus: false, optionGroups: false, optionBindings: false, images: false, promotions: false },
+    { menus: false, menuCreation: 'unsupported', optionGroups: false, optionBindings: false, images: false, promotions: false },
     [
       'reuse_managed_session',
       'reuse_extension_session',

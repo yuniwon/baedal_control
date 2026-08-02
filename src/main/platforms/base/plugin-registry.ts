@@ -43,4 +43,12 @@ export class PlatformPluginRegistry {
     }
     return plugin.writer
   }
+
+  getCreator(platformCode: PlatformCode) {
+    const plugin = this.get(platformCode)
+    if (plugin.capabilities.catalog.menuCreation !== 'verified' || !plugin.creator) {
+      throw new Error(`platform_menu_creation_unavailable:${platformCode}`)
+    }
+    return plugin.creator
+  }
 }
