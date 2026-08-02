@@ -19,6 +19,7 @@ import type {
   CatalogMaintenanceApplyInput,
   CatalogMaintenancePreview,
   CatalogMaintenanceResult,
+  CatalogProjectionPreview,
   CatalogWorkspaceRecord,
   PlatformImportResult,
   MenuRecord,
@@ -150,6 +151,9 @@ const catalogMaintenanceApplySchema = z.object({
   acceptedCandidateIds: z.array(z.string().trim().min(1)),
   excludeHiddenOnlyMenus: z.boolean()
 }).strict()
+const catalogProjectionPreviewSchema = z.object({
+  referencePlatformCode: platformCodeSchema
+}).strict()
 
 const parseCatalogPayload = <T>(schema: z.ZodType<T>, payload: unknown): T => {
   const result = schema.safeParse(payload)
@@ -273,6 +277,9 @@ interface HandlerDependencies {
       targetMenuId: string
     }
   }
+  catalogProjectionService?: {
+    preview: (referencePlatformCode: PlatformCode) => CatalogProjectionPreview
+  }
   syncEngine?: { run: (items: SyncPreviewItem[]) => Promise<unknown> }
   onCredentialSaved?: (platformCode: PlatformCode) => void
   createId?: () => string
@@ -305,6 +312,7 @@ export const registerHandlers = ({
   catalogReviewRepository,
   catalogIntentRuleRepository,
   catalogMaintenanceService,
+  catalogProjectionService,
   syncEngine,
   onCredentialSaved,
   createId,
@@ -707,6 +715,11 @@ export const registerHandlers = ({
     if (!catalogMaintenanceService) throw new Error('catalog_maintenance_unavailable')
     const input = parseCatalogPayload(catalogMaintenanceApplySchema, payload)
     return catalogMaintenanceService.apply(input)
+  })
+  register('catalogProjection:preview', async (_event, payload: unknown) => {
+    if (!catalogProjectionService) throw new Error('catalog_projection_unavailable')
+    const input = parseCatalogPayload(catalogProjectionPreviewSchema, payload)
+    return catalogProjectionService.preview(input.referencePlatformCode)
   })
   register('agentReports:getNextActionPlan', async (_event, filters?: Record<string, unknown>) =>
     agentOperationsReportService?.getNextActionPlan(filters ?? {}) ?? {

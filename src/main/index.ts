@@ -40,6 +40,7 @@ import { BrowserInspectorBridge } from './services/browser-inspector-bridge'
 import { createCatalogImportOrchestrator } from './services/catalog-import-orchestrator'
 import { CatalogBootstrapService } from './services/catalog-bootstrap-service'
 import { CatalogMaintenanceService } from './services/catalog-maintenance-service'
+import { CatalogProjectionService } from './services/catalog-projection-service'
 import { analyzeCatalogExceptions } from './services/catalog-exception-analyzer'
 import { applyIntentRules } from './services/catalog-intent-policy'
 import { AgentOperationsReportService } from './services/agent-operations-report-service'
@@ -147,6 +148,12 @@ app.whenReady().then(async () => {
       return backupPath
     },
     refreshReviews: refreshCatalogReviews
+  })
+  const catalogProjectionService = new CatalogProjectionService({
+    menuRepository,
+    mappingRepository,
+    platformMenuRepository,
+    platformOptionGroupRepository
   })
   const browserInspectorBridge = new BrowserInspectorBridge(browserInspectionSnapshotRepository, {
     extensionPath: join(process.cwd(), 'browser-extension', 'delivery-menu-inspector')
@@ -409,6 +416,7 @@ app.whenReady().then(async () => {
     catalogReviewRepository,
     catalogIntentRuleRepository,
     catalogMaintenanceService,
+    catalogProjectionService,
     syncEngine,
     onCredentialSaved: registerPlatformAdapter
   })

@@ -13,6 +13,7 @@ import type {
   CatalogMaintenanceApplyInput,
   CatalogMaintenancePreview,
   CatalogMaintenanceResult,
+  CatalogProjectionPreview,
   CatalogWorkspaceRecord,
   LogicalOptionGroupRecord,
   ManagedChromeSessionStatus,
@@ -132,6 +133,7 @@ declare global {
       catalogMaintenance: {
         preview: (referencePlatformCode: PlatformCode) => Promise<CatalogMaintenancePreview>
         apply: (payload: CatalogMaintenanceApplyInput) => Promise<CatalogMaintenanceResult>
+        projectionPreview: (referencePlatformCode: PlatformCode) => Promise<CatalogProjectionPreview>
       }
       agentReports: {
         getNextActionPlan: (filters?: unknown) => Promise<AgentReportEnvelope<AgentActionPlanReport>>
@@ -294,7 +296,16 @@ export const appApi: AppApi = window.appApi ?? {
         normalizedCategoryCount: 0,
         refreshedReferencePriceCount: 0,
         remainingMenuCount: 0
-      } as CatalogMaintenanceResult)
+      } as CatalogMaintenanceResult),
+    projectionPreview: (referencePlatformCode) =>
+      globalThis.window?.appApi?.catalogMaintenance.projectionPreview(referencePlatformCode)
+      ?? noopPromise({
+        referencePlatformCode,
+        generatedAt: '',
+        menuCount: 0,
+        items: [],
+        platforms: []
+      } as CatalogProjectionPreview)
   },
   agentReports: {
     getNextActionPlan: () =>

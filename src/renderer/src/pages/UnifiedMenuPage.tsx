@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   CatalogMaintenancePreview,
   CatalogMaintenanceResult,
+  CatalogProjectionPreview,
   MenuRecord,
   PlatformMenuCatalogRecord,
   PlatformMenuMappingRecord
 } from '../../../shared/contracts'
+import { getPlatformLabel, PLATFORM_CODES } from '../../../shared/platforms'
 import type { MenuRow } from '../components/MenuTable'
 import { CategoryRail } from '../components/menu-workspace/CategoryRail'
 import { MenuDetailPane } from '../components/menu-workspace/MenuDetailPane'
@@ -73,6 +75,23 @@ const filterLabels: Array<{ value: CatalogMenuFilter; label: string }> = [
   { value: 'excluded', label: '관리 제외' }
 ]
 
+const projectionModeLabels = {
+  price_rows: '가격행 사용',
+  required_size_option: '필수 사이즈 옵션',
+  separate_menus: '플랫폼 메뉴 분리',
+  single_menu: '단일 메뉴',
+  unverified: '확인 필요'
+} as const
+
+const projectionStatusLabels = {
+  ready: '구조 확인',
+  review: '검토 필요',
+  blocked: '수집 필요'
+} as const
+
+const projectionAmount = (amount: number | null | undefined) =>
+  amount === null || amount === undefined ? '미정' : `${amount.toLocaleString()}원`
+
 export const UnifiedMenuPage = () => {
   const [items, setItems] = useState<CatalogMenuListItem[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -88,6 +107,9 @@ export const UnifiedMenuPage = () => {
   const [maintenanceResult, setMaintenanceResult] = useState<CatalogMaintenanceResult | null>(null)
   const [maintenanceState, setMaintenanceState] = useState<'idle' | 'loading' | 'applying'>('idle')
   const [maintenanceError, setMaintenanceError] = useState<string | null>(null)
+  const [projectionPreview, setProjectionPreview] = useState<CatalogProjectionPreview | null>(null)
+  const [projectionState, setProjectionState] = useState<'idle' | 'loading'>('idle')
+  const [projectionError, setProjectionError] = useState<string | null>(null)
 
   const loadCatalog = useCallback(async () => {
     const [menus, mappings, platformMenus] = await Promise.all([
@@ -160,12 +182,27 @@ export const UnifiedMenuPage = () => {
       setMaintenanceState('idle')
     }
   }
+  const previewProjection = async () => {
+    setProjectionState('loading')
+    setProjectionError(null)
+    try {
+      setProjectionPreview(await appApi.catalogMaintenance.projectionPreview('baemin'))
+    } catch (reason) {
+      setProjectionError(reason instanceof Error ? reason.message : '가격 구조를 확인하지 못했습니다.')
+    } finally {
+      setProjectionState('idle')
+    }
+  }
+  const projectionGroups = useMemo(() => PLATFORM_CODES.map((platformCode) => ({
+    platformCode,
+    items: projectionPreview?.items.filter((item) => item.platformCode === platformCode) ?? []
+  })).filter((group) => group.items.length > 0), [projectionPreview])
 
   return (
     <section className="page catalog-page">
       <header className="catalog-header">
         <div><span className="eyebrow">메뉴 운영의 기준</span><h1>통합메뉴</h1><p>한 번 정리한 메뉴를 각 배달앱과 비교하고 안전하게 관리합니다.</p></div>
-        <div className="catalog-header-actions"><button className="secondary-button" disabled={maintenanceState !== 'idle'} onClick={() => void previewMaintenance()} type="button">{maintenanceState === 'loading' ? '확인 중…' : '데이터 정리'}</button><button className="primary-button" onClick={() => { if (canLeaveDraft()) { setSelectedId(null); setCreating(true) } }} type="button">+ 새 메뉴</button></div>
+        <div className="catalog-header-actions"><button className="secondary-button" disabled={maintenanceState !== 'idle'} onClick={() => void previewMaintenance()} type="button">{maintenanceState === 'loading' ? '확인 중…' : '데이터 정리'}</button><button className="secondary-button" disabled={projectionState !== 'idle'} onClick={() => void previewProjection()} type="button">{projectionState === 'loading' ? '구조 확인 중…' : '가격 구조 미리보기'}</button><button className="primary-button" onClick={() => { if (canLeaveDraft()) { setSelectedId(null); setCreating(true) } }} type="button">+ 새 메뉴</button></div>
       </header>
       {maintenancePreview && (
         <section className="catalog-maintenance-panel" aria-label="통합메뉴 데이터 정리">
@@ -185,6 +222,38 @@ export const UnifiedMenuPage = () => {
           )}
         </section>
       )}
+      {projectionPreview && (
+        <section className="catalog-projection-panel" aria-label="플랫폼별 가격 구조 미리보기">
+          <header>
+            <div><span className="eyebrow">저장 전 확인</span><h2>플랫폼별 가격 구조 미리보기</h2></div>
+            <button aria-label="가격 구조 미리보기 닫기" className="icon-button" onClick={() => setProjectionPreview(null)} type="button">×</button>
+          </header>
+          <p>통합메뉴 가격을 실제 플랫폼의 가격행·필수 옵션·분리 메뉴 중 어떤 방식으로 표현할지 보여줍니다. 이 화면은 원본이나 플랫폼 메뉴를 변경하지 않습니다.</p>
+          <div className="projection-platform-grid">
+            {projectionPreview.platforms.map((platform) => <article className="projection-platform-card" key={platform.platformCode}>
+              <strong>{getPlatformLabel(platform.platformCode)}</strong>
+              <span>{platform.itemCount}개 대상</span>
+              <div><b className="projection-ready">{platform.readyCount} 확인</b><b className="projection-review">{platform.reviewCount} 검토</b>{platform.blockedCount > 0 && <b className="projection-blocked">{platform.blockedCount} 수집 필요</b>}</div>
+              <small>{platform.note}</small>
+            </article>)}
+          </div>
+          {projectionGroups.length > 0 && <div className="projection-groups">
+            {projectionGroups.map((group) => <section key={group.platformCode}>
+              <h3>{getPlatformLabel(group.platformCode)} <small>{group.items.length}개</small></h3>
+              <ul>
+                {group.items.map((item) => <li key={`${item.platformCode}:${item.menuId}`}>
+                  <div className="projection-item-heading"><strong>{item.menuName}</strong><span className={`projection-status ${item.status}`}>{projectionStatusLabels[item.status]}</span></div>
+                  <div className="projection-item-meta"><span>{projectionModeLabels[item.mode]}</span><small>{item.summary}</small></div>
+                  <div className="projection-variants">{item.variants.map((variant) => <span key={variant.label}><b>{variant.label}</b> {projectionAmount(variant.canonicalAmount)}{variant.priceDelta !== null && variant.priceDelta !== undefined && variant.label !== 'M' ? ` (+${projectionAmount(variant.priceDelta)})` : ''}</span>)}</div>
+                  {item.warnings.length > 0 && <small className="projection-warning">{item.warnings[0]}</small>}
+                </li>)}
+              </ul>
+            </section>)}
+          </div>}
+          {projectionError && <p className="maintenance-error" role="alert">{projectionError}</p>}
+        </section>
+      )}
+      {projectionError && !projectionPreview && <p className="maintenance-error" role="alert">{projectionError}</p>}
       <div className="view-switch" aria-label="통합메뉴 보기 방식"><button className={view === 'menus' ? 'active' : ''} onClick={() => changeView('menus')} type="button">메뉴 보기</button><button className={view === 'options' ? 'active' : ''} onClick={() => changeView('options')} type="button">옵션 보기</button></div>
       {view === 'options' ? <div className="embedded-options"><OptionPage /></div> : (
         <>

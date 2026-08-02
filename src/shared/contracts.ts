@@ -98,6 +98,53 @@ export interface CatalogMaintenanceResult {
   remainingMenuCount: number
 }
 
+export type CatalogProjectionMode =
+  | 'price_rows'
+  | 'required_size_option'
+  | 'separate_menus'
+  | 'single_menu'
+  | 'unverified'
+
+export type CatalogProjectionStatus = 'ready' | 'review' | 'blocked'
+
+export interface CatalogProjectionVariant {
+  label: string
+  canonicalAmount: number | null
+  sourceAmount?: number | null
+  priceDelta?: number | null
+  derived: boolean
+}
+
+export interface CatalogProjectionItem {
+  menuId: string
+  menuName: string
+  platformCode: PlatformCode
+  mode: CatalogProjectionMode
+  status: CatalogProjectionStatus
+  summary: string
+  variants: CatalogProjectionVariant[]
+  sourceMenuIds: string[]
+  sourceOptionGroupIds: string[]
+  warnings: string[]
+}
+
+export interface CatalogProjectionPlatformSummary {
+  platformCode: PlatformCode
+  itemCount: number
+  readyCount: number
+  reviewCount: number
+  blockedCount: number
+  note: string
+}
+
+export interface CatalogProjectionPreview {
+  referencePlatformCode: PlatformCode
+  generatedAt: string
+  menuCount: number
+  items: CatalogProjectionItem[]
+  platforms: CatalogProjectionPlatformSummary[]
+}
+
 export interface CatalogReviewItem {
   reviewItemId: string
   workspaceId: string

@@ -448,6 +448,27 @@ describe('registerHandlers', () => {
     })).rejects.toThrow('invalid_catalog_request')
   })
 
+  it('validates and forwards the read-only catalog projection preview', async () => {
+    const projectionPreview = vi.fn().mockReturnValue({ items: [], platforms: [] })
+    registerHandlers({
+      menuRepository: { list: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      mappingRepository: { listAll: vi.fn().mockReturnValue([]), upsert: vi.fn() },
+      platformMenuRepository: { listAll: vi.fn().mockReturnValue([]) },
+      syncRunRepository: { list: vi.fn().mockReturnValue([]) },
+      credentialVault: { get: vi.fn(), set: vi.fn() } as never,
+      catalogProjectionService: { preview: projectionPreview }
+    })
+
+    await electronMock.registeredHandlers.get('catalogProjection:preview')?.({}, {
+      referencePlatformCode: 'baemin'
+    })
+    expect(projectionPreview).toHaveBeenCalledWith('baemin')
+
+    await expect(electronMock.registeredHandlers.get('catalogProjection:preview')?.({}, {
+      referencePlatformCode: 'unknown'
+    })).rejects.toThrow('invalid_catalog_request')
+  })
+
   it('links a selected general-menu candidate and resolves its review', async () => {
     const upsert = vi.fn()
     const resolve = vi.fn()

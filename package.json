@@ -11,6 +11,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "catalog:maintenance": "vite-node scripts/catalog-maintenance.ts",
+    "catalog:projection": "vite-node scripts/catalog-projection.ts",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
     "lint:types": "tsc --noEmit"

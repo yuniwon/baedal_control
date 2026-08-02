@@ -50,7 +50,7 @@ describe('preload contract', () => {
     expect(Object.keys(appApi.catalogWorkspace)).toEqual(['get'])
     expect(Object.keys(appApi.catalogBootstrap)).toEqual(['preview', 'activate'])
     expect(Object.keys(appApi.catalogReviews)).toEqual(['listOpen', 'link', 'mergeCanonical', 'resolve'])
-    expect(Object.keys(appApi.catalogMaintenance)).toEqual(['preview', 'apply'])
+    expect(Object.keys(appApi.catalogMaintenance)).toEqual(['preview', 'apply', 'projectionPreview'])
 
     await appApi.catalogWorkspace.get()
     await appApi.catalogBootstrap.preview({

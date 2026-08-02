@@ -3,6 +3,7 @@ import type {
   CatalogBootstrapActivationInput,
   CatalogBootstrapPreviewInput,
   CatalogMaintenanceApplyInput,
+  CatalogProjectionPreview,
   CatalogReviewLinkInput,
   CatalogReviewCanonicalMergeInput,
   CatalogReviewResolutionInput,
@@ -73,7 +74,9 @@ export const appApi = {
     preview: (referencePlatformCode: PlatformCode) =>
       ipcRenderer.invoke('catalogMaintenance:preview', { referencePlatformCode }),
     apply: (payload: CatalogMaintenanceApplyInput) =>
-      ipcRenderer.invoke('catalogMaintenance:apply', payload)
+      ipcRenderer.invoke('catalogMaintenance:apply', payload),
+    projectionPreview: (referencePlatformCode: PlatformCode): Promise<CatalogProjectionPreview> =>
+      ipcRenderer.invoke('catalogProjection:preview', { referencePlatformCode })
   },
   agentReports: {
     getNextActionPlan: (filters?: unknown) =>
