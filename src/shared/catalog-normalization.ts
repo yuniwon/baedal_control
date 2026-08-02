@@ -10,6 +10,55 @@ const MENU_IDENTITY_ALIASES: Record<string, string> = {
   일반피자미디움두판: '일반피자미디엄두판'
 }
 
+export type CatalogMenuSize = 'M' | 'L'
+
+interface CatalogMenuSizeMatch {
+  size: CatalogMenuSize
+  index: number
+}
+
+const CATALOG_SIZE_MARKER = /(?:^|[\s(（])([ML])(?=\s*(?:$|[)）]|[（(]))/giu
+
+const findCatalogMenuSize = (value: string): CatalogMenuSizeMatch | null => {
+  // A two-pizza expression such as M＋M or L＋L is a product shape, not a
+  // terminal size marker. Leave it intact for the separate set/duo identity.
+  if (/[+＋]|두판/iu.test(value)) {
+    return null
+  }
+
+  const matches = [...value.matchAll(CATALOG_SIZE_MARKER)]
+  if (matches.length !== 1) {
+    return null
+  }
+
+  const match = matches[0]
+  const raw = match[0]
+  const markerOffset = raw.search(/[ML]/iu)
+  if (match.index == null || markerOffset < 0) {
+    return null
+  }
+
+  return {
+    size: raw[markerOffset].toUpperCase() as CatalogMenuSize,
+    index: match.index + markerOffset
+  }
+}
+
+export const parseCatalogMenuSize = (value: string): CatalogMenuSize | null =>
+  findCatalogMenuSize(value)?.size ?? null
+
+export const stripCatalogMenuSize = (value: string) => {
+  const match = findCatalogMenuSize(value)
+  if (!match) {
+    return value.trim()
+  }
+
+  return `${value.slice(0, match.index)}${value.slice(match.index + 1)}`
+    .replace(/\s+([（(])/gu, '$1')
+    .replace(/\s+/gu, ' ')
+    .trim()
+}
+
 export const cleanCatalogCategoryName = (value: string | null | undefined) =>
   (value ?? '').replace(DDANGYO_HEADING_BADGE, '').trim()
 
@@ -21,7 +70,7 @@ export const catalogCategoryIdentity = (value: string | null | undefined) =>
     .replace(/[^\p{L}\p{N}]/gu, '')
 
 export const catalogMenuIdentity = (value: string) => {
-  const normalized = value
+  const normalized = stripCatalogMenuSize(value)
     .normalize('NFKC')
     .toLocaleLowerCase('ko-KR')
     .replace(/^\(추천\)\s*/u, '')

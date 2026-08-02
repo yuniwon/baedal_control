@@ -140,6 +140,104 @@ describe('CatalogMaintenanceService', () => {
     ])
   })
 
+  it('consolidates size siblings when the size marker precedes a descriptor', () => {
+    const { db, menus, mappings, platformMenus } = setup()
+    menus.upsert({
+      menuId: 'half-m',
+      baseName: '슈퍼불고기 피자 M（하프앤하프）',
+      basePrice: 18000,
+      isDirty: 0,
+      isManaged: 1
+    })
+    menus.upsert({
+      menuId: 'half-l',
+      baseName: '슈퍼불고기 피자 L（하프앤하프）',
+      basePrice: 21000,
+      isDirty: 0,
+      isManaged: 1
+    })
+    platformMenus.upsert({
+      platformCode: 'yogiyo',
+      platformMenuId: 'half-source-m',
+      platformMenuName: '슈퍼불고기 피자 M（하프앤하프）',
+      platformMenuCurrentPrice: 18000,
+      platformMenuGroupName: '프리미엄 피자 M 메뉴',
+      platformMenuStatus: '판매중'
+    })
+    platformMenus.upsert({
+      platformCode: 'yogiyo',
+      platformMenuId: 'half-source-l',
+      platformMenuName: '슈퍼불고기 피자 L（하프앤하프）',
+      platformMenuCurrentPrice: 21000,
+      platformMenuGroupName: '프리미엄 피자 L 메뉴',
+      platformMenuStatus: '판매중'
+    })
+    mappings.upsert({
+      mappingId: 'half-map-m',
+      menuId: 'half-m',
+      platformCode: 'yogiyo',
+      platformMenuId: 'half-source-m',
+      platformMenuName: '슈퍼불고기 피자 M（하프앤하프）',
+      platformMenuCurrentPrice: 18000,
+      matchedBy: 'auto',
+      isConfirmed: 1
+    })
+    mappings.upsert({
+      mappingId: 'half-map-l',
+      menuId: 'half-l',
+      platformCode: 'yogiyo',
+      platformMenuId: 'half-source-l',
+      platformMenuName: '슈퍼불고기 피자 L（하프앤하프）',
+      platformMenuCurrentPrice: 21000,
+      matchedBy: 'auto',
+      isConfirmed: 1
+    })
+
+    const service = new CatalogMaintenanceService({ db })
+    const candidate = service.preview('baemin').safeMerges.find((item) => item.mergeKind === 'size_sibling')
+
+    expect(candidate).toMatchObject({
+      sourceMenuId: 'half-l',
+      targetMenuId: 'half-m',
+      targetName: '슈퍼불고기 피자（하프앤하프）'
+    })
+  })
+
+  it('does not auto-merge size-labelled set menus', () => {
+    const { db, menus, mappings, platformMenus } = setup()
+    menus.upsert({ menuId: 'set-m', baseName: '미디움 피자 세트 M', basePrice: 20000, isDirty: 0, isManaged: 1 })
+    menus.upsert({ menuId: 'set-l', baseName: '미디움 피자 세트 L', basePrice: 24000, isDirty: 0, isManaged: 1 })
+    const setRows: Array<readonly [string, string, number]> = [
+      ['M', 'set-m', 20000],
+      ['L', 'set-l', 24000]
+    ]
+    for (const [suffix, menuId, price] of setRows) {
+      const platformMenuId = `set-source-${suffix}`
+      const name = `미디움 피자 세트 ${suffix}`
+      platformMenus.upsert({
+        platformCode: 'yogiyo',
+        platformMenuId,
+        platformMenuName: name,
+        platformMenuCurrentPrice: price,
+        platformMenuGroupName: '세트 메뉴',
+        platformMenuStatus: '판매중'
+      })
+      mappings.upsert({
+        mappingId: `set-map-${suffix}`,
+        menuId,
+        platformCode: 'yogiyo',
+        platformMenuId,
+        platformMenuName: name,
+        platformMenuCurrentPrice: price,
+        matchedBy: 'auto',
+        isConfirmed: 1
+      })
+    }
+
+    const preview = new CatalogMaintenanceService({ db }).preview('baemin')
+    expect(preview.safeMerges.some((item) => item.sourceMenuId === 'set-l')).toBe(false)
+  })
+
   it('rolls the database changes back if review rebuilding fails', () => {
     const { db, menus } = setup()
     const service = new CatalogMaintenanceService({

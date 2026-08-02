@@ -7,7 +7,9 @@ import type {
 } from '../../shared/contracts'
 import {
   catalogMenuIdentity,
-  cleanCatalogCategoryName
+  cleanCatalogCategoryName,
+  parseCatalogMenuSize,
+  stripCatalogMenuSize
 } from '../../shared/catalog-normalization'
 import type { DatabaseConnection } from '../db/connection'
 import { withSavepoint } from '../db/savepoint'
@@ -48,8 +50,11 @@ const candidateId = (sourceMenuId: string, targetMenuId: string) =>
   `merge:${sourceMenuId}:${targetMenuId}`
 
 const isHidden = (status: string | null) => status?.trim() === '숨김'
-const terminalSize = (name: string) => name.match(/[\s(（]([ML])(?:[)）])?\s*$/iu)?.[1].toUpperCase() ?? null
-const withoutTerminalSize = (name: string) => name.replace(/[\s(（][ML](?:[)）])?\s*$/iu, '').trim()
+const terminalSize = (name: string) => parseCatalogMenuSize(name)
+const withoutTerminalSize = (name: string) => stripCatalogMenuSize(name)
+
+const isStandaloneSizeMenu = (name: string) =>
+  !/(?:리뷰|후기|세트|두판)/iu.test(name)
 
 export class CatalogMaintenanceService {
   constructor(private readonly deps: CatalogMaintenanceServiceDependencies) {}
@@ -175,7 +180,13 @@ export class CatalogMaintenanceService {
       const mapping = menuMappings[0]
       const source = sourceByKey.get(`${mapping.platformCode}:${mapping.platformMenuId}`)
       const size = terminalSize(menu.baseName)
-      if (!source || isHidden(source.platformMenuStatus) || !size) continue
+      if (
+        !source ||
+        isHidden(source.platformMenuStatus) ||
+        !size ||
+        !isStandaloneSizeMenu(menu.baseName) ||
+        !isStandaloneSizeMenu(source.platformMenuName)
+      ) continue
       const key = `${mapping.platformCode}:${catalogMenuIdentity(menu.baseName)}`
       const rows = siblingGroups.get(key) ?? []
       rows.push({ menu, mapping, source })

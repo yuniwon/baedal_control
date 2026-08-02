@@ -13,7 +13,8 @@ import type {
 import {
   catalogCategoryIdentity,
   cleanCatalogCategoryName,
-  catalogMenuIdentity
+  catalogMenuIdentity,
+  parseCatalogMenuSize
 } from '../../shared/catalog-normalization'
 import { isSafeAutoLinkMatch, scoreMenuMatch } from './menu-matcher'
 
@@ -599,8 +600,8 @@ const analyzePrices = (input: CatalogExceptionAnalysisInput): CatalogReviewItem[
       mappings.flatMap((mapping) => {
         const name = sourceByKey.get(`${mapping.platformCode}:${mapping.platformMenuId}`)
           ?.platformMenuName ?? mapping.platformMenuName
-        const match = name.match(/[\s(（]([ML])(?:[)）])?\s*$/iu)
-        return match ? [match[1].toUpperCase()] : []
+        const size = parseCatalogMenuSize(name)
+        return size ? [size] : []
       })
     )
     const hasBasePrice = mappings.some((mapping) => {

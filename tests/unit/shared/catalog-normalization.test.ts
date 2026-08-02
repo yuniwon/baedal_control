@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import {
   cleanCatalogCategoryName,
-  catalogCategoryIdentity
+  catalogCategoryIdentity,
+  catalogMenuIdentity,
+  parseCatalogMenuSize,
+  stripCatalogMenuSize
 } from '../../../src/shared/catalog-normalization'
 
 describe('catalog category normalization', () => {
@@ -18,5 +21,21 @@ describe('catalog category normalization', () => {
 
   it('does not remove meaningful numbers from an ordinary category', () => {
     expect(cleanCatalogCategoryName('1인 세트')).toBe('1인 세트')
+  })
+
+  it('recognizes size markers before a parenthetical menu descriptor', () => {
+    expect(parseCatalogMenuSize('슈퍼불고기 피자 M（하프앤하프）')).toBe('M')
+    expect(parseCatalogMenuSize('슈퍼불고기 피자 L（하프앤하프）')).toBe('L')
+    expect(stripCatalogMenuSize('슈퍼불고기 피자 M（하프앤하프）'))
+      .toBe('슈퍼불고기 피자（하프앤하프）')
+    expect(catalogMenuIdentity('슈퍼불고기 피자 M（하프앤하프）'))
+      .toBe(catalogMenuIdentity('슈퍼불고기 피자 L（하프앤하프）'))
+  })
+
+  it('does not treat two-pizza size notation as a single size marker', () => {
+    expect(parseCatalogMenuSize('일반피자 M＋M')).toBeNull()
+    expect(parseCatalogMenuSize('일반피자 L＋L')).toBeNull()
+    expect(catalogMenuIdentity('일반피자 M＋M'))
+      .not.toBe(catalogMenuIdentity('일반피자 L＋L'))
   })
 })
